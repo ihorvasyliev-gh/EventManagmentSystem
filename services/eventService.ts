@@ -260,7 +260,7 @@ const mapSupabaseEventToEvent = async (
     attendeeNames: attendeeNames && attendeeNames.length > 0 ? attendeeNames : undefined,
     comments: comments && comments.length > 0 ? comments : undefined,
     history: history && history.length > 0 ? history : undefined,
-    creatorId: supabaseEvent.creator_id,
+    creatorId: supabaseEvent.creator_id || undefined,
     createdAt: new Date(supabaseEvent.created_at)
   };
 };

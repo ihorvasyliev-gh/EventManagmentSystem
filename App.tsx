@@ -16,7 +16,7 @@ import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
 import { getCachedUser, cacheUser, clearUserCache, hasValidSession } from './utils/sessionCache';
-import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache } from './utils/eventsCache';
+import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache, cacheCreatorNames, getCachedCreatorNamesStale } from './utils/eventsCache';
 import { clearRecurrenceCache } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
@@ -39,7 +39,9 @@ const AppContent: React.FC = () => {
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
   const [recurrenceExceptions, setRecurrenceExceptions] = useState<Map<string, Date[]>>(new Map());
-  const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
+  const [creatorNames, setCreatorNames] = useState<Record<string, string>>(() => {
+    return getCachedCreatorNamesStale() || {};
+  });
 
   // Mobile State
   const isMobile = useMedia('(max-width: 640px)');
@@ -730,7 +732,13 @@ const AppContent: React.FC = () => {
     if (events.length === 0) return;
 
     const loadCreatorNames = async () => {
-      const uniqueCreatorIds = Array.from(new Set(events.map(e => e.creatorId)));
+      const uniqueCreatorIds = Array.from(
+        new Set(
+          events
+            .map(e => e.creatorId)
+            .filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''))
+        )
+      );
 
       // Filter out IDs we already know
       const unknownIds = uniqueCreatorIds.filter(id => !creatorNames[id]);
@@ -752,7 +760,11 @@ const AppContent: React.FC = () => {
         });
 
         if (Object.keys(newNames).length > 0) {
-          setCreatorNames(prev => ({ ...prev, ...newNames }));
+          setCreatorNames(prev => {
+            const merged = { ...prev, ...newNames };
+            cacheCreatorNames(merged);
+            return merged;
+          });
         }
       } catch (err) {
         console.error('Failed to load creator names', err);
@@ -766,8 +778,9 @@ const AppContent: React.FC = () => {
   const availableCreators = useMemo(() => {
     const creatorMap = new Map<string, string>();
     events.forEach(e => {
-      if (!creatorMap.has(e.creatorId)) {
-        creatorMap.set(e.creatorId, creatorNames[e.creatorId] || `Creator ${e.creatorId.substring(0, 8)}...`);
+      if (e.creatorId && typeof e.creatorId === 'string' && !creatorMap.has(e.creatorId)) {
+        const fallbackName = `Creator ${e.creatorId.substring(0, 8)}...`;
+        creatorMap.set(e.creatorId, creatorNames[e.creatorId] || fallbackName);
       }
     });
     return Array.from(creatorMap.entries()).map(([id, name]) => ({ id, name }));

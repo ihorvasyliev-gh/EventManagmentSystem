@@ -285,8 +285,12 @@ export const getUsersByIds = async (userIds: string[]): Promise<User[]> => {
     return [];
   }
 
-  // Убираем дубликаты
-  const uniqueIds = Array.from(new Set(userIds));
+  // Убираем дубликаты и пустые/null значения
+  const uniqueIds = Array.from(new Set(userIds)).filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''));
+
+  if (uniqueIds.length === 0) {
+    return [];
+  }
 
   try {
     const { data: usersData, error } = await withTimeout(

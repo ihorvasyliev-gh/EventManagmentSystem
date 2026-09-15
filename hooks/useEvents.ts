@@ -203,7 +203,13 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
   useEffect(() => {
     if (events.length === 0) return;
     const loadCreatorNames = async () => {
-      const uniqueCreatorIds = Array.from(new Set(events.map(e => e.creatorId)));
+      const uniqueCreatorIds = Array.from(
+        new Set(
+          events
+            .map(e => e.creatorId)
+            .filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''))
+        )
+      );
       const unknownIds = uniqueCreatorIds.filter(id => !creatorNames[id]);
       if (unknownIds.length === 0) return;
       try {
@@ -231,8 +237,9 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
   const availableCreators = useMemo(() => {
     const creatorMap = new Map<string, string>();
     events.forEach(e => {
-      if (!creatorMap.has(e.creatorId)) {
-        creatorMap.set(e.creatorId, creatorNames[e.creatorId] || `Creator ${e.creatorId.substring(0, 8)}...`);
+      if (e.creatorId && typeof e.creatorId === 'string' && !creatorMap.has(e.creatorId)) {
+        const fallbackName = `Creator ${e.creatorId.substring(0, 8)}...`;
+        creatorMap.set(e.creatorId, creatorNames[e.creatorId] || fallbackName);
       }
     });
     return Array.from(creatorMap.entries()).map(([id, name]) => ({ id, name }));

@@ -7,13 +7,15 @@ interface BottomNavigationProps {
     onCreateClick: () => void;
     showCreateButton: boolean;
     activeTab: 'home' | 'create';
+    createLabel?: string;
 }
 
 const BottomNavigation: React.FC<BottomNavigationProps> = ({
     onHomeClick,
     onCreateClick,
     showCreateButton,
-    activeTab
+    activeTab,
+    createLabel = 'Create'
 }) => {
     const { theme } = useTheme();
 
@@ -34,7 +36,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                         className={`flex flex-col items-center justify-center w-full h-full space-y-1 min-h-[44px] ${activeTab === 'create' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-500 dark:text-slate-400'}`}
                     >
                         <PlusSquare className={`h-6 w-6 ${activeTab === 'create' ? 'fill-current opacity-20' : ''}`} />
-                        <span className="text-[10px] font-medium">Create</span>
+                        <span className="text-[10px] font-medium">{createLabel}</span>
                     </button>
                 )}
             </div>

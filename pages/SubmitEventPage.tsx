@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail, CheckCircle2, AlertCircle, Upload, X, ArrowLeft } from 'lucide-react';
 import { submitEvent } from '../services/eventService';
+import { User as AuthUser } from '../types';
 
 const CATEGORIES = [
   'Enterprise & Employment',
@@ -14,9 +15,10 @@ const CATEGORIES = [
 
 interface SubmitEventPageProps {
   onBackToLogin?: () => void;
+  currentUser?: AuthUser | null;
 }
 
-const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin }) => {
+const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser }) => {
   // Form State
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -35,8 +37,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin }) => {
   });
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [submitterName, setSubmitterName] = useState('');
-  const [submitterEmail, setSubmitterEmail] = useState('');
+  const [submitterName, setSubmitterName] = useState(currentUser?.fullName || '');
+  const [submitterEmail, setSubmitterEmail] = useState(currentUser?.email || '');
 
   // Poster state
   const [posterFile, setPosterFile] = useState<File | null>(null);
@@ -180,7 +182,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin }) => {
                 onClick={onBackToLogin}
                 className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors text-sm"
               >
-                Go to Staff Login / Calendar
+                {currentUser ? 'Back to Calendar' : 'Go to Staff Login / Calendar'}
               </button>
             )}
           </div>
@@ -200,7 +202,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin }) => {
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              Staff Login
+              {currentUser ? 'Back to Calendar' : 'Staff Login'}
             </button>
           )}
           <span className="text-xs font-medium text-brand-600 dark:text-brand-400 uppercase tracking-wider ml-auto">

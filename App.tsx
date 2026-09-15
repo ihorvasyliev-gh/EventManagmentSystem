@@ -789,6 +789,7 @@ const AppContent: React.FC = () => {
   if (isSubmitPageOpen) {
     return (
       <SubmitEventPage
+        currentUser={user}
         onBackToLogin={() => {
           setIsSubmitPageOpen(false);
           if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {
@@ -826,6 +827,10 @@ const AppContent: React.FC = () => {
         user={user}
         onLogout={handleLogout}
         onAddEventClick={handleCreateClick}
+        onOpenSubmitEvent={() => {
+          setIsSubmitPageOpen(true);
+          window.history.pushState({}, '', '/?mode=submit');
+        }}
         onExportClick={handleExportClick}
         onRefresh={() => refreshEvents(true)}
         loadingEvents={loadingEvents}
@@ -935,8 +940,12 @@ const AppContent: React.FC = () => {
       {isMobile && (
         <BottomNavigation
           onHomeClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          onCreateClick={handleCreateClick}
-          showCreateButton={user.role === UserRole.ADMIN}
+          onCreateClick={user.role === UserRole.ADMIN ? handleCreateClick : () => {
+            setIsSubmitPageOpen(true);
+            window.history.pushState({}, '', '/?mode=submit');
+          }}
+          showCreateButton={true}
+          createLabel={user.role === UserRole.ADMIN ? 'Create' : 'Submit'}
           activeTab="home"
         />
       )}

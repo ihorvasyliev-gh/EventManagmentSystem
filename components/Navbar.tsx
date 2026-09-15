@@ -17,6 +17,7 @@ interface NavbarProps {
   pendingSubmissionsCount?: number;
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
+  onOpenSubmitEvent?: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -31,7 +32,8 @@ const Navbar: React.FC<NavbarProps> = ({
   userRsvpEventIds = new Set(),
   pendingSubmissionsCount = 0,
   onOpenSubmissions,
-  onOpenFortnightlyBulletin
+  onOpenFortnightlyBulletin,
+  onOpenSubmitEvent
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -156,6 +158,17 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
+                {user.role !== UserRole.ADMIN && onOpenSubmitEvent && (
+                  <button
+                    onClick={onOpenSubmitEvent}
+                    className="flex items-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs btn-hover-effect"
+                    title="Submit an event for review"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    <span>Submit Event</span>
+                  </button>
+                )}
+
                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
 
                 <button
@@ -238,6 +251,19 @@ const Navbar: React.FC<NavbarProps> = ({
                   >
                     <FileText className="h-5 w-5 text-brand-600 dark:text-brand-400" />
                     <span>Fortnightly Bulletin</span>
+                  </button>
+                )}
+
+                {user.role !== UserRole.ADMIN && onOpenSubmitEvent && (
+                  <button
+                    onClick={() => {
+                      onOpenSubmitEvent();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center space-x-3 text-left px-4 py-3 min-h-[48px] text-brand-700 dark:text-brand-300 bg-brand-50/50 dark:bg-brand-950/20 hover:bg-brand-100 rounded-lg transition-all font-medium"
+                  >
+                    <PlusCircle className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+                    <span>Submit Event</span>
                   </button>
                 )}
 

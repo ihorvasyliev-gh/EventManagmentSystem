@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail, CheckCircle2, AlertCircle, Upload, X, ArrowLeft } from 'lucide-react';
 import { submitEvent } from '../services/eventService';
-import { User as AuthUser } from '../types';
+import { User as AuthUser, UserRole } from '../types';
 
 const CATEGORIES = [
   'Enterprise & Employment',
@@ -19,6 +19,7 @@ interface SubmitEventPageProps {
 }
 
 const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser }) => {
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
   // Form State
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -122,7 +123,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         category,
         submitterName: submitterName.trim(),
         submitterEmail: submitterEmail.trim(),
-        posterFile: posterFile || undefined
+        posterFile: posterFile || undefined,
+        status: isAdmin ? 'published' : 'draft'
       });
 
       setSubmittedTitle(title.trim());
@@ -153,16 +155,24 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-            Event Submitted!
+            {isAdmin ? 'Event Created & Published!' : 'Event Submitted!'}
           </h2>
           <p className="text-slate-600 dark:text-slate-300 text-sm mb-6">
-            Thank you, <span className="font-semibold text-slate-900 dark:text-white">{submitterName}</span>. Your event <span className="font-semibold text-brand-600 dark:text-brand-400">"{submittedTitle}"</span> has been sent for Elizabeth's review.
+            {isAdmin ? (
+              <>
+                Great! <span className="font-semibold text-slate-900 dark:text-white">{submitterName}</span>, your event <span className="font-semibold text-brand-600 dark:text-brand-400">"{submittedTitle}"</span> has been published directly to the calendar.
+              </>
+            ) : (
+              <>
+                Thank you, <span className="font-semibold text-slate-900 dark:text-white">{submitterName}</span>. Your event <span className="font-semibold text-brand-600 dark:text-brand-400">"{submittedTitle}"</span> has been sent for Elizabeth's review.
+              </>
+            )}
           </p>
 
           <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-400 mb-6 text-left space-y-1.5 border border-slate-100 dark:border-slate-700">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-              <span>Review: Pending Elizabeth's review</span>
+              <span className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-emerald-500' : 'bg-green-500'}`}></span>
+              <span>{isAdmin ? 'Status: Published & visible on calendar' : "Review: Pending Elizabeth's review"}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -175,7 +185,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               onClick={handleReset}
               className="w-full py-2.5 px-4 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl shadow-sm transition-colors text-sm"
             >
-              Submit Another Event
+              {isAdmin ? 'Create Another Event' : 'Submit Another Event'}
             </button>
             {onBackToLogin && (
               <button
@@ -206,7 +216,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </button>
           )}
           <span className="text-xs font-medium text-brand-600 dark:text-brand-400 uppercase tracking-wider ml-auto">
-            Staff Event Form
+            {isAdmin ? 'Admin Event Form' : 'Staff Event Form'}
           </span>
         </div>
 

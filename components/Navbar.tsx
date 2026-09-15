@@ -148,21 +148,11 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {user.role === UserRole.ADMIN && (
-                  <button
-                    onClick={onAddEventClick}
-                    className="flex items-center space-x-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium btn-hover-effect"
-                  >
-                    <PlusCircle className="h-4 w-4" />
-                    <span>New Event</span>
-                  </button>
-                )}
-
-                {user.role !== UserRole.ADMIN && onOpenSubmitEvent && (
+                {onOpenSubmitEvent && (
                   <button
                     onClick={onOpenSubmitEvent}
                     className="flex items-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs btn-hover-effect"
-                    title="Submit an event for review"
+                    title={user.role === UserRole.ADMIN ? "Create / Submit an event" : "Submit an event for review"}
                   >
                     <PlusCircle className="h-4 w-4" />
                     <span>Submit Event</span>
@@ -254,7 +244,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {user.role !== UserRole.ADMIN && onOpenSubmitEvent && (
+                {onOpenSubmitEvent && (
                   <button
                     onClick={() => {
                       onOpenSubmitEvent();

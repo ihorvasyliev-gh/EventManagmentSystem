@@ -733,6 +733,7 @@ export const submitEvent = async (eventData: {
   submitterName: string;
   submitterEmail: string;
   posterFile?: File;
+  status?: 'draft' | 'published';
 }): Promise<Event> => {
   let posterUrl: string | undefined;
 
@@ -767,9 +768,11 @@ export const submitEvent = async (eventData: {
     }
   }
 
+  const eventStatus = eventData.status || 'draft';
+
   // 2. Prepare tags including submitter info for redundancy
   const tags: string[] = [
-    'staff-submission',
+    eventStatus === 'published' ? 'admin-created' : 'staff-submission',
     `by:${eventData.submitterName.trim()}`,
     `email:${eventData.submitterEmail.trim()}`
   ];
@@ -782,7 +785,7 @@ export const submitEvent = async (eventData: {
     location: eventData.location.trim(),
     category: eventData.category || null,
     poster_url: posterUrl || null,
-    status: 'draft',
+    status: eventStatus,
     tags,
     submitter_name: eventData.submitterName.trim(),
     submitter_email: eventData.submitterEmail.trim(),

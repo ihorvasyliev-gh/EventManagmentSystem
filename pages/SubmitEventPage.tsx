@@ -211,15 +211,17 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin }) => {
         {/* Brand Card Header */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 sm:p-8 mb-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 mb-4">
-            <img
-              src="/assets/ccp-logo.png"
-              alt="Cork City Partnership"
-              className="h-14 sm:h-16 object-contain"
-              onError={(e) => {
-                // Fallback if logo fails
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-2xs flex-shrink-0">
+              <img
+                src="/assets/ccp-logo.png"
+                alt="Cork City Partnership"
+                className="h-12 sm:h-14 w-auto max-w-[240px] object-contain"
+                onError={(e) => {
+                  // Fallback if logo fails
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            </div>
             <div className="text-center sm:text-left">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
                 Upcoming Events Submission

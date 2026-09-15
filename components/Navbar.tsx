@@ -63,18 +63,27 @@ const Navbar: React.FC<NavbarProps> = ({
       <nav className={`sticky top-0 z-50 w-full transition-all duration-300 ${theme === 'dark' ? 'glass-panel-dark text-white' : 'glass-panel text-slate-800'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            {/* Logo Section - Minimalist */}
+            {/* Logo Section */}
             <div
-              className="flex items-center space-x-3 group cursor-pointer"
+              className="flex items-center space-x-2.5 sm:space-x-3 group cursor-pointer"
               onClick={handleRefreshClick}
               title="Click to refresh events"
             >
-              <div className="relative flex items-center justify-center p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-brand-600 dark:text-brand-400 btn-hover-effect overflow-hidden">
-                <Calendar className={`h-5 w-5 ${loadingEvents || isRefreshing ? 'animate-spin' : ''}`} />
+              <div className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs flex items-center justify-center">
+                <img
+                  src="/assets/ccp-logo.png"
+                  alt="Cork City Partnership"
+                  className="h-6 sm:h-7 w-auto object-contain"
+                />
               </div>
               <div className="flex flex-col">
-                <span className="font-semibold text-lg tracking-tight leading-none text-slate-900 dark:text-white select-none">CCP Events</span>
+                <span className="font-semibold text-base sm:text-lg tracking-tight leading-none text-slate-900 dark:text-white select-none">
+                  Calendar
+                </span>
               </div>
+              {(loadingEvents || isRefreshing) && (
+                <div className="w-3.5 h-3.5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
+              )}
             </div>
 
             {/* Desktop Actions Section - lg so phones/tablets get hamburger menu */}
@@ -103,7 +112,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 {onOpenFortnightlyBulletin && (
                   <button
                     onClick={onOpenFortnightlyBulletin}
-                    className="flex items-center space-x-1.5 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/50 font-medium px-3 py-1.5 rounded-lg transition-all text-sm border border-brand-200 dark:border-brand-850 shadow-xs"
+                    className="flex items-center space-x-1.5 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/50 font-medium px-3 py-1.5 rounded-lg transition-all text-sm border border-brand-200 dark:border-brand-800 shadow-xs"
                     title="Generate 2-week PDF bulletin for Board and staff"
                   >
                     <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />

@@ -8,9 +8,9 @@ export interface BulletinOptions {
   title?: string;
 }
 
-// CCP Brand Colors (RGB)
-const CCP_MAGENTA = [179, 0, 102]; // #B30066
-const CCP_GREEN = [57, 181, 74];   // #39B54A
+// CCP Brand Colors (RGB) matching official logo
+const CCP_RED = [225, 0, 0];       // #E10000 (Official Red from vector logo)
+const CCP_GREEN = [62, 168, 11];    // #3EA80B (Official Green from vector logo)
 const SLATE_DARK = [30, 41, 59];   // #1E293B
 const SLATE_MUTED = [100, 116, 139]; // #64748B
 const BG_LIGHT = [248, 250, 252];  // #F8FAFC
@@ -86,7 +86,7 @@ export const generateFortnightlyPDF = async (
   // Header helper
   const drawHeader = () => {
     // Top decorative brand bar
-    doc.setFillColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+    doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
     doc.rect(margin, margin, contentWidth, 2, 'F');
     doc.setFillColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
     doc.rect(margin + contentWidth * 0.7, margin, contentWidth * 0.3, 2, 'F');
@@ -95,8 +95,10 @@ export const generateFortnightlyPDF = async (
     let headerTextX = margin;
     if (logoData) {
       try {
-        doc.addImage(logoData, 'PNG', margin, margin + 4, 38, 12);
-        headerTextX = margin + 42;
+        const logoHeight = 10.5;
+        const logoWidth = logoHeight * (1024 / 240); // natural ratio ~44.8mm
+        doc.addImage(logoData, 'PNG', margin, margin + 4, logoWidth, logoHeight);
+        headerTextX = margin + logoWidth + 4;
       } catch {
         headerTextX = margin;
       }
@@ -105,7 +107,7 @@ export const generateFortnightlyPDF = async (
     // Header Titles
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
-    doc.setTextColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+    doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
     doc.text('CORK CITY PARTNERSHIP', headerTextX, margin + 8);
 
     doc.setFont('helvetica', 'normal');
@@ -216,7 +218,7 @@ export const generateFortnightlyPDF = async (
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8.5);
-        doc.setTextColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+        doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
         const weekLabel =
           weekNum === 1
             ? 'WEEK 1 — Upcoming 7 Days'
@@ -232,7 +234,7 @@ export const generateFortnightlyPDF = async (
       doc.roundedRect(margin, currentY, contentWidth, cardHeight, 2, 2, 'S');
 
       // Left Accent Color Bar
-      doc.setFillColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+      doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
       doc.roundedRect(margin, currentY, 2.5, cardHeight, 1, 1, 'F');
 
       // Date & Time Column (left)
@@ -259,7 +261,7 @@ export const generateFortnightlyPDF = async (
         doc.roundedRect(margin + 6, currentY + 22, 34, 5, 1, 1, 'F');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(6.5);
-        doc.setTextColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+        doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
         const catText = ev.category.length > 22 ? ev.category.slice(0, 20) + '…' : ev.category;
         doc.text(catText, margin + 8, currentY + 25.5);
       }
@@ -330,7 +332,7 @@ export const generateFortnightlyPDF = async (
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
-      doc.setTextColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+      doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
       doc.text('Date', colX.date, y + 4.8);
       doc.text('Time', colX.time, y + 4.8);
       doc.text('Event & Description', colX.title, y + 4.8);
@@ -397,7 +399,7 @@ export const generateFortnightlyPDF = async (
       // Category
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
-      doc.setTextColor(CCP_MAGENTA[0], CCP_MAGENTA[1], CCP_MAGENTA[2]);
+      doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
       const cat = (ev.category || 'Event').slice(0, 18);
       doc.text(cat, colX.category, currentY + 5);
 

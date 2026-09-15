@@ -91,17 +91,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-8 py-6 text-center">
-          <img
-            src="/assets/ccp-logo.png"
-            alt="Cork City Partnership"
-            className="h-12 mx-auto mb-3 bg-white/95 p-1.5 rounded-lg shadow-sm"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-          <h1 className="text-xl font-bold text-white">Cork City Partnership</h1>
-          <p className="text-brand-100 text-xs mt-1">Staff Portal & Event Calendar</p>
+        <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-8 py-7 text-center">
+          <div className="bg-white p-2.5 rounded-xl shadow-md inline-block mb-3 max-w-[280px]">
+            <img
+              src="/assets/ccp-logo.png"
+              alt="Cork City Partnership"
+              className="h-12 w-auto object-contain mx-auto"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          </div>
+          <h1 className="text-xl font-bold text-white">Event Calendar</h1>
+          <p className="text-brand-100 text-xs mt-1">Staff Portal & Community Events</p>
         </div>
 
         <form onSubmit={handleSubmit} className="px-8 py-6 space-y-5">

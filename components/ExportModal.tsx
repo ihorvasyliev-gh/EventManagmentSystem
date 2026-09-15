@@ -115,7 +115,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
             <button
               onClick={() => setActiveTab('export')}
               className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${activeTab === 'export'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-brand-600 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
                 }`}
             >
@@ -125,7 +125,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
             <button
               onClick={() => setActiveTab('subscribe')}
               className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${activeTab === 'subscribe'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-brand-600 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
                 }`}
             >
@@ -211,7 +211,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-brand-600 text-base font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
                 >
                   {exporting ? (
                     <span className="animate-pulse">Preparing export…</span>
@@ -224,7 +224,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                 </button>
                 <button
                   onClick={onClose}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-slate-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-slate-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                 >
                   Cancel
                 </button>
@@ -251,7 +251,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                     </div>
                     <button
                       onClick={handleCopyUrl}
-                      className="flex-shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                      className="flex-shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
                       title="Copy URL"
                     >
                       {copied ? (
@@ -269,7 +269,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                 {/* Quick subscribe button */}
                 <a
                   href={webcalUrl}
-                  className="w-full inline-flex justify-center items-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors mb-4"
+                  className="w-full inline-flex justify-center items-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-colors mb-4"
                 >
                   <Calendar className="h-4 w-4 mr-2" />
                   Open in Calendar App

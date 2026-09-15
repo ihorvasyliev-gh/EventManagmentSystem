@@ -12,6 +12,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
 import DatePickerCalendar from './DatePickerCalendar';
+import TimePickerInput from './TimePickerInput';
 
 interface EventModalProps {
   isOpen: boolean;
@@ -844,12 +845,12 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Date</label>
-                    <input required type="date" value={dateStr} onChange={(e) => { setDateStr(e.target.value); clearFieldError('date'); }} className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.date ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} />
+                    <input required type="date" value={dateStr} onChange={(e) => { setDateStr(e.target.value); clearFieldError('date'); }} className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] ${fieldErrors.date ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} />
                     {fieldErrors.date && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.date}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Time</label>
-                    <input required type="time" value={timeStr} onChange={(e) => setTimeStr(e.target.value)} className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0" />
+                    <TimePickerInput required value={timeStr} onChange={(val) => setTimeStr(val)} className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm" />
                   </div>
                 </div>
 

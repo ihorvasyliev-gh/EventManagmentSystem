@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail, CheckCircle2, AlertCircle, Upload, X, ArrowLeft } from 'lucide-react';
 import { submitEvent } from '../services/eventService';
 import { User as AuthUser, UserRole } from '../types';
+import TimePickerInput from '../components/TimePickerInput';
 
 const CATEGORIES = [
   'Enterprise & Employment',
@@ -13,6 +14,29 @@ const CATEGORIES = [
   'Other'
 ];
 
+// Helper to format local date to YYYY-MM-DD
+const formatDateToInput = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Convert "HH:mm" to minutes
+const timeToMinutes = (t: string): number => {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+};
+
+// Convert minutes to "HH:mm"
+const minutesToTime = (totalMinutes: number): string => {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
 interface SubmitEventPageProps {
   onBackToLogin?: () => void;
   currentUser?: AuthUser | null;
@@ -23,19 +47,47 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   // Form State
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    // Default to coming Monday or tomorrow at 10:00 AM
-    d.setDate(d.getDate() + 1);
-    d.setHours(10, 0, 0, 0);
-    return d.toISOString().slice(0, 16);
-  });
-  const [endDate, setEndDate] = useState(() => {
+
+  const defaultDateStr = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    d.setHours(11, 30, 0, 0);
-    return d.toISOString().slice(0, 16);
-  });
+    return formatDateToInput(d);
+  }, []);
+
+  const [startDateStr, setStartDateStr] = useState(defaultDateStr);
+  const [startTimeStr, setStartTimeStr] = useState('10:00');
+  const [endDateStr, setEndDateStr] = useState(defaultDateStr);
+  const [endTimeStr, setEndTimeStr] = useState('11:30');
+
+  // Auto-synchronize dates & times
+  const handleStartDateChange = (newDate: string) => {
+    setStartDateStr(newDate);
+    // Always keep End Date on the same day as Start Date when Start Date changes
+    setEndDateStr(newDate);
+  };
+
+  const handleStartTimeChange = (newTime: string) => {
+    // Preserve duration if start and end are on the same day
+    const prevStartM = timeToMinutes(startTimeStr);
+    const prevEndM = timeToMinutes(endTimeStr);
+    let duration = prevEndM - prevStartM;
+    if (duration <= 0) duration = 90; // default 1.5 hours
+
+    setStartTimeStr(newTime);
+
+    if (startDateStr === endDateStr) {
+      const newStartM = timeToMinutes(newTime);
+      setEndTimeStr(minutesToTime(newStartM + duration));
+    }
+  };
+
+  const handleEndDateChange = (newDate: string) => {
+    setEndDateStr(newDate);
+  };
+
+  const handleEndTimeChange = (newTime: string) => {
+    setEndTimeStr(newTime);
+  };
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [submitterName, setSubmitterName] = useState(currentUser?.fullName || '');
@@ -91,10 +143,30 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       setErrorMsg('Please enter an event title.');
       return;
     }
-    if (!startDate) {
+    if (!startDateStr || !startTimeStr) {
       setErrorMsg('Please select a start date and time.');
       return;
     }
+
+    const startDateTime = new Date(`${startDateStr}T${startTimeStr}`);
+    if (isNaN(startDateTime.getTime())) {
+      setErrorMsg('Invalid start date or time.');
+      return;
+    }
+
+    let endDateTime: Date | undefined = undefined;
+    if (endDateStr && endTimeStr) {
+      endDateTime = new Date(`${endDateStr}T${endTimeStr}`);
+      if (isNaN(endDateTime.getTime())) {
+        setErrorMsg('Invalid end date or time.');
+        return;
+      }
+      if (endDateTime < startDateTime) {
+        setErrorMsg('End Date & Time cannot be earlier than Start Date & Time.');
+        return;
+      }
+    }
+
     if (!location.trim()) {
       setErrorMsg('Please specify the venue/location.');
       return;
@@ -117,8 +189,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       await submitEvent({
         title: title.trim(),
         description: description.trim(),
-        date: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : undefined,
+        date: startDateTime,
+        endDate: endDateTime,
         location: location.trim(),
         category,
         submitterName: submitterName.trim(),
@@ -141,6 +213,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setDescription('');
     setLocation('');
     handleRemovePoster();
+    setStartDateStr(defaultDateStr);
+    setStartTimeStr('10:00');
+    setEndDateStr(defaultDateStr);
+    setEndTimeStr('11:30');
     setSubmittedTitle(null);
     setErrorMsg(null);
   };
@@ -303,30 +379,54 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           </div>
 
           {/* 3. Date & Time */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-1.5">
                 Start Date & Time <span className="text-red-500">*</span>
               </label>
-              <input
-                type="datetime-local"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="date"
+                  required
+                  value={startDateStr}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <TimePickerInput
+                  value={startTimeStr}
+                  onChange={handleStartTimeChange}
+                  required
+                  placeholder="10:00"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-1.5">
-                End Date & Time <span className="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="datetime-local"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-semibold text-slate-900 dark:text-white">
+                  End Date & Time <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                {startDateStr === endDateStr && (
+                  <span className="text-xs text-brand-600 dark:text-brand-400 font-medium bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 rounded-md">
+                    Same day
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="date"
+                  min={startDateStr}
+                  value={endDateStr}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm [color-scheme:light] dark:[color-scheme:dark]"
+                />
+                <TimePickerInput
+                  value={endTimeStr}
+                  onChange={handleEndTimeChange}
+                  referenceStartTime={startDateStr === endDateStr ? startTimeStr : undefined}
+                  placeholder="11:30"
+                />
+              </div>
             </div>
           </div>
 

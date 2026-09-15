@@ -135,6 +135,61 @@ const formatEventTime = (start: Date | string, end?: Date | string) => {
   return sStr;
 };
 
+// Supported Windows-1252 characters above 255 that jsPDF maps properly
+const WINANSI_SUPPORTED_EXTRA = new Set([
+  338, 339, 352, 353, 376, 381, 382, 402, 710, 732,
+  8211, 8212, 8216, 8217, 8218, 8220, 8221, 8222, 8224, 8225, 8226, 8230, 8240, 8249, 8250, 8364, 8482
+]);
+
+/**
+ * Sanitizes strings for jsPDF standard fonts (Helvetica) to prevent switching to 16-bit encoding
+ * which injects null bytes and corrupts letter spacing and glyphs.
+ */
+export const cleanPdfText = (text: string | null | undefined): string => {
+  if (!text) return '';
+  let result = '';
+  const stripped = String(text)
+    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[\uFE00-\uFE0F]/g, '');
+
+  for (let i = 0; i < stripped.length; i++) {
+    const code = stripped.charCodeAt(i);
+    if (code <= 255 || WINANSI_SUPPORTED_EXTRA.has(code)) {
+      result += stripped[i];
+    } else {
+      result += ' ';
+    }
+  }
+  return result.replace(/\s+/g, ' ').trim();
+};
+
+/**
+ * Draws a sharp, vector map pin icon directly in jsPDF without relying on Unicode emojis
+ */
+const drawPinIcon = (doc: jsPDF, x: number, y: number): void => {
+  doc.setFillColor(2, 132, 199);
+  doc.setDrawColor(2, 132, 199);
+  const centerX = x + 1.0;
+  const centerY = y - 1.1;
+  const r = 0.95;
+
+  // Pin head circle
+  doc.circle(centerX, centerY, r, 'F');
+
+  // Downward pointer
+  doc.triangle(
+    centerX - r * 0.85, centerY + 0.2,
+    centerX + r * 0.85, centerY + 0.2,
+    centerX, y + 0.4,
+    'F'
+  );
+
+  // Center white dot
+  doc.setFillColor(255, 255, 255);
+  doc.circle(centerX, centerY, 0.4, 'F');
+};
+
 /**
  * Generate Fortnightly Bulletin PDF using jsPDF
  */
@@ -402,9 +457,10 @@ export const generateFortnightlyPDF = async (
       // Category Pill & optional Multi-day indicator
       if (ev.category) {
         doc.setFont('helvetica', 'bold');
-        const catFontSize = ev.category.length > 25 ? 5.5 : 6;
+        const cleanCat = cleanPdfText(ev.category);
+        const catFontSize = cleanCat.length > 25 ? 5.5 : 6;
         doc.setFontSize(catFontSize);
-        const textW = doc.getTextWidth(ev.category);
+        const textW = doc.getTextWidth(cleanCat);
         const pillWidth = Math.max(14, textW + 3.5);
         const pillHeight = 4.2;
 
@@ -414,7 +470,7 @@ export const generateFortnightlyPDF = async (
         doc.roundedRect(textStartX, infoY, pillWidth, pillHeight, 1, 1, 'S');
 
         doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-        doc.text(ev.category, textStartX + pillWidth / 2, infoY + 3, { align: 'center' });
+        doc.text(cleanCat, textStartX + pillWidth / 2, infoY + 3, { align: 'center' });
 
         if (isMultiDay && endEvDate) {
           const multiText = `${formatDateRange(ev.date, ev.endDate)}`;
@@ -438,25 +494,29 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      const titleLines = doc.splitTextToSize(ev.title, textWidth);
+      const cleanTitle = cleanPdfText(ev.title);
+      const titleLines = doc.splitTextToSize(cleanTitle, textWidth);
       doc.text(titleLines.slice(0, 2), textStartX, infoY + 1);
       const titleHeight = (titleLines.slice(0, 2).length) * 4;
       infoY += titleHeight + 1.5;
 
       // Venue / Location (Clickable to Google Maps)
       if (ev.location) {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(2, 132, 199); // Maps Link Blue
-        const venueText = `📍 ${ev.location}`;
-        const venueLines = doc.splitTextToSize(venueText, textWidth);
-        doc.text(venueLines[0], textStartX, infoY);
+        const cleanLoc = cleanPdfText(ev.location);
+        if (cleanLoc) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(2, 132, 199); // Maps Link Blue
+          drawPinIcon(doc, textStartX, infoY);
+          const venueLines = doc.splitTextToSize(cleanLoc, textWidth - 3);
+          doc.text(venueLines[0], textStartX + 2.8, infoY);
 
-        if (mapsUrl) {
-          const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 2);
-          doc.link(textStartX, infoY - 3, venueW, 4.2, { url: mapsUrl });
+          if (mapsUrl) {
+            const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 4);
+            doc.link(textStartX, infoY - 3, venueW, 4.2, { url: mapsUrl });
+          }
+          infoY += 3.5;
         }
-        infoY += 3.5;
       }
 
       // Description (wrapped)
@@ -464,7 +524,8 @@ export const generateFortnightlyPDF = async (
       doc.setFontSize(7);
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
       const maxDescLines = hasFlyer ? 2 : 3;
-      const descLines = doc.splitTextToSize(ev.description || '', textWidth);
+      const cleanDesc = cleanPdfText(ev.description || '');
+      const descLines = doc.splitTextToSize(cleanDesc, textWidth);
       doc.text(descLines.slice(0, maxDescLines), textStartX, infoY);
 
       // Right Column: Flyer Thumbnail
@@ -537,7 +598,7 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text('⬇ .ICS', icsBtnX + icsBtnW / 2, btnY + 3.2, { align: 'center' });
+      doc.text('.ICS', icsBtnX + icsBtnW / 2, btnY + 3.2, { align: 'center' });
       doc.link(icsBtnX, btnY, icsBtnW, btnHeight, { url: icsUrl });
 
       // Submitter info footer line inside card (to the left of action buttons)
@@ -546,7 +607,7 @@ export const generateFortnightlyPDF = async (
         doc.setFontSize(6.5);
         doc.setTextColor(148, 163, 184);
         const maxSubWidth = outlookBtnX - textStartX - 3;
-        const subText = `Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`;
+        const subText = cleanPdfText(`Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`);
         const subLines = doc.splitTextToSize(subText, Math.max(20, maxSubWidth));
         doc.text(subLines[0], textStartX, currentY + cardHeight - 3.2);
       }
@@ -626,22 +687,25 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      const title = ev.title.length > 34 ? ev.title.slice(0, 32) + '…' : ev.title;
+      const cleanTitle = cleanPdfText(ev.title);
+      const title = cleanTitle.length > 34 ? cleanTitle.slice(0, 32) + '…' : cleanTitle;
       doc.text(title, colX.title, currentY + 4.5);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const desc = ev.description.replace(/\n/g, ' ').slice(0, 50) + (ev.description.length > 50 ? '…' : '');
+      const cleanDesc = cleanPdfText(ev.description || '').replace(/\n/g, ' ');
+      const desc = cleanDesc.slice(0, 50) + (cleanDesc.length > 50 ? '…' : '');
       doc.text(desc, colX.title, currentY + 8.5);
 
       // Venue (Clickable to Google Maps)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(2, 132, 199); // Maps Link Blue
-      const venue = ev.location.length > 25 ? ev.location.slice(0, 23) + '…' : ev.location;
+      const cleanLoc = cleanPdfText(ev.location || '');
+      const venue = cleanLoc.length > 25 ? cleanLoc.slice(0, 23) + '…' : cleanLoc;
       doc.text(venue, colX.venue, currentY + 5);
-      if (mapsUrl) {
+      if (mapsUrl && venue) {
         doc.link(colX.venue, currentY + 1, 38, 5, { url: mapsUrl });
       }
 
@@ -649,7 +713,8 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      const catLines = doc.splitTextToSize(ev.category || 'Event', 24);
+      const cleanCat = cleanPdfText(ev.category || 'Event');
+      const catLines = doc.splitTextToSize(cleanCat, 24);
       doc.text(catLines[0], colX.category, currentY + 5);
 
       // Calendar quick links in Compact format

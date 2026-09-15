@@ -8,6 +8,33 @@ import { useMedia } from '../hooks/useMedia';
 
 const LIST_VIEW_BATCH_SIZE = 50;
 
+const isMultiDayEvent = (event: Event): boolean => {
+  if (!event.endDate) return false;
+  const s = new Date(event.date);
+  const e = new Date(event.endDate);
+  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
+};
+
+const isEventOnDay = (event: Event, day: Date): boolean => {
+  const s = new Date(event.date);
+  s.setHours(0, 0, 0, 0);
+  if (!event.endDate || !isMultiDayEvent(event)) {
+    return isSameDay(event.date, day);
+  }
+  const e = new Date(event.endDate);
+  e.setHours(23, 59, 59, 999);
+  const target = new Date(day);
+  target.setHours(12, 0, 0, 0);
+  return target >= s && target <= e;
+};
+
+const formatEventRangeText = (event: Event): string => {
+  if (!event.endDate || !isMultiDayEvent(event)) return '';
+  const sStr = event.date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  const eStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  return `${sStr} – ${eStr}`;
+};
+
 interface CalendarViewProps {
   events: Event[];
   onEventClick: (event: Event) => void;
@@ -257,7 +284,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
               {calendarDays.map((day, idx) => {
                 if (!day) return <div key={`empty-${idx}`} className="min-h-[5rem] sm:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
 
-                const dayEvents = displayEvents.filter(e => isSameDay(e.date, day));
+                const dayEvents = displayEvents.filter(e => isEventOnDay(e, day));
                 const isToday = isSameDay(day, new Date());
                 const hasEvents = dayEvents.length > 0;
 
@@ -293,12 +320,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                               const colorClass = getCategoryColor(ev.category);
                               // Get first 2-3 letters of title, max 3 chars
                               const shortTitle = ev.title.slice(0, 3).toUpperCase();
+                              const rangeStr = formatEventRangeText(ev);
+                              const itemTitle = rangeStr ? `${ev.title} (${rangeStr})` : ev.title;
                               return (
                                 <div
                                   key={ev.instanceKey ?? ev.id}
                                   onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
                                   className={`w-full px-1.5 py-0.5 rounded-md ${colorClass} cursor-pointer transition-all active:scale-95 active:shadow-sm text-center touch-manipulation`}
-                                  title={ev.title}
+                                  title={itemTitle}
                                 >
                                   <span className="text-[9px] font-bold tracking-tight">
                                     {shortTitle}
@@ -319,14 +348,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                         {dayEvents.map(ev => {
                           const colorClass = getCategoryColor(ev.category);
                           const statusClass = ev.status === 'draft' ? 'opacity-70 dashed-border' : '';
+                          const rangeStr = formatEventRangeText(ev);
+                          const itemTitle = rangeStr ? `${ev.title} (${rangeStr})` : ev.title;
 
                           return (
                             <div
                               key={ev.instanceKey ?? ev.id}
                               onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
                               className={`w-full text-left ${colorClass} text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-[4px] truncate font-medium transition-all hover:opacity-80 cursor-pointer touch-manipulation ${statusClass}`}
-                              title={ev.title}
+                              title={itemTitle}
                             >
+                              {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                               {ev.title}
                             </div>
                           );
@@ -394,6 +426,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                       <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {dayEvents.map(event => {
                           const colorClass = getCategoryColor(event.category);
+                          const isMulti = isMultiDayEvent(event);
                           return (
                             <div
                               key={event.instanceKey ?? event.id}
@@ -402,10 +435,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                             >
                               <div className="flex gap-3 items-start">
                                 {/* Time */}
-                                <div className="flex-shrink-0 w-14 sm:w-16 text-right">
+                                <div className="flex-shrink-0 w-16 sm:w-20 text-right">
                                   <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
                                     {event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </div>
+                                  {isMulti && event.endDate ? (
+                                    <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold whitespace-nowrap">
+                                      until {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                                    </div>
+                                  ) : event.endDate ? (
+                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                      to {event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                  ) : null}
                                 </div>
 
                                 {/* Event Details */}
@@ -416,6 +458,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                                       <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                                         {event.title}
                                       </h3>
+                                      {isMulti && event.endDate && (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                                          <span>🗓 {event.date.toLocaleDateString([], { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                                        </div>
+                                      )}
                                       {event.description && (
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
                                           {event.description}

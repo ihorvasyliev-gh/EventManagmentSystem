@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry, EventCategoryItem } from '../types';
 import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink } from 'lucide-react';
-import { formatDate, formatTime } from '../utils/date';
+import { formatDate, formatTime, isSameDay } from '../utils/date';
 import { uploadPosterToR2, uploadAttachment, addComment, deleteComment, fetchEventDetails, deleteEvent, deleteRecurrenceInstance } from '../services/eventService';
 import { rsvpToEvent, cancelRsvp, hasUserRsvped } from '../services/rsvpService';
 import { getCategories, createCategory } from '../services/categoryService';
@@ -292,6 +292,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
       description,
       location,
       date: dateTime,
+      endDate: event?.endDate,
       category: category || undefined,
       status: status || 'published',
       tags: tagsArray.length > 0 ? tagsArray : undefined,
@@ -338,6 +339,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         description,
         location,
         date: dateTime,
+        endDate: event?.endDate,
         posterUrl,
         category: category || undefined,
         status: status || 'published',
@@ -696,7 +698,23 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                     <CalendarIcon className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-[10px] text-slate-400 font-bold uppercase">Date & Time</p>
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">{formatDate(event.date)} at {formatTime(event.date)}</p>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">
+                        {event.endDate && !isSameDay(event.date, event.endDate) ? (
+                          <>
+                            <span>{formatDate(event.date)} at {formatTime(event.date)}</span>
+                            <span className="text-slate-400 dark:text-slate-500 mx-1.5 font-bold">→</span>
+                            <span>{formatDate(event.endDate)} at {formatTime(event.endDate)}</span>
+                          </>
+                        ) : event.endDate ? (
+                          <>
+                            {formatDate(event.date)}, {formatTime(event.date)} – {formatTime(event.endDate)}
+                          </>
+                        ) : (
+                          <>
+                            {formatDate(event.date)} at {formatTime(event.date)}
+                          </>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center p-3 rounded-xl border border-slate-100 dark:border-slate-800">

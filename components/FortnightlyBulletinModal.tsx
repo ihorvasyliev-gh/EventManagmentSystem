@@ -115,7 +115,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                   Fortnightly Bulletin
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-300">
-                  Generate 2-week upcoming events digest for the Board & staff
+                  Generate 2-week upcoming events digest
                 </p>
               </div>
             </div>

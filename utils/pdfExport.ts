@@ -86,6 +86,17 @@ const toDate = (d: Date | string | number | undefined | null): Date | null => {
   return isNaN(date.getTime()) ? null : date;
 };
 
+export const createGoogleMapsUrl = (location: string): string => {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
+};
+
+export const isMultiDayEvent = (start: Date | string, end?: Date | string | null): boolean => {
+  const s = toDate(start);
+  const e = toDate(end);
+  if (!s || !e) return false;
+  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
+};
+
 const formatDateRange = (start: Date | string, end: Date | string) => {
   const s = toDate(start);
   const e = toDate(end);
@@ -99,6 +110,18 @@ const formatEventDate = (d: Date | string) => {
   const date = toDate(d);
   if (!date) return '';
   return date.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+const formatEventDateDisplay = (start: Date | string, end?: Date | string | null): string => {
+  const s = toDate(start);
+  const e = toDate(end);
+  if (!s) return '';
+  if (!e || !isMultiDayEvent(s, e)) {
+    return s.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  const sStr = s.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
+  const eStr = e.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
+  return `${sStr} – ${eStr}`;
 };
 
 const formatEventTime = (start: Date | string, end?: Date | string) => {
@@ -187,20 +210,17 @@ export const generateFortnightlyPDF = async (
     doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
     doc.text('UPCOMING EVENTS BULLETIN', headerTextX, margin + 13);
 
-    // Period Badge on right
+    // Period Badge on right (Clean Executive Chip)
+    const periodText = `Period: ${formatDateRange(options.startDate, options.endDate)}`;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+    doc.setFontSize(8.5);
+    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
     doc.text(
-      `Period: ${formatDateRange(options.startDate, options.endDate)}`,
+      periodText,
       pageWidth - margin,
-      margin + 8,
+      margin + 10.5,
       { align: 'right' }
     );
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text('For the Board of Directors & Staff', pageWidth - margin, margin + 13, { align: 'right' });
 
     // Divider line
     doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
@@ -263,13 +283,16 @@ export const generateFortnightlyPDF = async (
     for (let i = 0; i < filteredEvents.length; i++) {
       const ev = filteredEvents[i];
       const flyerData = flyerMap.get(ev.id);
+      const evDate = toDate(ev.date) || new Date();
+      const endEvDate = toDate(ev.endDate);
+      const isMultiDay = isMultiDayEvent(ev.date, ev.endDate);
 
       // Check if we need to print a week header
-      const diffDays = Math.floor((ev.date.getTime() - startMs) / (1000 * 60 * 60 * 24));
+      const diffDays = Math.floor((evDate.getTime() - startMs) / (1000 * 60 * 60 * 24));
       const weekNum = diffDays < 7 ? 1 : 2;
 
       const hasFlyer = !!flyerData;
-      const cardHeight = hasFlyer ? 39 : 33;
+      const cardHeight = hasFlyer ? 41 : 35;
 
       // Page break check
       if (currentY + cardHeight > pageHeight - 16) {
@@ -309,75 +332,147 @@ export const generateFortnightlyPDF = async (
       doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
       doc.roundedRect(margin, currentY, 2.5, cardHeight, 1, 1, 'F');
 
-      // Date & Time Column (left)
+      // Modern Calendar Date Badge (Left)
+      const badgeW = 23;
+      const badgeH = 20;
+      const badgeX = margin + 5.5;
+      const badgeY = currentY + 3.5;
+
+      // Badge Container
+      doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+      doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.8, 1.8, 'F');
+      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+      doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.8, 1.8, 'S');
+
+      // Badge Top Ribbon (Month)
+      doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
+      doc.roundedRect(badgeX, badgeY, badgeW, 5.5, 1.8, 1.8, 'F');
+      // Square off bottom corners of header ribbon
+      doc.rect(badgeX, badgeY + 3, badgeW, 2.5, 'F');
+
+      const monthName = evDate.toLocaleDateString('en-IE', { month: 'short' }).toUpperCase();
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text(formatEventDate(ev.date), margin + 6, currentY + 6);
+      doc.setFontSize(6.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text(monthName, badgeX + badgeW / 2, badgeY + 3.8, { align: 'center' });
 
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
-      doc.text(formatEventTime(ev.date, ev.endDate), margin + 6, currentY + 11);
-
-      // Venue / Location
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const venueLines = doc.splitTextToSize(`Venue: ${ev.location || 'TBA'}`, 36);
-      doc.text(venueLines.slice(0, 2), margin + 6, currentY + 16);
-
-      // Category Pill (dynamic width & adaptive font size to prevent truncation)
-      if (ev.category) {
+      // Badge Body (Day & Weekday or Multi-day)
+      if (!isMultiDay || !endEvDate) {
         doc.setFont('helvetica', 'bold');
-        const catFontSize = ev.category.length > 25 ? 5.8 : ev.category.length > 20 ? 6.2 : 6.5;
-        doc.setFontSize(catFontSize);
-        const textWidth = doc.getTextWidth(ev.category);
-        const pillWidth = Math.min(38, Math.max(18, textWidth + 4));
-        const pillHeight = 5;
+        doc.setFontSize(11);
+        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+        doc.text(String(evDate.getDate()), badgeX + badgeW / 2, badgeY + 12.2, { align: 'center' });
 
-        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-        doc.roundedRect(margin + 6, currentY + 22, pillWidth, pillHeight, 1, 1, 'F');
-        doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-        doc.roundedRect(margin + 6, currentY + 22, pillWidth, pillHeight, 1, 1, 'S');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5.8);
+        doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+        const dayName = evDate.toLocaleDateString('en-IE', { weekday: 'short' }).toUpperCase();
+        doc.text(dayName, badgeX + badgeW / 2, badgeY + 17, { align: 'center' });
+      } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+        doc.text(`${evDate.getDate()}–${endEvDate.getDate()}`, badgeX + badgeW / 2, badgeY + 11.5, { align: 'center' });
 
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5.2);
         doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-        const textX = margin + 6 + (pillWidth - textWidth) / 2;
-        doc.text(ev.category, textX, currentY + 25.5);
+        doc.text('MULTI-DAY', badgeX + badgeW / 2, badgeY + 16.8, { align: 'center' });
       }
 
-      // Middle Column: Title & Description
-      const textStartX = margin + 46;
-      const textWidth = hasFlyer ? contentWidth - 46 - 28 : contentWidth - 48;
+      // Time Display below Badge
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.8);
+      doc.setTextColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
+      const timeStr = formatEventTime(ev.date, ev.endDate);
+      const timeLines = doc.splitTextToSize(timeStr, badgeW + 4);
+      doc.text(timeLines[0], badgeX + badgeW / 2, badgeY + badgeH + 4.2, { align: 'center' });
+
+      // Middle Column: Category, Title, Venue (Clickable Maps), Description
+      const textStartX = margin + 33;
+      const textWidth = hasFlyer ? contentWidth - 33 - 27 : contentWidth - 35;
 
       // Event URLs
       const outlookUrl = createOutlookWebUrl(ev);
       const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
 
-      // Event Title (clickable link to Outlook)
+      let infoY = currentY + 4.5;
+
+      // Category Pill & optional Multi-day indicator
+      if (ev.category) {
+        doc.setFont('helvetica', 'bold');
+        const catFontSize = ev.category.length > 25 ? 5.5 : 6;
+        doc.setFontSize(catFontSize);
+        const textW = doc.getTextWidth(ev.category);
+        const pillWidth = Math.max(14, textW + 3.5);
+        const pillHeight = 4.2;
+
+        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+        doc.roundedRect(textStartX, infoY, pillWidth, pillHeight, 1, 1, 'F');
+        doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+        doc.roundedRect(textStartX, infoY, pillWidth, pillHeight, 1, 1, 'S');
+
+        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+        doc.text(ev.category, textStartX + pillWidth / 2, infoY + 3, { align: 'center' });
+
+        if (isMultiDay && endEvDate) {
+          const multiText = `${formatDateRange(ev.date, ev.endDate)}`;
+          const multiTextW = doc.getTextWidth(multiText);
+          const multiPillW = multiTextW + 4;
+          const multiX = textStartX + pillWidth + 2;
+
+          doc.setFillColor(254, 242, 242); // soft red tint
+          doc.roundedRect(multiX, infoY, multiPillW, pillHeight, 1, 1, 'F');
+          doc.setDrawColor(254, 202, 202);
+          doc.roundedRect(multiX, infoY, multiPillW, pillHeight, 1, 1, 'S');
+
+          doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
+          doc.text(multiText, multiX + multiPillW / 2, infoY + 3, { align: 'center' });
+        }
+
+        infoY += pillHeight + 2;
+      }
+
+      // Event Title (Clean text, NOT clickable as requested)
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
+      doc.setFontSize(9.5);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
       const titleLines = doc.splitTextToSize(ev.title, textWidth);
-      doc.text(titleLines.slice(0, 2), textStartX, currentY + 6.5);
+      doc.text(titleLines.slice(0, 2), textStartX, infoY + 1);
+      const titleHeight = (titleLines.slice(0, 2).length) * 4;
+      infoY += titleHeight + 1.5;
 
-      const titleHeight = (titleLines.slice(0, 2).length) * 4.5;
-      doc.link(textStartX, currentY + 2, textWidth, titleHeight + 2, { url: outlookUrl });
+      // Venue / Location (Clickable to Google Maps)
+      if (ev.location) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(2, 132, 199); // Maps Link Blue
+        const venueText = `📍 ${ev.location}`;
+        const venueLines = doc.splitTextToSize(venueText, textWidth);
+        doc.text(venueLines[0], textStartX, infoY);
+
+        if (mapsUrl) {
+          const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 2);
+          doc.link(textStartX, infoY - 3, venueW, 4.2, { url: mapsUrl });
+        }
+        infoY += 3.5;
+      }
 
       // Description (wrapped)
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const maxDescLines = hasFlyer ? 4 : 3;
+      const maxDescLines = hasFlyer ? 2 : 3;
       const descLines = doc.splitTextToSize(ev.description || '', textWidth);
-      doc.text(descLines.slice(0, maxDescLines), textStartX, currentY + 7 + titleHeight);
+      doc.text(descLines.slice(0, maxDescLines), textStartX, infoY);
 
       // Right Column: Flyer Thumbnail
       let flyerW = 0;
       let flyerX = pageWidth - margin;
       if (hasFlyer && flyerData) {
         try {
-          const maxW = 24;
+          const maxW = 23;
           const maxH = cardHeight - 6;
           flyerW = maxW;
           let flyerH = maxH;
@@ -398,6 +493,11 @@ export const generateFortnightlyPDF = async (
           }
           flyerX = pageWidth - margin - flyerW - 3;
           const flyerY = currentY + 3 + (maxH - flyerH) / 2;
+
+          // Draw subtle image border frame
+          doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+          doc.roundedRect(flyerX - 0.5, flyerY - 0.5, flyerW + 1, flyerH + 1, 1, 1, 'S');
+
           doc.addImage(flyerData, 'JPEG', flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
         } catch (imgErr) {
           console.warn('Could not embed flyer thumbnail in PDF:', imgErr);
@@ -418,9 +518,9 @@ export const generateFortnightlyPDF = async (
 
       // 1. Outlook Web Button
       doc.setFillColor(OUTLOOK_BG[0], OUTLOOK_BG[1], OUTLOOK_BG[2]);
-      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1, 1, 'F');
+      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1.2, 1.2, 'F');
       doc.setDrawColor(OUTLOOK_BORDER[0], OUTLOOK_BORDER[1], OUTLOOK_BORDER[2]);
-      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1, 1, 'S');
+      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1.2, 1.2, 'S');
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
@@ -430,9 +530,9 @@ export const generateFortnightlyPDF = async (
 
       // 2. .ICS Download Button
       doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1, 1, 'F');
+      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1.2, 1.2, 'F');
       doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1, 1, 'S');
+      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1.2, 1.2, 'S');
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
@@ -505,11 +605,12 @@ export const generateFortnightlyPDF = async (
       doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
       doc.line(margin, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
 
-      // Date & Time
+      // Date & Time (Multi-day aware)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text(formatEventDate(ev.date), colX.date, currentY + 5);
+      const dateDisplay = formatEventDateDisplay(ev.date, ev.endDate);
+      doc.text(dateDisplay, colX.date, currentY + 5);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
@@ -519,15 +620,14 @@ export const generateFortnightlyPDF = async (
       // URLs for calendar integration
       const outlookUrl = createOutlookWebUrl(ev);
       const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
 
-      // Event Title & short desc
+      // Event Title (Clean text, NOT clickable as requested)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
       const title = ev.title.length > 34 ? ev.title.slice(0, 32) + '…' : ev.title;
       doc.text(title, colX.title, currentY + 4.5);
-      // Make title clickable to add to Outlook Web
-      doc.link(colX.title, currentY + 1, 55, 5, { url: outlookUrl });
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
@@ -535,12 +635,15 @@ export const generateFortnightlyPDF = async (
       const desc = ev.description.replace(/\n/g, ' ').slice(0, 50) + (ev.description.length > 50 ? '…' : '');
       doc.text(desc, colX.title, currentY + 8.5);
 
-      // Venue
+      // Venue (Clickable to Google Maps)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+      doc.setTextColor(2, 132, 199); // Maps Link Blue
       const venue = ev.location.length > 25 ? ev.location.slice(0, 23) + '…' : ev.location;
       doc.text(venue, colX.venue, currentY + 5);
+      if (mapsUrl) {
+        doc.link(colX.venue, currentY + 1, 38, 5, { url: mapsUrl });
+      }
 
       // Category
       doc.setFont('helvetica', 'normal');
@@ -602,8 +705,7 @@ export const generateWhatsAppSummary = (
   const dateRangeStr = formatDateRange(startDate, endDate);
 
   let text = `📅 *CORK CITY PARTNERSHIP — UPCOMING EVENTS*\n`;
-  text += `*Fortnightly Schedule:* ${dateRangeStr}\n`;
-  text += `_Circulated for the Board & Staff_\n`;
+  text += `*Schedule:* ${dateRangeStr}\n`;
   text += `────────────────────────────\n\n`;
 
   if (filteredEvents.length === 0) {
@@ -616,20 +718,30 @@ export const generateWhatsAppSummary = (
 
   filteredEvents.forEach((ev) => {
     const evDate = toDate(ev.date) || new Date();
+    const isMulti = isMultiDayEvent(ev.date, ev.endDate);
     const evDateStr = evDate.toLocaleDateString('en-IE', {
       weekday: 'long',
       day: 'numeric',
       month: 'long'
     });
 
-    if (evDateStr !== currentDateGroup) {
+    if (isMulti && ev.endDate) {
+      const multiHeader = `${formatDateRange(ev.date, ev.endDate)} (Multi-day)`;
+      if (multiHeader !== currentDateGroup) {
+        currentDateGroup = multiHeader;
+        text += `🗓 *${currentDateGroup}*\n`;
+      }
+    } else if (evDateStr !== currentDateGroup) {
       currentDateGroup = evDateStr;
       text += `🗓 *${currentDateGroup}*\n`;
     }
 
     const timeStr = formatEventTime(ev.date, ev.endDate);
     text += `⏰ *${timeStr}* | *${ev.title}*\n`;
-    text += `📍 *Venue:* ${ev.location}\n`;
+    if (ev.location) {
+      const mapUrl = createGoogleMapsUrl(ev.location);
+      text += `📍 *Venue:* ${ev.location} (${mapUrl})\n`;
+    }
     if (ev.category) {
       text += `🏷 *Category:* ${ev.category}\n`;
     }
@@ -644,7 +756,7 @@ export const generateWhatsAppSummary = (
   });
 
   text += `────────────────────────────\n`;
-  text += `📌 *PDF Bulletin & Calendar:* Check company email or portal.`;
+  text += `📌 *PDF Bulletin & Calendar:* Check company portal.`;
 
   return text;
 };

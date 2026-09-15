@@ -1,0 +1,5 @@
+{
+  "name": "CCP Event Calendar",
+  "description": "Internal event management platform for CCP staff with calendar view, R2 file storage integration, and role-based access control.",
+  "requestFramePermissions": []
+}

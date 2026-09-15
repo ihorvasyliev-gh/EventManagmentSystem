@@ -736,25 +736,31 @@ export const submitEvent = async (eventData: {
 }): Promise<Event> => {
   let posterUrl: string | undefined;
 
-  // 1. If a poster file was provided, upload to event-attachments bucket
+  // 1. If a poster file was provided, try uploading to Cloudflare R2 or Supabase storage
   if (eventData.posterFile) {
     try {
-      const fileExt = eventData.posterFile.name.split('.').pop() || 'jpg';
-      const fileName = `submissions/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('event-attachments')
-        .upload(fileName, eventData.posterFile, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (!uploadError && uploadData) {
-        const { data: publicUrlData } = supabase.storage
+      try {
+        // First try Cloudflare R2 (/api/upload Pages Function)
+        posterUrl = await uploadPosterToR2(eventData.posterFile);
+      } catch (r2Err) {
+        // Fallback to Supabase Storage bucket 'event-attachments'
+        const fileExt = eventData.posterFile.name.split('.').pop() || 'jpg';
+        const fileName = `submissions/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from('event-attachments')
-          .getPublicUrl(fileName);
-        posterUrl = publicUrlData.publicUrl;
-      } else {
-        console.warn('Could not upload poster to storage:', uploadError);
+          .upload(fileName, eventData.posterFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: publicUrlData } = supabase.storage
+            .from('event-attachments')
+            .getPublicUrl(fileName);
+          posterUrl = publicUrlData.publicUrl;
+        } else {
+          console.warn('Poster upload skipped (storage not configured):', uploadError || r2Err);
+        }
       }
     } catch (uploadErr) {
       console.warn('Error uploading poster:', uploadErr);
@@ -785,10 +791,57 @@ export const submitEvent = async (eventData: {
 
   // Check if current user is logged in
   const { data: sessionData } = await supabase.auth.getSession();
+  const isAnonymous = !sessionData?.session?.user?.id;
+
   if (sessionData?.session?.user?.id) {
     insertPayload.creator_id = sessionData.session.user.id;
   }
 
+  // If anonymous, insert without .select() because Postgres evaluates SELECT RLS on RETURNING,
+  // and anonymous visitors cannot read unapproved draft events
+  if (isAnonymous) {
+    const { error } = await supabase
+      .from('events')
+      .insert([insertPayload]);
+
+    if (error) {
+      console.error('Error submitting event:', error);
+      // If error was due to unknown columns (in case DB migration isn't run yet), fallback without them:
+      if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date'))) {
+        const minimalPayload = { ...insertPayload };
+        delete minimalPayload.submitter_name;
+        delete minimalPayload.submitter_email;
+        delete minimalPayload.end_date;
+        const { error: retryError } = await supabase
+          .from('events')
+          .insert([minimalPayload]);
+        if (retryError) {
+          throw new Error(retryError?.message || 'Failed to submit event');
+        }
+      } else {
+        throw new Error(error?.message || 'Failed to submit event');
+      }
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      title: insertPayload.title,
+      description: insertPayload.description,
+      date: new Date(insertPayload.date),
+      endDate: insertPayload.end_date ? new Date(insertPayload.end_date) : undefined,
+      location: insertPayload.location,
+      category: insertPayload.category,
+      posterUrl: insertPayload.poster_url,
+      status: 'draft',
+      tags: insertPayload.tags,
+      submitterName: insertPayload.submitter_name,
+      submitterEmail: insertPayload.submitter_email,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } as Event;
+  }
+
+  // Authenticated submission
   const { data, error } = await supabase
     .from('events')
     .insert([insertPayload])
@@ -797,21 +850,6 @@ export const submitEvent = async (eventData: {
 
   if (error || !data) {
     console.error('Error submitting event:', error);
-    // If error was due to unknown columns (in case DB migration isn't run yet), fallback without them:
-    if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date'))) {
-      delete insertPayload.submitter_name;
-      delete insertPayload.submitter_email;
-      delete insertPayload.end_date;
-      const { data: retryData, error: retryError } = await supabase
-        .from('events')
-        .insert([insertPayload])
-        .select()
-        .single();
-      if (retryError || !retryData) {
-        throw new Error(retryError?.message || 'Failed to submit event');
-      }
-      return mapSupabaseEventToEvent(retryData);
-    }
     throw new Error(error?.message || 'Failed to submit event');
   }
 

@@ -6,6 +6,10 @@ A full-featured corporate event calendar for **Cork City Partnership** — built
 
 | Feature | Description |
 |---------|-------------|
+| 📝 **Staff Submissions Form** | Public direct link (`/submit`) for all CCP staff to submit upcoming events without passwords |
+| 📥 **Admin Submissions Inbox** | Moderation queue for Elizabeth/Admins with 1-click Approve, Edit, and Decline |
+| 📑 **Fortnightly PDF Bulletin** | Generates branded A4 PDF for the Board & staff (Executive Cards & Compact Table formats) |
+| 📲 **WhatsApp Digest** | 1-click formatted emoji text generator for company WhatsApp announcements |
 | 🔐 **Auth & Roles** | Email/password sign-in via Supabase Auth. Staff and Admin roles |
 | 📅 **Calendar Views** | Month grid and agenda views with responsive mobile layout |
 | 🔁 **Recurring Events** | Daily, weekly, monthly, yearly, or custom date picks; delete single occurrences |
@@ -32,6 +36,39 @@ A full-featured corporate event calendar for **Cork City Partnership** — built
 | Hosting | Cloudflare Pages (with Pages Functions) |
 | Icons | Lucide React |
 | Export | ExcelJS (`.xlsx`), ICS generation |
+
+---
+
+## 🗓️ Wednesday Submission & Fortnightly Bulletin Workflow
+
+This calendar includes a dedicated, streamlined workflow tailored to Cork City Partnership's bi-weekly event circulation schedule:
+
+### 1. Wednesday Afternoon: Staff Submissions
+- **Direct Submission URL:** `https://<your-domain>/submit` (or `/?mode=submit`)
+- **No Password Required:** All CCP staff can open the link directly on desktop or mobile.
+- **Fields:** Event Name, Category, Date & Time, Venue/Location, Short Description, Poster/Flyer upload, Submitter Name & Email.
+- Submitted events are automatically queued in the database with status `draft` (Pending Review).
+
+### 2. Thursday: Admin Review & Moderation
+- Admins (Elizabeth, Igor, etc.) log into the calendar.
+- The **Navbar** shows an active notification badge: `[📥 Submissions (3)]`.
+- Click **Submissions** to open the review panel:
+  - Inspect submitter info, date/time, venue, description, and full poster preview.
+  - **Approve & Publish:** Sets status to `published` in 1 click; event immediately appears on the calendar.
+  - **Edit:** Adjust details or formatting before approving.
+  - **Approve All:** Batch approve all verified submissions.
+
+### 3. Friday Morning: Fortnightly Bulletin (PDF & WhatsApp)
+- Click the **"Bulletin"** button in the Navbar or in the **Export** dialog.
+- Select the 14-day date range (defaults to next 2 weeks).
+- Choose layout style:
+  - **Executive Digest:** A4 visual cards with category pills, date/time badges, descriptions, and embedded flyer thumbnails. Ideal for the Board of Directors.
+  - **Compact Table:** Dense agenda table.
+- Click **Download Fortnightly PDF Bulletin** to generate the document with official Cork City Partnership colors (`#B30066` and `#39B54A`) and logo.
+- Click **Copy WhatsApp Summary** to copy a preformatted markdown text with emojis ready to paste directly into company WhatsApp groups.
+
+### Database Setup
+To enable anonymous draft submissions in Supabase, execute `submission-migration.sql` in your Supabase SQL Editor.
 
 ---
 

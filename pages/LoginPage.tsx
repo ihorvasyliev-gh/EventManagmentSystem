@@ -5,9 +5,10 @@ import { Calendar, Lock, User as UserIcon, Loader2, Mail } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
+  onOpenSubmitEvent?: () => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,15 +91,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-xl overflow-hidden">
-        <div className="bg-blue-600 px-8 py-6 text-center">
-          <div className="bg-white/20 p-3 rounded-full inline-block mb-3">
-             <Calendar className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">CCP Events</h1>
-          <p className="text-blue-100 text-sm mt-1">Staff Access Portal</p>
+        <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-8 py-6 text-center">
+          <img
+            src="/assets/ccp-logo.png"
+            alt="Cork City Partnership"
+            className="h-12 mx-auto mb-3 bg-white/95 p-1.5 rounded-lg shadow-sm"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+          <h1 className="text-xl font-bold text-white">Cork City Partnership</h1>
+          <p className="text-brand-100 text-xs mt-1">Staff Portal & Event Calendar</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-8 py-8 space-y-6">
+        <form onSubmit={handleSubmit} className="px-8 py-6 space-y-5">
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-md border border-red-100 dark:border-red-800">
               {error}
@@ -115,10 +121,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <input
                   type="text"
                   required
-                  className="pl-10 block w-full border border-slate-300 dark:border-slate-600 rounded-lg py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                  placeholder="John Doe"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                  placeholder="John Doe"
                 />
               </div>
             </div>
@@ -133,10 +139,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <input
                 type="email"
                 required
-                className="pl-10 block w-full border border-slate-300 dark:border-slate-600 rounded-lg py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                placeholder="you@ccp.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                placeholder="staff@partnershipcork.ie"
               />
             </div>
           </div>
@@ -150,22 +156,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <input
                 type="password"
                 required
-                className="pl-10 block w-full border border-slate-300 dark:border-slate-600 rounded-lg py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength={isSignUp ? 6 : undefined}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                placeholder="••••••••"
               />
             </div>
-            {isSignUp && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Password must be at least 6 characters</p>
-            )}
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center items-center bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-70"
+            className="w-full flex justify-center items-center bg-brand-600 text-white py-2.5 rounded-lg font-semibold hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-all disabled:opacity-70"
           >
             {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : (isSignUp ? 'Sign Up' : 'Sign In')}
           </button>
@@ -179,11 +181,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 setPassword('');
                 setFullName('');
               }}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium"
             >
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
             </button>
           </div>
+
+          {onOpenSubmitEvent && (
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 text-center">
+              <button
+                type="button"
+                onClick={onOpenSubmitEvent}
+                className="w-full py-2 px-3 border border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/30 hover:bg-brand-100 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-300 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>📝 Submit an Event for Elizabeth's Review</span>
+                <span className="text-[10px] bg-brand-200 dark:bg-brand-800 text-brand-800 dark:text-brand-200 px-1.5 py-0.5 rounded">No login needed</span>
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

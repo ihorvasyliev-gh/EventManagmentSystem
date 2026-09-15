@@ -24,6 +24,7 @@ import { useMedia } from './hooks/useMedia';
 // Lazy load modals for code splitting
 const EventModal = lazy(() => import('./components/EventModal'));
 const ExportModal = lazy(() => import('./components/ExportModal'));
+import SubmitEventPage from './pages/SubmitEventPage';
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -50,6 +51,12 @@ const AppContent: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname.startsWith('/submit') || window.location.search.includes('mode=submit');
+    }
+    return false;
+  });
 
   // Session restoration - мгновенное восстановление из кэша
   const userIdRef = React.useRef<string | null>(null);
@@ -709,6 +716,19 @@ const AppContent: React.FC = () => {
     return Array.from(creatorMap.entries()).map(([id, name]) => ({ id, name }));
   }, [events, creatorNames]);
 
+  if (isSubmitPageOpen) {
+    return (
+      <SubmitEventPage
+        onBackToLogin={() => {
+          setIsSubmitPageOpen(false);
+          if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {
+            window.history.pushState({}, '', '/');
+          }
+        }}
+      />
+    );
+  }
+
   if (isSessionLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 gap-4">
@@ -719,7 +739,15 @@ const AppContent: React.FC = () => {
   }
 
   if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <LoginPage
+        onLogin={handleLogin}
+        onOpenSubmitEvent={() => {
+          setIsSubmitPageOpen(true);
+          window.history.pushState({}, '', '/?mode=submit');
+        }}
+      />
+    );
   }
 
   return (

@@ -56,6 +56,15 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     filtered = filtered.filter(event => event.creatorId === filters.creatorId);
   }
 
+  // Submitter Email filter
+  if (filters.submitterEmail) {
+    const emailLower = filters.submitterEmail.toLowerCase();
+    filtered = filtered.filter(event =>
+      event.submitterEmail?.toLowerCase() === emailLower ||
+      event.tags?.some(tag => tag.toLowerCase() === `email:${emailLower}`)
+    );
+  }
+
   // Tags filter
   if (filters.tags && filters.tags.length > 0) {
     filtered = filtered.filter(event =>

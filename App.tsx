@@ -10,13 +10,13 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { User, Event, EventFilters, UserRole } from './types';
 import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptions, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
-import { logout as logoutService, getCurrentUser, getUsersByIds } from './services/authService';
+import { logout as logoutService, getCurrentUser } from './services/authService';
 import { getUserRsvps } from './services/rsvpService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
 import { getCachedUser, cacheUser, clearUserCache, hasValidSession } from './utils/sessionCache';
-import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache, cacheCreatorNames, getCachedCreatorNamesStale } from './utils/eventsCache';
+import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache } from './utils/eventsCache';
 import { clearRecurrenceCache } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
@@ -39,9 +39,6 @@ const AppContent: React.FC = () => {
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
   const [recurrenceExceptions, setRecurrenceExceptions] = useState<Map<string, Date[]>>(new Map());
-  const [creatorNames, setCreatorNames] = useState<Record<string, string>>(() => {
-    return getCachedCreatorNamesStale() || {};
-  });
 
   // Mobile State
   const isMobile = useMedia('(max-width: 640px)');
@@ -727,64 +724,22 @@ const AppContent: React.FC = () => {
     return Array.from(new Set(events.map(e => e.location))).sort();
   }, [events]);
 
-  // Load creator names
-  useEffect(() => {
-    if (events.length === 0) return;
-
-    const loadCreatorNames = async () => {
-      const uniqueCreatorIds = Array.from(
-        new Set(
-          events
-            .map(e => e.creatorId)
-            .filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''))
-        )
-      );
-
-      // Filter out IDs we already know
-      const unknownIds = uniqueCreatorIds.filter(id => !creatorNames[id]);
-
-      if (unknownIds.length === 0) return;
-
-      try {
-        const users = await getUsersByIds(unknownIds);
-        const newNames: Record<string, string> = {};
-
-        users.forEach(u => {
-          newNames[u.id] = u.fullName;
-        });
-
-        unknownIds.forEach(id => {
-          if (!newNames[id]) {
-            // handle unknown
-          }
-        });
-
-        if (Object.keys(newNames).length > 0) {
-          setCreatorNames(prev => {
-            const merged = { ...prev, ...newNames };
-            cacheCreatorNames(merged);
-            return merged;
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load creator names', err);
-      }
-    };
-
-    // Debounce slightly or just run
-    loadCreatorNames();
-  }, [events, creatorNames]);
-
-  const availableCreators = useMemo(() => {
-    const creatorMap = new Map<string, string>();
+  // Extract unique submitter emails for filters
+  const availableSubmitterEmails = useMemo(() => {
+    const emails = new Set<string>();
     events.forEach(e => {
-      if (e.creatorId && typeof e.creatorId === 'string' && !creatorMap.has(e.creatorId)) {
-        const fallbackName = `Creator ${e.creatorId.substring(0, 8)}...`;
-        creatorMap.set(e.creatorId, creatorNames[e.creatorId] || fallbackName);
+      if (e.submitterEmail && typeof e.submitterEmail === 'string' && e.submitterEmail.trim()) {
+        emails.add(e.submitterEmail.trim());
       }
+      e.tags?.forEach(tag => {
+        if (tag.toLowerCase().startsWith('email:')) {
+          const email = tag.slice(6).trim();
+          if (email) emails.add(email);
+        }
+      });
     });
-    return Array.from(creatorMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [events, creatorNames]);
+    return Array.from(emails).sort((a, b) => a.localeCompare(b));
+  }, [events]);
 
   if (isSubmitPageOpen) {
     return (
@@ -854,7 +809,7 @@ const AppContent: React.FC = () => {
             filters={filters}
             onFiltersChange={setFilters}
             availableLocations={availableLocations}
-            availableCreators={availableCreators}
+            availableSubmitterEmails={availableSubmitterEmails}
           />
         </div>
 

@@ -245,6 +245,22 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
     return Array.from(creatorMap.entries()).map(([id, name]) => ({ id, name }));
   }, [events, creatorNames]);
 
+  const availableSubmitterEmails = useMemo(() => {
+    const emails = new Set<string>();
+    events.forEach(e => {
+      if (e.submitterEmail && typeof e.submitterEmail === 'string' && e.submitterEmail.trim()) {
+        emails.add(e.submitterEmail.trim());
+      }
+      e.tags?.forEach(tag => {
+        if (tag.toLowerCase().startsWith('email:')) {
+          const email = tag.slice(6).trim();
+          if (email) emails.add(email);
+        }
+      });
+    });
+    return Array.from(emails).sort((a, b) => a.localeCompare(b));
+  }, [events]);
+
   return {
     events,
     setEvents,
@@ -257,5 +273,6 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
     creatorNames,
     availableLocations,
     availableCreators,
+    availableSubmitterEmails,
   };
 }

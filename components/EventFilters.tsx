@@ -1,15 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Filter, X, Calendar, MapPin, User, Tag } from 'lucide-react';
-import { EventFilters, EventCategory, EventStatus, EventCategoryItem } from '../types';
-import { getCategories } from '../services/categoryService';
-
+import React, { useState, useMemo } from 'react';
+import { Filter, X, Calendar, MapPin, Mail, Tag } from 'lucide-react';
+import { EventFilters, EventCategory, EventStatus } from '../types';
 import { EVENT_CATEGORIES } from '../constants/categories';
 
 interface EventFiltersProps {
   filters: EventFilters;
   onFiltersChange: (filters: EventFilters) => void;
   availableLocations: string[];
-  availableCreators: { id: string; name: string }[];
+  availableSubmitterEmails: string[];
   onClose?: () => void;
 }
 
@@ -17,33 +15,17 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   filters,
   onFiltersChange,
   availableLocations,
-  availableCreators,
+  availableSubmitterEmails,
   onClose
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [categories, setCategories] = useState<EventCategoryItem[]>([]);
-
-  useEffect(() => {
-    getCategories()
-      .then(setCategories)
-      .catch(err => {
-        console.error('Failed to load categories:', err);
-        setCategories([]);
-      });
-  }, []);
 
   const categoryOptions: { value: EventCategory; label: string }[] = useMemo(() => {
-    const list: string[] = [...EVENT_CATEGORIES];
-    categories.forEach(cat => {
-      if (cat.name && !list.includes(cat.name)) {
-        list.push(cat.name);
-      }
-    });
-    return list.map(cat => ({
+    return EVENT_CATEGORIES.map(cat => ({
       value: cat,
       label: cat
     }));
-  }, [categories]);
+  }, []);
 
   const statuses: { value: EventStatus; label: string }[] = [
     { value: 'published', label: 'Published' },
@@ -83,12 +65,15 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   ];
 
   const hasActiveFilters = useMemo(() => 
-    filters.category || 
-    filters.status || 
-    filters.dateRange || 
-    filters.location || 
-    filters.creatorId ||
-    (filters.tags && filters.tags.length > 0),
+    Boolean(
+      filters.category || 
+      filters.status || 
+      filters.dateRange || 
+      filters.location || 
+      filters.submitterEmail ||
+      filters.creatorId ||
+      (filters.tags && filters.tags.length > 0)
+    ),
     [filters]
   );
 
@@ -122,7 +107,7 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
               filters.status ? 1 : 0,
               filters.dateRange ? 1 : 0,
               filters.location ? 1 : 0,
-              filters.creatorId ? 1 : 0,
+              filters.submitterEmail || filters.creatorId ? 1 : 0,
               filters.tags?.length || 0
             ].reduce((a, b) => a + b, 0)}
           </span>
@@ -268,27 +253,27 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
               </div>
             )}
 
-            {/* Creator Filter */}
-            {availableCreators.length > 0 && (
+            {/* Submitter Email Filter */}
+            {availableSubmitterEmails.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  <User className="h-4 w-4 inline mr-1" />
-                  Creator
+                  <Mail className="h-4 w-4 inline mr-1" />
+                  Submitter Email
                 </label>
                 <select
-                  value={filters.creatorId || ''}
+                  value={filters.submitterEmail || ''}
                   onChange={(e) => {
                     onFiltersChange({
                       ...filters,
-                      creatorId: e.target.value || undefined
+                      submitterEmail: e.target.value || undefined
                     });
                   }}
                   className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
                 >
-                  <option value="">All Creators</option>
-                  {availableCreators.map((creator) => (
-                    <option key={creator.id} value={creator.id}>
-                      {creator.name}
+                  <option value="">All Submitters</option>
+                  {availableSubmitterEmails.map((email) => (
+                    <option key={email} value={email}>
+                      {email}
                     </option>
                   ))}
                 </select>
@@ -319,6 +304,7 @@ export default React.memo(EventFiltersComponent, (prevProps, nextProps) => {
     if (prevProps.filters.category !== nextProps.filters.category) return false;
     if (prevProps.filters.status !== nextProps.filters.status) return false;
     if (prevProps.filters.location !== nextProps.filters.location) return false;
+    if (prevProps.filters.submitterEmail !== nextProps.filters.submitterEmail) return false;
     if (prevProps.filters.creatorId !== nextProps.filters.creatorId) return false;
     
     // Compare date ranges
@@ -338,10 +324,8 @@ export default React.memo(EventFiltersComponent, (prevProps, nextProps) => {
   if (prevProps.availableLocations.length !== nextProps.availableLocations.length) return false;
   if (prevProps.availableLocations.join(',') !== nextProps.availableLocations.join(',')) return false;
   
-  if (prevProps.availableCreators.length !== nextProps.availableCreators.length) return false;
-  const prevCreators = prevProps.availableCreators.map(c => `${c.id}:${c.name}`).join(',');
-  const nextCreators = nextProps.availableCreators.map(c => `${c.id}:${c.name}`).join(',');
-  if (prevCreators !== nextCreators) return false;
+  if (prevProps.availableSubmitterEmails.length !== nextProps.availableSubmitterEmails.length) return false;
+  if (prevProps.availableSubmitterEmails.join(',') !== nextProps.availableSubmitterEmails.join(',')) return false;
   
   if (prevProps.onFiltersChange !== nextProps.onFiltersChange) return false;
   if (prevProps.onClose !== nextProps.onClose) return false;

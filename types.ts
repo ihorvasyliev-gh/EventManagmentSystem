@@ -101,5 +101,6 @@ export interface EventFilters {
   };
   location?: string;
   creatorId?: string;
+  submitterEmail?: string;
   tags?: string[];
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X } from 'lucide-react';
+import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -14,9 +14,25 @@ interface NavbarProps {
   isRefreshing?: boolean;
   events?: any[]; // Using any[] to avoid circular dependency issues if types are mixed, but ideally Event[]
   userRsvpEventIds?: Set<string>;
+  pendingSubmissionsCount?: number;
+  onOpenSubmissions?: () => void;
+  onOpenFortnightlyBulletin?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onAddEventClick, onExportClick, onRefresh, loadingEvents = false, isRefreshing = false, events = [], userRsvpEventIds = new Set() }) => {
+const Navbar: React.FC<NavbarProps> = ({
+  user,
+  onLogout,
+  onAddEventClick,
+  onExportClick,
+  onRefresh,
+  loadingEvents = false,
+  isRefreshing = false,
+  events = [],
+  userRsvpEventIds = new Set(),
+  pendingSubmissionsCount = 0,
+  onOpenSubmissions,
+  onOpenFortnightlyBulletin
+}) => {
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -84,13 +100,40 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onAddEventClick, onExpo
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
 
+                {onOpenFortnightlyBulletin && (
+                  <button
+                    onClick={onOpenFortnightlyBulletin}
+                    className="flex items-center space-x-1.5 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/50 font-medium px-3 py-1.5 rounded-lg transition-all text-sm border border-brand-200 dark:border-brand-850 shadow-xs"
+                    title="Generate 2-week PDF bulletin for Board and staff"
+                  >
+                    <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                    <span className="hidden sm:inline">Bulletin</span>
+                  </button>
+                )}
+
                 {onExportClick && (
                   <button
                     onClick={onExportClick}
-                    className="flex items-center space-x-2 text-slate-600 hover:text-slate-900 font-medium px-3 py-1.5 rounded-lg transition-all hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 btn-hover-effect text-sm"
+                    className="flex items-center space-x-1.5 text-slate-600 hover:text-slate-900 font-medium px-3 py-1.5 rounded-lg transition-all hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 btn-hover-effect text-sm"
                   >
                     <Download className="h-4 w-4" />
                     <span>Export</span>
+                  </button>
+                )}
+
+                {user.role === UserRole.ADMIN && onOpenSubmissions && (
+                  <button
+                    onClick={onOpenSubmissions}
+                    className="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    title="Review staff submissions"
+                  >
+                    <Inbox className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                    <span className="hidden sm:inline">Submissions</span>
+                    {pendingSubmissionsCount > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white animate-pulse">
+                        {pendingSubmissionsCount}
+                      </span>
+                    )}
                   </button>
                 )}
 
@@ -176,7 +219,38 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onAddEventClick, onExpo
                   </button>
                 )}
 
+                {onOpenFortnightlyBulletin && (
+                  <button
+                    onClick={() => {
+                      onOpenFortnightlyBulletin();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center space-x-3 text-left px-4 py-3 min-h-[48px] text-brand-700 dark:text-brand-300 bg-brand-50/50 dark:bg-brand-950/20 hover:bg-brand-100 rounded-lg transition-all font-medium"
+                  >
+                    <FileText className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+                    <span>Fortnightly Bulletin</span>
+                  </button>
+                )}
 
+                {user.role === UserRole.ADMIN && onOpenSubmissions && (
+                  <button
+                    onClick={() => {
+                      onOpenSubmissions();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between text-left px-4 py-3 min-h-[48px] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all font-medium"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Inbox className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+                      <span>Submissions Inbox</span>
+                    </div>
+                    {pendingSubmissionsCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white">
+                        {pendingSubmissionsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 <button
                   onClick={onLogout}

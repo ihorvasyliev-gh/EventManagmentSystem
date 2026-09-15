@@ -9,7 +9,7 @@ import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { User, Event, EventFilters, UserRole } from './types';
-import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptions } from './services/eventService';
+import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptions, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
 import { logout as logoutService, getCurrentUser, getUsersByIds } from './services/authService';
 import { getUserRsvps } from './services/rsvpService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
@@ -24,6 +24,7 @@ import { useMedia } from './hooks/useMedia';
 // Lazy load modals for code splitting
 const EventModal = lazy(() => import('./components/EventModal'));
 const ExportModal = lazy(() => import('./components/ExportModal'));
+const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
 import SubmitEventPage from './pages/SubmitEventPage';
 
 const AppContent: React.FC = () => {
@@ -51,6 +52,8 @@ const AppContent: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
+  const [pendingSubmissions, setPendingSubmissions] = useState<Event[]>([]);
   const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.location.pathname.startsWith('/submit') || window.location.search.includes('mode=submit');
@@ -367,6 +370,58 @@ const AppContent: React.FC = () => {
     setEvents([]);
     setUserRsvpEventIds(new Set());
   }, []);
+
+  // Submissions handlers for Admins
+  const refreshSubmissions = useCallback(async () => {
+    if (user?.role === UserRole.ADMIN) {
+      try {
+        const subs = await getPendingSubmissions();
+        setPendingSubmissions(subs);
+      } catch (err) {
+        console.error('Error fetching submissions:', err);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.role === UserRole.ADMIN) {
+      refreshSubmissions();
+    }
+  }, [user, refreshSubmissions]);
+
+  const handleApproveSubmission = useCallback(async (event: Event) => {
+    try {
+      await approveSubmission(event.id);
+      showToast(`Event "${event.title}" approved and published!`, 'success');
+      refreshSubmissions();
+      refreshEvents(true);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to approve event', 'error');
+    }
+  }, [refreshSubmissions, refreshEvents, showToast]);
+
+  const handleRejectSubmission = useCallback(async (eventId: string) => {
+    try {
+      await rejectSubmission(eventId);
+      showToast('Submission removed', 'info');
+      refreshSubmissions();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to reject event', 'error');
+    }
+  }, [refreshSubmissions, showToast]);
+
+  const handleApproveAllSubmissions = useCallback(async () => {
+    try {
+      for (const sub of pendingSubmissions) {
+        await approveSubmission(sub.id);
+      }
+      showToast(`All ${pendingSubmissions.length} events approved and published!`, 'success');
+      refreshSubmissions();
+      refreshEvents(true);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to approve all events', 'error');
+    }
+  }, [pendingSubmissions, refreshSubmissions, refreshEvents, showToast]);
 
   // Event Handlers - memoized callbacks
   const handleEventClick = useCallback((event: Event) => {
@@ -762,6 +817,8 @@ const AppContent: React.FC = () => {
         isRefreshing={isRefreshing}
         events={events}
         userRsvpEventIds={userRsvpEventIds}
+        pendingSubmissionsCount={pendingSubmissions.length}
+        onOpenSubmissions={() => setIsSubmissionsModalOpen(true)}
       />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -821,6 +878,23 @@ const AppContent: React.FC = () => {
             isOpen={isExportModalOpen}
             onClose={() => setIsExportModalOpen(false)}
             events={filteredEvents}
+          />
+        </Suspense>
+      )}
+
+      {isSubmissionsModalOpen && (
+        <Suspense fallback={null}>
+          <SubmissionsModal
+            isOpen={isSubmissionsModalOpen}
+            onClose={() => setIsSubmissionsModalOpen(false)}
+            submissions={pendingSubmissions}
+            onApprove={handleApproveSubmission}
+            onEdit={(ev) => {
+              setSelectedEvent(ev);
+              setIsModalOpen(true);
+            }}
+            onReject={handleRejectSubmission}
+            onApproveAll={handleApproveAllSubmissions}
           />
         </Suspense>
       )}

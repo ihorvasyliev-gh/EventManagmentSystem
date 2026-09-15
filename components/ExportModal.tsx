@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink } from 'lucide-react';
+import { X, Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { Event } from '../types';
 import { exportToICal, exportToExcel, downloadFile, downloadBlob } from '../utils/export';
 import { getEventsWithRelated, getRecurrenceExceptions } from '../services/eventService';
@@ -12,9 +12,10 @@ interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   events: Event[];
+  onOpenFortnightlyBulletin?: () => void;
 }
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events }) => {
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOpenFortnightlyBulletin }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'subscribe'>('export');
   const [exportFormat, setExportFormat] = useState<'ical' | 'excel'>('ical');
   const [exporting, setExporting] = useState(false);
@@ -137,8 +138,32 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events }) =>
           {activeTab === 'export' && (
             <>
               <div className="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                  Export {events.length} event{events.length !== 1 ? 's' : ''} to your preferred format.
+                {onOpenFortnightlyBulletin && (
+                  <div className="mb-5 p-4 rounded-xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/80 flex items-center justify-between gap-3 shadow-xs">
+                    <div>
+                      <h4 className="text-sm font-bold text-brand-900 dark:text-brand-100 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-brand-600" />
+                        Fortnightly Bulletin (PDF)
+                      </h4>
+                      <p className="text-xs text-brand-700 dark:text-brand-300 mt-0.5">
+                        Generate the 2-week PDF digest & WhatsApp summary for the Board & staff.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenFortnightlyBulletin();
+                      }}
+                      className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex-shrink-0"
+                    >
+                      Open Generator
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+                  Or export calendar data:
                 </p>
 
                 <div className="space-y-3">

@@ -25,6 +25,7 @@ import { useMedia } from './hooks/useMedia';
 const EventModal = lazy(() => import('./components/EventModal'));
 const ExportModal = lazy(() => import('./components/ExportModal'));
 const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
+const FortnightlyBulletinModal = lazy(() => import('./components/FortnightlyBulletinModal'));
 import SubmitEventPage from './pages/SubmitEventPage';
 
 const AppContent: React.FC = () => {
@@ -53,6 +54,7 @@ const AppContent: React.FC = () => {
   const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
+  const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
   const [pendingSubmissions, setPendingSubmissions] = useState<Event[]>([]);
   const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -819,6 +821,7 @@ const AppContent: React.FC = () => {
         userRsvpEventIds={userRsvpEventIds}
         pendingSubmissionsCount={pendingSubmissions.length}
         onOpenSubmissions={() => setIsSubmissionsModalOpen(true)}
+        onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
       />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -877,6 +880,17 @@ const AppContent: React.FC = () => {
           <ExportModal
             isOpen={isExportModalOpen}
             onClose={() => setIsExportModalOpen(false)}
+            events={filteredEvents}
+            onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
+          />
+        </Suspense>
+      )}
+
+      {isBulletinModalOpen && (
+        <Suspense fallback={null}>
+          <FortnightlyBulletinModal
+            isOpen={isBulletinModalOpen}
+            onClose={() => setIsBulletinModalOpen(false)}
             events={filteredEvents}
           />
         </Suspense>

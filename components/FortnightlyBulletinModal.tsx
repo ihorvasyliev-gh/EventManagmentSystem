@@ -43,8 +43,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
 
   // Count events in range
   const matchingEvents = events.filter((e) => {
-    const t = e.date.getTime();
-    return t >= startDate.getTime() && t <= endDate.getTime();
+    const d = e.date instanceof Date ? e.date : new Date(e.date);
+    const t = d.getTime();
+    return !isNaN(t) && t >= startDate.getTime() && t <= endDate.getTime();
   });
 
   const handleDownloadPDF = async () => {

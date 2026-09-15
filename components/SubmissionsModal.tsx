@@ -61,8 +61,10 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
     }
   };
 
-  const formatDate = (d: Date) => {
-    return d.toLocaleDateString('en-IE', {
+  const formatDate = (d: Date | string) => {
+    const date = d instanceof Date ? d : new Date(d);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-IE', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -70,8 +72,10 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
     });
   };
 
-  const formatTime = (d: Date) => {
-    return d.toLocaleTimeString('en-IE', {
+  const formatTime = (d: Date | string) => {
+    const date = d instanceof Date ? d : new Date(d);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('en-IE', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false

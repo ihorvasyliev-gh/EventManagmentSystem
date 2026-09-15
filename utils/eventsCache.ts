@@ -13,19 +13,30 @@ interface CachedEvents {
 function serialize(events: Event[]): string {
   const raw = events.map((e) => ({
     ...e,
-    date: e.date.toISOString(),
-    createdAt: e.createdAt.toISOString(),
-    attachments: e.attachments?.map((a) => ({ ...a, uploadedAt: (a.uploadedAt as Date).toISOString() })),
+    date: e.date instanceof Date ? e.date.toISOString() : new Date(e.date).toISOString(),
+    endDate: e.endDate
+      ? (e.endDate instanceof Date ? e.endDate.toISOString() : new Date(e.endDate).toISOString())
+      : undefined,
+    createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : new Date(e.createdAt).toISOString(),
+    attachments: e.attachments?.map((a) => ({
+      ...a,
+      uploadedAt: a.uploadedAt instanceof Date ? a.uploadedAt.toISOString() : new Date(a.uploadedAt).toISOString()
+    })),
     comments: e.comments?.map((c) => ({
       ...c,
-      createdAt: (c.createdAt as Date).toISOString(),
-      occurrenceDate: (c.occurrenceDate as Date).toISOString()
+      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : new Date(c.createdAt).toISOString(),
+      occurrenceDate: c.occurrenceDate instanceof Date ? c.occurrenceDate.toISOString() : new Date(c.occurrenceDate).toISOString()
     })),
-    history: e.history?.map((h) => ({ ...h, timestamp: (h.timestamp as Date).toISOString() })),
+    history: e.history?.map((h) => ({
+      ...h,
+      timestamp: h.timestamp instanceof Date ? h.timestamp.toISOString() : new Date(h.timestamp).toISOString()
+    })),
     recurrence: e.recurrence
       ? {
         ...e.recurrence,
-        endDate: e.recurrence.endDate ? (e.recurrence.endDate as Date).toISOString() : undefined
+        endDate: e.recurrence.endDate
+          ? (e.recurrence.endDate instanceof Date ? e.recurrence.endDate.toISOString() : new Date(e.recurrence.endDate).toISOString())
+          : undefined
       }
       : undefined
   }));
@@ -38,6 +49,7 @@ function deserialize(json: string): Event[] {
   return raw.map((e) => ({
     ...e,
     date: new Date(e.date),
+    endDate: e.endDate ? new Date(e.endDate) : undefined,
     createdAt: new Date(e.createdAt),
     attachments: e.attachments?.map((a: any) => ({ ...a, uploadedAt: new Date(a.uploadedAt) })),
     comments: e.comments?.map((c: any) => ({

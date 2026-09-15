@@ -32,22 +32,36 @@ const loadImageAsBase64 = async (url: string): Promise<string | null> => {
   }
 };
 
-const formatDateRange = (start: Date, end: Date) => {
+const toDate = (d: Date | string | number | undefined | null): Date | null => {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateRange = (start: Date | string, end: Date | string) => {
+  const s = toDate(start);
+  const e = toDate(end);
   const opt: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-  return `${start.toLocaleDateString('en-IE', opt)} – ${end.toLocaleDateString('en-IE', opt)}`;
+  const sStr = s ? s.toLocaleDateString('en-IE', opt) : '';
+  const eStr = e ? e.toLocaleDateString('en-IE', opt) : '';
+  return sStr && eStr ? `${sStr} – ${eStr}` : sStr || eStr;
 };
 
-const formatEventDate = (d: Date) => {
-  return d.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
+const formatEventDate = (d: Date | string) => {
+  const date = toDate(d);
+  if (!date) return '';
+  return date.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
-const formatEventTime = (start: Date, end?: Date) => {
-  const s = start.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', hour12: false });
-  if (end) {
-    const e = end.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', hour12: false });
-    return `${s} – ${e}`;
+const formatEventTime = (start: Date | string, end?: Date | string) => {
+  const s = toDate(start);
+  const e = toDate(end);
+  const sStr = s ? s.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  if (e) {
+    const eStr = e.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return sStr ? `${sStr} – ${eStr}` : eStr;
   }
-  return s;
+  return sStr;
 };
 
 /**
@@ -72,14 +86,20 @@ export const generateFortnightlyPDF = async (
   const logoData = await loadImageAsBase64('/assets/ccp-logo.png');
 
   // Filter events within selected date range and sort chronologically
-  const startMs = options.startDate.getTime();
-  const endMs = options.endDate.getTime();
+  const startMs = (toDate(options.startDate) || new Date()).getTime();
+  const endMs = (toDate(options.endDate) || new Date()).getTime();
   const filteredEvents = events
     .filter((e) => {
-      const t = e.date.getTime();
+      const d = toDate(e.date);
+      if (!d) return false;
+      const t = d.getTime();
       return t >= startMs && t <= endMs;
     })
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+    .sort((a, b) => {
+      const ta = toDate(a.date)?.getTime() || 0;
+      const tb = toDate(b.date)?.getTime() || 0;
+      return ta - tb;
+    });
 
   let currentPage = 1;
 
@@ -95,8 +115,12 @@ export const generateFortnightlyPDF = async (
     let headerTextX = margin;
     if (logoData) {
       try {
+        const imgProps = doc.getImageProperties(logoData);
+        const ratio = imgProps && imgProps.width && imgProps.height
+          ? imgProps.width / imgProps.height
+          : (1024 / 240);
         const logoHeight = 10.5;
-        const logoWidth = logoHeight * (1024 / 240); // natural ratio ~44.8mm
+        const logoWidth = logoHeight * ratio;
         doc.addImage(logoData, 'PNG', margin, margin + 4, logoWidth, logoHeight);
         headerTextX = margin + logoWidth + 4;
       } catch {
@@ -302,10 +326,28 @@ export const generateFortnightlyPDF = async (
       // Right Column: Flyer Thumbnail
       if (hasFlyer && flyerData) {
         try {
-          const flyerW = 24;
-          const flyerH = cardHeight - 6;
+          const maxW = 24;
+          const maxH = cardHeight - 6;
+          let flyerW = maxW;
+          let flyerH = maxH;
+          try {
+            const fProps = doc.getImageProperties(flyerData);
+            if (fProps && fProps.width && fProps.height) {
+              const fRatio = fProps.width / fProps.height;
+              if (fRatio > maxW / maxH) {
+                flyerW = maxW;
+                flyerH = maxW / fRatio;
+              } else {
+                flyerH = maxH;
+                flyerW = maxH * fRatio;
+              }
+            }
+          } catch {
+            // fallback to box bounds
+          }
           const flyerX = pageWidth - margin - flyerW - 3;
-          doc.addImage(flyerData, 'JPEG', flyerX, currentY + 3, flyerW, flyerH, undefined, 'FAST');
+          const flyerY = currentY + 3 + (maxH - flyerH) / 2;
+          doc.addImage(flyerData, 'JPEG', flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
         } catch (imgErr) {
           console.warn('Could not embed flyer thumbnail in PDF:', imgErr);
         }
@@ -411,7 +453,8 @@ export const generateFortnightlyPDF = async (
   drawFooter(currentPage);
 
   // Save the PDF
-  const filename = `CCP-Fortnightly-Events-${options.startDate.toISOString().slice(0, 10)}.pdf`;
+  const validStart = toDate(options.startDate) || new Date();
+  const filename = `CCP-Fortnightly-Events-${validStart.toISOString().slice(0, 10)}.pdf`;
   doc.save(filename);
 };
 
@@ -420,17 +463,23 @@ export const generateFortnightlyPDF = async (
  */
 export const generateWhatsAppSummary = (
   events: Event[],
-  startDate: Date,
-  endDate: Date
+  startDate: Date | string,
+  endDate: Date | string
 ): string => {
-  const startMs = startDate.getTime();
-  const endMs = endDate.getTime();
+  const startMs = (toDate(startDate) || new Date()).getTime();
+  const endMs = (toDate(endDate) || new Date()).getTime();
   const filteredEvents = events
     .filter((e) => {
-      const t = e.date.getTime();
+      const d = toDate(e.date);
+      if (!d) return false;
+      const t = d.getTime();
       return t >= startMs && t <= endMs;
     })
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+    .sort((a, b) => {
+      const ta = toDate(a.date)?.getTime() || 0;
+      const tb = toDate(b.date)?.getTime() || 0;
+      return ta - tb;
+    });
 
   const dateRangeStr = formatDateRange(startDate, endDate);
 
@@ -448,7 +497,8 @@ export const generateWhatsAppSummary = (
   let currentDateGroup = '';
 
   filteredEvents.forEach((ev) => {
-    const evDateStr = ev.date.toLocaleDateString('en-IE', {
+    const evDate = toDate(ev.date) || new Date();
+    const evDateStr = evDate.toLocaleDateString('en-IE', {
       weekday: 'long',
       day: 'numeric',
       month: 'long'

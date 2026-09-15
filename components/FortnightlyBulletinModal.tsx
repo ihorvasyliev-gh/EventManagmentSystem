@@ -54,7 +54,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       await generateFortnightlyPDF(events, {
         startDate,
         endDate,
-        format
+        format,
+        baseUrl: window.location.origin
       });
     } catch (err) {
       console.error('Failed to generate PDF:', err);

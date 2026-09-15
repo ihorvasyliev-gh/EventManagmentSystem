@@ -20,6 +20,7 @@ interface SupabaseEvent {
     title: string;
     description: string | null;
     date: string;
+    end_date?: string | null;
     location: string | null;
     status: string;
     category: string | null;
@@ -147,7 +148,7 @@ function buildICS(events: SupabaseEvent[]): string {
 
     for (const ev of events) {
         const start = new Date(ev.date);
-        const end = new Date(start.getTime() + 60 * 60 * 1000); // +1 hour default
+        const end = ev.end_date ? new Date(ev.end_date) : new Date(start.getTime() + 60 * 60 * 1000); // +1 hour default
 
         lines.push('BEGIN:VEVENT');
         lines.push(`UID:${ev.id}@ccp-events`);
@@ -183,6 +184,63 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }
 
     try {
+        const reqUrl = new URL(context.request.url);
+        const eventId = reqUrl.searchParams.get('event_id');
+        const specificDate = reqUrl.searchParams.get('date');
+
+        if (eventId) {
+            // Fetch single event (e.g. clicked from PDF bulletin)
+            const url = `${env.SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(eventId)}&select=*`;
+            const res = await fetch(url, {
+                headers: {
+                    'apikey': env.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!res.ok) {
+                return new Response('Failed to fetch event.', { status: res.status });
+            }
+
+            const events: SupabaseEvent[] = await res.json();
+            if (!events || events.length === 0) {
+                return new Response('Event not found.', { status: 404 });
+            }
+
+            const ev = { ...events[0] };
+            if (specificDate) {
+                const parsed = new Date(specificDate);
+                if (!isNaN(parsed.getTime())) {
+                    if (ev.end_date) {
+                        const originalStart = new Date(ev.date).getTime();
+                        const originalEnd = new Date(ev.end_date).getTime();
+                        const duration = Math.max(30 * 60 * 1000, originalEnd - originalStart);
+                        ev.end_date = new Date(parsed.getTime() + duration).toISOString();
+                    }
+                    ev.date = parsed.toISOString();
+                }
+            }
+
+            const ics = buildICS([ev]);
+            const rawTitle = ev.title || 'event';
+            const slug = rawTitle
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                .slice(0, 40) || 'ccp-event';
+
+            return new Response(ics, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/calendar; charset=utf-8',
+                    'Content-Disposition': `attachment; filename="${slug}.ics"`,
+                    'Cache-Control': 'public, max-age=3600',
+                    'Access-Control-Allow-Origin': '*',
+                },
+            });
+        }
+
         // Fetch published events from Supabase REST API
         const url = `${env.SUPABASE_URL}/rest/v1/events?status=eq.published&order=date.asc`;
         const res = await fetch(url, {

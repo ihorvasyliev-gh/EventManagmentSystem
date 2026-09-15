@@ -6,6 +6,7 @@ export interface BulletinOptions {
   endDate: Date;
   format: 'executive' | 'compact';
   title?: string;
+  baseUrl?: string;
 }
 
 // CCP Brand Colors (RGB) matching official logo
@@ -15,6 +16,53 @@ const SLATE_DARK = [30, 41, 59];   // #1E293B
 const SLATE_MUTED = [100, 116, 139]; // #64748B
 const BG_LIGHT = [248, 250, 252];  // #F8FAFC
 const BORDER_LIGHT = [226, 232, 240]; // #E2E8F0
+const OUTLOOK_BLUE = [0, 120, 212]; // #0078D4 (Microsoft Outlook Brand Blue)
+const OUTLOOK_BG = [239, 246, 255]; // #EFF6FF (Soft Blue)
+const OUTLOOK_BORDER = [186, 215, 253]; // #BFDBFE
+
+/**
+ * Generate deep link for adding an event directly into Outlook 365 on the Web
+ */
+export const createOutlookWebUrl = (event: {
+  title: string;
+  description?: string;
+  location?: string;
+  date: Date | string;
+  endDate?: Date | string;
+}): string => {
+  const start = toDate(event.date) || new Date();
+  const end = toDate(event.endDate) || new Date(start.getTime() + 60 * 60 * 1000);
+
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: event.title || 'Event',
+    startdt: start.toISOString(),
+    enddt: end.toISOString(),
+  });
+
+  if (event.location) {
+    params.set('location', event.location);
+  }
+  if (event.description) {
+    params.set('body', event.description);
+  }
+
+  return `https://outlook.office.com/calendar/deeplink/compose?${params.toString()}`;
+};
+
+/**
+ * Generate link for single-event .ics download (Desktop Outlook / Apple / Mobile)
+ */
+export const createIcsDownloadUrl = (
+  event: { id: string; date: Date | string },
+  baseUrl?: string
+): string => {
+  const base = baseUrl || (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://ccp-event-calendar.pages.dev');
+  const d = toDate(event.date);
+  const dateParam = d ? `&date=${encodeURIComponent(d.toISOString())}` : '';
+  return `${base}/api/calendar?event_id=${encodeURIComponent(event.id)}${dateParam}`;
+};
 
 const loadImageAsBase64 = async (url: string): Promise<string | null> => {
   try {
@@ -221,7 +269,7 @@ export const generateFortnightlyPDF = async (
       const weekNum = diffDays < 7 ? 1 : 2;
 
       const hasFlyer = !!flyerData;
-      const cardHeight = hasFlyer ? 38 : 30;
+      const cardHeight = hasFlyer ? 39 : 33;
 
       // Page break check
       if (currentY + cardHeight > pageHeight - 16) {
@@ -276,25 +324,37 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const venueLines = doc.splitTextToSize(`Venue: ${ev.location}`, 36);
+      const venueLines = doc.splitTextToSize(`Venue: ${ev.location || 'TBA'}`, 36);
       doc.text(venueLines.slice(0, 2), margin + 6, currentY + 16);
 
-      // Category Pill
+      // Category Pill (dynamic width & adaptive font size to prevent truncation)
       if (ev.category) {
-        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-        doc.roundedRect(margin + 6, currentY + 22, 34, 5, 1, 1, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.5);
+        const catFontSize = ev.category.length > 25 ? 5.8 : ev.category.length > 20 ? 6.2 : 6.5;
+        doc.setFontSize(catFontSize);
+        const textWidth = doc.getTextWidth(ev.category);
+        const pillWidth = Math.min(38, Math.max(18, textWidth + 4));
+        const pillHeight = 5;
+
+        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+        doc.roundedRect(margin + 6, currentY + 22, pillWidth, pillHeight, 1, 1, 'F');
+        doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+        doc.roundedRect(margin + 6, currentY + 22, pillWidth, pillHeight, 1, 1, 'S');
+
         doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-        const catText = ev.category.length > 22 ? ev.category.slice(0, 20) + '…' : ev.category;
-        doc.text(catText, margin + 8, currentY + 25.5);
+        const textX = margin + 6 + (pillWidth - textWidth) / 2;
+        doc.text(ev.category, textX, currentY + 25.5);
       }
 
       // Middle Column: Title & Description
       const textStartX = margin + 46;
       const textWidth = hasFlyer ? contentWidth - 46 - 28 : contentWidth - 48;
 
-      // Event Title
+      // Event URLs
+      const outlookUrl = createOutlookWebUrl(ev);
+      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+
+      // Event Title (clickable link to Outlook)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
@@ -302,33 +362,24 @@ export const generateFortnightlyPDF = async (
       doc.text(titleLines.slice(0, 2), textStartX, currentY + 6.5);
 
       const titleHeight = (titleLines.slice(0, 2).length) * 4.5;
+      doc.link(textStartX, currentY + 2, textWidth, titleHeight + 2, { url: outlookUrl });
 
       // Description (wrapped)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
       const maxDescLines = hasFlyer ? 4 : 3;
-      const descLines = doc.splitTextToSize(ev.description, textWidth);
+      const descLines = doc.splitTextToSize(ev.description || '', textWidth);
       doc.text(descLines.slice(0, maxDescLines), textStartX, currentY + 7 + titleHeight);
 
-      // Submitter info footer line inside card
-      if (ev.submitterName) {
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(6.5);
-        doc.setTextColor(148, 163, 184);
-        doc.text(
-          `Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`,
-          textStartX,
-          currentY + cardHeight - 2.5
-        );
-      }
-
       // Right Column: Flyer Thumbnail
+      let flyerW = 0;
+      let flyerX = pageWidth - margin;
       if (hasFlyer && flyerData) {
         try {
           const maxW = 24;
           const maxH = cardHeight - 6;
-          let flyerW = maxW;
+          flyerW = maxW;
           let flyerH = maxH;
           try {
             const fProps = doc.getImageProperties(flyerData);
@@ -345,12 +396,59 @@ export const generateFortnightlyPDF = async (
           } catch {
             // fallback to box bounds
           }
-          const flyerX = pageWidth - margin - flyerW - 3;
+          flyerX = pageWidth - margin - flyerW - 3;
           const flyerY = currentY + 3 + (maxH - flyerH) / 2;
           doc.addImage(flyerData, 'JPEG', flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
         } catch (imgErr) {
           console.warn('Could not embed flyer thumbnail in PDF:', imgErr);
         }
+      }
+
+      // Action Buttons (Outlook 365 Web & .ICS)
+      const actionRight = hasFlyer && flyerData ? (flyerX - 3) : (pageWidth - margin - 4);
+      const btnHeight = 4.6;
+      const btnY = currentY + cardHeight - btnHeight - 2;
+
+      const icsBtnW = 14;
+      const outlookBtnW = 21;
+      const btnGap = 2;
+
+      const icsBtnX = actionRight - icsBtnW;
+      const outlookBtnX = icsBtnX - btnGap - outlookBtnW;
+
+      // 1. Outlook Web Button
+      doc.setFillColor(OUTLOOK_BG[0], OUTLOOK_BG[1], OUTLOOK_BG[2]);
+      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1, 1, 'F');
+      doc.setDrawColor(OUTLOOK_BORDER[0], OUTLOOK_BORDER[1], OUTLOOK_BORDER[2]);
+      doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1, 1, 'S');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(OUTLOOK_BLUE[0], OUTLOOK_BLUE[1], OUTLOOK_BLUE[2]);
+      doc.text('+ Outlook', outlookBtnX + outlookBtnW / 2, btnY + 3.2, { align: 'center' });
+      doc.link(outlookBtnX, btnY, outlookBtnW, btnHeight, { url: outlookUrl });
+
+      // 2. .ICS Download Button
+      doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1, 1, 'F');
+      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1, 1, 'S');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+      doc.text('⬇ .ICS', icsBtnX + icsBtnW / 2, btnY + 3.2, { align: 'center' });
+      doc.link(icsBtnX, btnY, icsBtnW, btnHeight, { url: icsUrl });
+
+      // Submitter info footer line inside card (to the left of action buttons)
+      if (ev.submitterName) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(6.5);
+        doc.setTextColor(148, 163, 184);
+        const maxSubWidth = outlookBtnX - textStartX - 3;
+        const subText = `Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`;
+        const subLines = doc.splitTextToSize(subText, Math.max(20, maxSubWidth));
+        doc.text(subLines[0], textStartX, currentY + cardHeight - 3.2);
       }
 
       currentY += cardHeight + 3.5;
@@ -418,12 +516,18 @@ export const generateFortnightlyPDF = async (
       doc.setTextColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
       doc.text(formatEventTime(ev.date, ev.endDate), colX.time, currentY + 5);
 
+      // URLs for calendar integration
+      const outlookUrl = createOutlookWebUrl(ev);
+      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+
       // Event Title & short desc
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
       const title = ev.title.length > 34 ? ev.title.slice(0, 32) + '…' : ev.title;
       doc.text(title, colX.title, currentY + 4.5);
+      // Make title clickable to add to Outlook Web
+      doc.link(colX.title, currentY + 1, 55, 5, { url: outlookUrl });
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
@@ -442,8 +546,22 @@ export const generateFortnightlyPDF = async (
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      const cat = (ev.category || 'Event').slice(0, 18);
-      doc.text(cat, colX.category, currentY + 5);
+      const catLines = doc.splitTextToSize(ev.category || 'Event', 24);
+      doc.text(catLines[0], colX.category, currentY + 5);
+
+      // Calendar quick links in Compact format
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6);
+      doc.setTextColor(OUTLOOK_BLUE[0], OUTLOOK_BLUE[1], OUTLOOK_BLUE[2]);
+      doc.text('+Outlook', colX.category, currentY + 9.5);
+      doc.link(colX.category, currentY + 7, 10, 4, { url: outlookUrl });
+
+      doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+      doc.text('•', colX.category + 11.5, currentY + 9.5);
+
+      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+      doc.text('.ics', colX.category + 14.5, currentY + 9.5);
+      doc.link(colX.category + 13.5, currentY + 7, 8, 4, { url: icsUrl });
 
       currentY += rowHeight;
     }

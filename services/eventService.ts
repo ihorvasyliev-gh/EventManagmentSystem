@@ -235,17 +235,24 @@ const mapSupabaseEventToEvent = async (
   const posterAttachment = attachments?.find(att => att.type === 'image');
   const posterUrl = supabaseEvent.poster_url || posterAttachment?.url || undefined;
 
+  const tags: string[] = supabaseEvent.tags || [];
+  const tagSubmitterName = tags.find((t: string) => t.startsWith('by:'))?.replace('by:', '');
+  const tagSubmitterEmail = tags.find((t: string) => t.startsWith('email:'))?.replace('email:', '');
+
   return {
     id: supabaseEvent.id,
     title: supabaseEvent.title,
     description: supabaseEvent.description || '',
     date: new Date(supabaseEvent.date),
+    endDate: supabaseEvent.end_date ? new Date(supabaseEvent.end_date) : undefined,
     location: supabaseEvent.location || '',
     posterUrl,
     attachments: attachments && attachments.length > 0 ? attachments : undefined,
     category: supabaseEvent.category || undefined,
-    tags: supabaseEvent.tags || [],
+    tags,
     status: supabaseEvent.status,
+    submitterName: supabaseEvent.submitter_name || tagSubmitterName || undefined,
+    submitterEmail: supabaseEvent.submitter_email || tagSubmitterEmail || undefined,
     recurrence,
     rsvpEnabled: supabaseEvent.rsvp_enabled || false,
     maxAttendees: supabaseEvent.max_attendees || undefined,
@@ -709,5 +716,159 @@ export const deleteComment = async (commentId: string): Promise<void> => {
   if (error) {
     console.error('Error deleting comment:', error);
     throw new Error(error.message || 'Failed to delete comment');
+  }
+};
+
+/**
+ * Submit an event from the public/staff submission form.
+ * Saved with status 'draft' and tags for submitter attribution.
+ */
+export const submitEvent = async (eventData: {
+  title: string;
+  description: string;
+  date: Date;
+  endDate?: Date;
+  location: string;
+  category?: string;
+  submitterName: string;
+  submitterEmail: string;
+  posterFile?: File;
+}): Promise<Event> => {
+  let posterUrl: string | undefined;
+
+  // 1. If a poster file was provided, upload to event-attachments bucket
+  if (eventData.posterFile) {
+    try {
+      const fileExt = eventData.posterFile.name.split('.').pop() || 'jpg';
+      const fileName = `submissions/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('event-attachments')
+        .upload(fileName, eventData.posterFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (!uploadError && uploadData) {
+        const { data: publicUrlData } = supabase.storage
+          .from('event-attachments')
+          .getPublicUrl(fileName);
+        posterUrl = publicUrlData.publicUrl;
+      } else {
+        console.warn('Could not upload poster to storage:', uploadError);
+      }
+    } catch (uploadErr) {
+      console.warn('Error uploading poster:', uploadErr);
+    }
+  }
+
+  // 2. Prepare tags including submitter info for redundancy
+  const tags: string[] = [
+    'staff-submission',
+    `by:${eventData.submitterName.trim()}`,
+    `email:${eventData.submitterEmail.trim()}`
+  ];
+
+  // 3. Insert into events table
+  const insertPayload: any = {
+    title: eventData.title.trim(),
+    description: eventData.description.trim(),
+    date: eventData.date.toISOString(),
+    location: eventData.location.trim(),
+    category: eventData.category || null,
+    poster_url: posterUrl || null,
+    status: 'draft',
+    tags,
+    submitter_name: eventData.submitterName.trim(),
+    submitter_email: eventData.submitterEmail.trim(),
+    end_date: eventData.endDate ? eventData.endDate.toISOString() : null
+  };
+
+  // Check if current user is logged in
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData?.session?.user?.id) {
+    insertPayload.creator_id = sessionData.session.user.id;
+  }
+
+  const { data, error } = await supabase
+    .from('events')
+    .insert([insertPayload])
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Error submitting event:', error);
+    // If error was due to unknown columns (in case DB migration isn't run yet), fallback without them:
+    if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date'))) {
+      delete insertPayload.submitter_name;
+      delete insertPayload.submitter_email;
+      delete insertPayload.end_date;
+      const { data: retryData, error: retryError } = await supabase
+        .from('events')
+        .insert([insertPayload])
+        .select()
+        .single();
+      if (retryError || !retryData) {
+        throw new Error(retryError?.message || 'Failed to submit event');
+      }
+      return mapSupabaseEventToEvent(retryData);
+    }
+    throw new Error(error?.message || 'Failed to submit event');
+  }
+
+  return mapSupabaseEventToEvent(data);
+};
+
+/**
+ * Fetch pending submissions for admins (status === 'draft').
+ */
+export const getPendingSubmissions = async (): Promise<Event[]> => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching pending submissions:', error);
+    return [];
+  }
+
+  return Promise.all((data || []).map(row => mapSupabaseEventToEvent(row, undefined, true)));
+};
+
+/**
+ * Approve and publish a submission.
+ */
+export const approveSubmission = async (eventId: string): Promise<Event> => {
+  const { data, error } = await supabase
+    .from('events')
+    .update({
+      status: 'published',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', eventId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Error approving submission:', error);
+    throw new Error(error?.message || 'Failed to approve submission');
+  }
+
+  return mapSupabaseEventToEvent(data);
+};
+
+/**
+ * Reject / delete a submission.
+ */
+export const rejectSubmission = async (eventId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', eventId);
+
+  if (error) {
+    console.error('Error rejecting submission:', error);
+    throw new Error(error?.message || 'Failed to reject submission');
   }
 };

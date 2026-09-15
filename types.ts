@@ -69,12 +69,15 @@ export interface Event {
   title: string;
   description: string;
   date: Date;
+  endDate?: Date;
   location: string;
   posterUrl?: string; // Keep for backward compatibility
   attachments?: Attachment[];
   category?: EventCategory;
   tags?: string[];
   status: EventStatus;
+  submitterName?: string;
+  submitterEmail?: string;
   recurrence?: RecurrenceRule;
   rsvpEnabled?: boolean;
   maxAttendees?: number;
@@ -82,7 +85,7 @@ export interface Event {
   attendeeNames?: { userId: string; userName: string }[]; // User Names (for admins)
   comments?: EventComment[];
   history?: EventHistoryEntry[];
-  creatorId: string;
+  creatorId?: string;
   createdAt: Date;
 }
 

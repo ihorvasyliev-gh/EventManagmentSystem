@@ -156,7 +156,7 @@ export const login = async (email: string, password: string): Promise<User> => {
         } else if (authError.message?.includes('Email not confirmed')) {
           errorMessage = 'Please confirm your email address before signing in. Check your inbox for a confirmation email.';
         } else if (authError.message?.includes('User not found')) {
-          errorMessage = 'User not found. Please sign up first or contact your administrator.';
+          errorMessage = 'User not found. Please contact ivasyliev@partnershipcork.ie or your administrator.';
         } else {
           errorMessage = `Authentication failed: ${authError.message}. Please check your credentials or contact support.`;
         }

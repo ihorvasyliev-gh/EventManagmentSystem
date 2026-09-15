@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { login, signUp } from '../services/authService';
-import { User, UserRole } from '../types';
-import { Calendar, Lock, User as UserIcon, Loader2, Mail } from 'lucide-react';
+import { login } from '../services/authService';
+import { User } from '../types';
+import { Lock, Loader2, Mail } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
@@ -9,10 +9,8 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => {
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = React.useRef(0);
@@ -40,22 +38,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
     setError('');
 
     try {
-      let user: User;
-      if (isSignUp) {
-        if (!fullName.trim()) {
-          setError('Please enter your full name');
-          setIsLoading(false);
-          return;
-        }
-        if (password.length < 6) {
-          setError('Password must be at least 6 characters');
-          setIsLoading(false);
-          return;
-        }
-        user = await signUp(email, password, fullName, UserRole.STAFF);
-      } else {
-        user = await login(email, password);
-      }
+      const user = await login(email, password);
       
       // Проверяем, что это все еще актуальный запрос и компонент смонтирован
       if (currentRequestId !== requestIdRef.current || !isMountedRef.current) {
@@ -74,8 +57,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
         return;
       }
       
-      // Показываем более детальное сообщение об ошибке
-      const errorMessage = err.message || (isSignUp ? 'Registration failed' : 'Login failed');
+      const errorMessage = err.message || 'Login failed';
       setError(errorMessage);
       
       // Логируем ошибку в консоль для отладки
@@ -110,25 +92,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-md border border-red-100 dark:border-red-800">
               {error}
-            </div>
-          )}
-
-          {isSignUp && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <UserIcon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                  placeholder="John Doe"
-                />
-              </div>
             </div>
           )}
 
@@ -171,22 +134,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             disabled={isLoading}
             className="w-full flex justify-center items-center bg-brand-600 text-white py-2.5 rounded-lg font-semibold hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-all disabled:opacity-70"
           >
-            {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : (isSignUp ? 'Sign Up' : 'Sign In')}
+            {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Sign In'}
           </button>
 
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-                setPassword('');
-                setFullName('');
-              }}
-              className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium"
+          <div className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1">
+            To register an account, please contact{' '}
+            <a
+              href="mailto:ivasyliev@partnershipcork.ie"
+              className="text-brand-600 dark:text-brand-400 hover:underline font-medium"
             >
-              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
+              ivasyliev@partnershipcork.ie
+            </a>
           </div>
 
           {onOpenSubmitEvent && (
@@ -196,7 +154,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
                 onClick={onOpenSubmitEvent}
                 className="w-full py-2 px-3 border border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/30 hover:bg-brand-100 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-300 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
               >
-                <span>📝 Submit an Event for Elizabeth's Review</span>
+                <span>📝 Submit an Event for review</span>
                 <span className="text-[10px] bg-brand-200 dark:bg-brand-800 text-brand-800 dark:text-brand-200 px-1.5 py-0.5 rounded">No login needed</span>
               </button>
             </div>

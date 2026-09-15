@@ -3,16 +3,9 @@ import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail,
 import { submitEvent } from '../services/eventService';
 import { User as AuthUser, UserRole } from '../types';
 import TimePickerInput from '../components/TimePickerInput';
+import { EVENT_CATEGORIES } from '../constants/categories';
 
-const CATEGORIES = [
-  'Enterprise & Employment',
-  'Community & Family',
-  'Education & Training',
-  'Special Visits & Celebrations',
-  'Public Information Session',
-  'Health & Wellbeing',
-  'Other'
-];
+const CATEGORIES = EVENT_CATEGORIES;
 
 // Helper to format local date to YYYY-MM-DD
 const formatDateToInput = (d: Date): string => {
@@ -252,7 +245,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span>Fortnightly Bulletin: Scheduled for Friday morning release</span>
+              <span>Upcoming Events Digest: Scheduled for Friday morning release</span>
             </div>
           </div>
 
@@ -315,7 +308,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 Upcoming Events Submission
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Submissions for the Fortnightly Events Bulletin (circulated every Friday to the Board & staff).
+                Submissions for the Upcoming Events Digest (circulated every Friday to the Board & staff).
               </p>
             </div>
           </div>
@@ -549,7 +542,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     required
                     value={submitterEmail}
                     onChange={(e) => setSubmitterEmail(e.target.value)}
-                    placeholder="e.g. sarah@corkcitypartnership.ie"
+                    placeholder="e.g. sarah@partnershipcork.ie"
                     className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 text-xs"
                   />
                   <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />

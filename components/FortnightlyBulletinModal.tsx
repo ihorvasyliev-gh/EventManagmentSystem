@@ -112,10 +112,10 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white" id="bulletin-modal-title">
-                  Fortnightly Bulletin
+                  Upcoming Events Digest
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-300">
-                  Generate 2-week upcoming events digest
+                  Generate 2-week upcoming events digest for Board & Staff
                 </p>
               </div>
             </div>
@@ -233,7 +233,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    <span>Download Fortnightly PDF Bulletin</span>
+                    <span>Download Events Digest PDF</span>
                   </>
                 )}
               </button>

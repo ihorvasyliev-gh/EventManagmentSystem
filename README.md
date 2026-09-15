@@ -8,7 +8,7 @@ A full-featured corporate event calendar for **Cork City Partnership** — built
 |---------|-------------|
 | 📝 **Staff Submissions Form** | Public direct link (`/submit`) for all CCP staff to submit upcoming events without passwords |
 | 📥 **Admin Submissions Inbox** | Moderation queue for Elizabeth/Admins with 1-click Approve, Edit, and Decline |
-| 📑 **Fortnightly PDF Bulletin** | Generates branded A4 PDF for the Board & staff (Executive Cards & Compact Table formats) |
+| 📑 **Upcoming Events Digest** | Generates branded A4 PDF for the Board & staff (Executive Cards & Compact Table formats) |
 | 📲 **WhatsApp Digest** | 1-click formatted emoji text generator for company WhatsApp announcements |
 | 🔐 **Auth & Roles** | Email/password sign-in via Supabase Auth. Staff and Admin roles |
 | 📅 **Calendar Views** | Month grid and agenda views with responsive mobile layout |
@@ -39,12 +39,17 @@ A full-featured corporate event calendar for **Cork City Partnership** — built
 
 ---
 
-## 🗓️ Wednesday Submission & Fortnightly Bulletin Workflow
+## 🗓️ Wednesday Submission & Upcoming Events Digest Workflow
 
 This calendar includes a dedicated, streamlined workflow tailored to Cork City Partnership's bi-weekly event circulation schedule:
 
+> 📘 **Detailed Guides:**
+> - [**Guide for Elizabeth (Coordinator & Admin Manual)**](docs/GUIDE_FOR_ELIZABETH.md) — Includes weekly routine, admin moderation, digest generation, and copy-paste email templates.
+> - [**Staff Event Submission Guide**](docs/GUIDE_FOR_STAFF.md) — Shareable guide for all CCP team members explaining how to submit upcoming events.
+
 ### 1. Wednesday Afternoon: Staff Submissions
-- **Direct Submission URL:** `https://<your-domain>/submit` (or `/?mode=submit`)
+- **Live Calendar URL:** [https://ccp-event-calendar.pages.dev/](https://ccp-event-calendar.pages.dev/)
+- **Direct Submission URL:** [https://ccp-event-calendar.pages.dev/submit](https://ccp-event-calendar.pages.dev/submit) (also accessible directly below the Sign In button on the login page)
 - **No Password Required:** All CCP staff can open the link directly on desktop or mobile.
 - **Fields:** Event Name, Category, Date & Time, Venue/Location, Short Description, Poster/Flyer upload, Submitter Name & Email.
 - Submitted events are automatically queued in the database with status `draft` (Pending Review).
@@ -58,13 +63,13 @@ This calendar includes a dedicated, streamlined workflow tailored to Cork City P
   - **Edit:** Adjust details or formatting before approving.
   - **Approve All:** Batch approve all verified submissions.
 
-### 3. Friday Morning: Fortnightly Bulletin (PDF & WhatsApp)
-- Click the **"Bulletin"** button in the Navbar or in the **Export** dialog.
+### 3. Friday Morning: Upcoming Events Digest (PDF & WhatsApp)
+- Click the **"Events Digest"** button in the Navbar or in the **Export** dialog.
 - Select the 14-day date range (defaults to next 2 weeks).
 - Choose layout style:
   - **Executive Digest:** A4 visual cards with category pills, date/time badges, descriptions, and embedded flyer thumbnails. Ideal for the Board of Directors.
   - **Compact Table:** Dense agenda table.
-- Click **Download Fortnightly PDF Bulletin** to generate the document with official Cork City Partnership colors (`#B30066` and `#39B54A`) and logo.
+- Click **Download Events Digest PDF** to generate the document with official Cork City Partnership colors (`#B30066` and `#39B54A`) and logo.
 - Click **Copy WhatsApp Summary** to copy a preformatted markdown text with emojis ready to paste directly into company WhatsApp groups.
 
 ### Database Setup
@@ -224,16 +229,22 @@ Everything staff can do, plus:
 ├── index.tsx                   # React entry point
 ├── index.css                   # Global styles (Tailwind)
 ├── types.ts                    # TypeScript type definitions
+├── pages/
+│   ├── LoginPage.tsx           # Staff & Admin login
+│   └── SubmitEventPage.tsx     # Public event submission form (/submit)
 ├── components/
 │   ├── CalendarView.tsx        # Month grid and list views
 │   ├── EventModal.tsx          # Event detail/edit modal
 │   ├── EventFilters.tsx        # Search and filter panel
 │   ├── ExportModal.tsx         # Export & Subscribe modal
-│   ├── Navbar.tsx              # Top navigation bar
+│   ├── FortnightlyBulletinModal.tsx # Upcoming Events Digest generator (PDF & WhatsApp)
+│   ├── SubmissionsModal.tsx    # Admin inbox for staff event submissions
+│   ├── Navbar.tsx              # Top navigation bar with status badges
 │   ├── NotificationCenter.tsx  # Notification bell dropdown
 │   ├── EventComments.tsx       # Comment thread component
 │   ├── EventHistory.tsx        # Change history display
 │   ├── DatePickerCalendar.tsx  # Custom date picker for recurrence
+│   ├── TimePickerInput.tsx     # Smart time picker with 15-min increments
 │   ├── SearchBar.tsx           # Search input
 │   ├── BottomNavigation.tsx    # Mobile bottom nav
 │   ├── ErrorBoundary.tsx       # Error boundary wrapper
@@ -241,11 +252,12 @@ Everything staff can do, plus:
 │   └── SkeletonLoader.tsx      # Loading skeleton
 ├── services/
 │   ├── authService.ts          # Authentication (Supabase Auth)
-│   ├── eventService.ts         # Event CRUD, file upload
+│   ├── eventService.ts         # Event CRUD, submissions, file upload
 │   ├── categoryService.ts      # Category management
 │   ├── rsvpService.ts          # RSVP operations
 │   └── notificationService.ts  # Notification logic
 ├── utils/
+│   ├── pdfExport.ts            # Branded PDF digest & WhatsApp generator
 │   ├── recurrence.ts           # Recurring event expansion
 │   ├── export.ts               # ICS and Excel export
 │   ├── eventsCache.ts          # Client-side event caching
@@ -254,6 +266,9 @@ Everything staff can do, plus:
 │   ├── conflictDetection.ts    # Event conflict checks
 │   ├── date.ts                 # Date utilities
 │   └── validation.ts           # Form validation
+├── docs/
+│   ├── GUIDE_FOR_ELIZABETH.md  # Coordinator & Admin operational guide
+│   └── GUIDE_FOR_STAFF.md      # Staff event submission guide
 ├── hooks/                      # React custom hooks
 ├── contexts/                   # React context providers
 ├── lib/
@@ -265,6 +280,7 @@ Everything staff can do, plus:
 │   │   └── file/[[key]].ts     # R2 file serving (Pages Function)
 │   └── tsconfig.json           # Functions TypeScript config
 ├── public/
+│   ├── assets/                 # Brand logo & static assets
 │   └── manifest.json           # PWA manifest
 ├── vite.config.ts              # Vite build configuration
 ├── tailwind.config.js          # Tailwind CSS configuration
@@ -289,13 +305,15 @@ See `CREATE_ADMIN_USER.md` for detailed instructions.
 
 | File | Description |
 |------|-------------|
+| [**docs/GUIDE_FOR_ELIZABETH.md**](docs/GUIDE_FOR_ELIZABETH.md) | **Elizabeth's Guide** — Bi-weekly timeline, call-out email template, moderation inbox, digest generation |
+| [**docs/GUIDE_FOR_STAFF.md**](docs/GUIDE_FOR_STAFF.md) | **Staff Submission Guide** — Shareable guide for staff on submitting events via `/submit` |
 | `DEPLOY.md` | Full deployment guide |
 | `CLOUDFLARE_SETUP.md` | Cloudflare Pages & R2 setup |
 | `SUPABASE_SETUP.md` | Supabase database & auth setup |
 | `CREATE_ADMIN_USER.md` | How to create an admin user |
 | `QUICKSTART.md` | Quick setup reference |
 | `PERFORMANCE_SETUP.md` | Performance optimization notes |
-| `DOCUMENTATION.md` | Comprehensive internal documentation |
+| `DOCUMENTATION.md` | Comprehensive internal technical documentation |
 
 ---
 

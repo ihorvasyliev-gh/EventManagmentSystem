@@ -143,7 +143,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                     <div>
                       <h4 className="text-sm font-bold text-brand-900 dark:text-brand-100 flex items-center gap-1.5">
                         <FileText className="w-4 h-4 text-brand-600" />
-                        Fortnightly Bulletin (PDF)
+                        Upcoming Events Digest (PDF)
                       </h4>
                       <p className="text-xs text-brand-700 dark:text-brand-300 mt-0.5">
                         Generate the 2-week PDF digest & WhatsApp summary for the Board & staff.

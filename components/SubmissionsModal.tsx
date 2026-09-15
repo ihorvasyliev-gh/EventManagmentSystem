@@ -114,7 +114,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                   Staff Submissions Inbox
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-300">
-                  Review upcoming events submitted by staff for the Fortnightly Bulletin
+                  Review upcoming events submitted by staff for the Upcoming Events Digest
                 </p>
               </div>
             </div>
@@ -315,7 +315,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
           {/* Footer */}
           <div className="bg-slate-50 dark:bg-slate-850 px-6 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              Approved events will automatically appear on the calendar and in the Fortnightly Bulletin.
+              Approved events will automatically appear on the calendar and in the Upcoming Events Digest.
             </span>
             <button
               onClick={onClose}

@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry, EventCategoryItem } from '../types';
-import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink } from 'lucide-react';
+import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle } from 'lucide-react';
 import { formatDate, formatTime, isSameDay } from '../utils/date';
 import { uploadPosterToR2, uploadAttachment, addComment, deleteComment, fetchEventDetails, deleteEvent, deleteRecurrenceInstance } from '../services/eventService';
 import { rsvpToEvent, cancelRsvp, hasUserRsvped } from '../services/rsvpService';
@@ -13,6 +13,23 @@ import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
 import DatePickerCalendar from './DatePickerCalendar';
 import TimePickerInput from './TimePickerInput';
+import { EVENT_CATEGORIES } from '../constants/categories';
+import { supabase } from '../lib/supabase';
+
+// Convert "HH:mm" to minutes
+const timeToMinutes = (t: string): number => {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+};
+
+// Convert minutes to "HH:mm"
+const minutesToTime = (totalMinutes: number): string => {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
 
 interface EventModalProps {
   isOpen: boolean;
@@ -40,12 +57,16 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dateStr, setDateStr] = useState('');
-  const [timeStr, setTimeStr] = useState('');
+  const [startDateStr, setStartDateStr] = useState('');
+  const [startTimeStr, setStartTimeStr] = useState('10:00');
+  const [endDateStr, setEndDateStr] = useState('');
+  const [endTimeStr, setEndTimeStr] = useState('11:30');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState<EventCategory | ''>('');
   const [status, setStatus] = useState<EventStatus>('published');
   const [tags, setTags] = useState<string>('');
+  const [submitterName, setSubmitterName] = useState('');
+  const [submitterEmail, setSubmitterEmail] = useState('');
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
   const [maxAttendees, setMaxAttendees] = useState<number | ''>('');
   const [posterFile, setPosterFile] = useState<File | null>(null);
@@ -61,11 +82,25 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
   const [userHasRsvped, setUserHasRsvped] = useState(false);
 
   // Categories State
-  const [categories, setCategories] = useState<EventCategoryItem[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [showCalendarDropdown, setShowCalendarDropdown] = useState(false);
+
+  // Available categories: standard EVENT_CATEGORIES, current event's category, plus any custom
+  const availableCategories = useMemo(() => {
+    const list: string[] = [...EVENT_CATEGORIES];
+    if (category && !list.includes(category)) {
+      list.push(category);
+    }
+    customCategories.forEach(c => {
+      if (!list.includes(c)) {
+        list.push(c);
+      }
+    });
+    return list;
+  }, [category, customCategories]);
 
   // Recurrence State
   const [recurrenceType, setRecurrenceType] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>('none');
@@ -81,6 +116,38 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
       delete next[field];
       return next;
     });
+  };
+
+  // Auto-synchronize dates & times
+  const handleStartDateChange = (newDate: string) => {
+    setStartDateStr(newDate);
+    setEndDateStr(newDate);
+    clearFieldError('date');
+  };
+
+  const handleStartTimeChange = (newTime: string) => {
+    const prevStartM = timeToMinutes(startTimeStr);
+    const prevEndM = timeToMinutes(endTimeStr);
+    let duration = prevEndM - prevStartM;
+    if (duration <= 0) duration = 90; // default 1.5 hours
+
+    setStartTimeStr(newTime);
+    clearFieldError('date');
+
+    if (startDateStr === endDateStr) {
+      const newStartM = timeToMinutes(newTime);
+      setEndTimeStr(minutesToTime(newStartM + duration));
+    }
+  };
+
+  const handleEndDateChange = (newDate: string) => {
+    setEndDateStr(newDate);
+    clearFieldError('endDate');
+  };
+
+  const handleEndTimeChange = (newTime: string) => {
+    setEndTimeStr(newTime);
+    clearFieldError('endDate');
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +182,8 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setCategory(event.category || '');
         setStatus(event.status || 'published');
         setTags(event.tags?.join(', ') || '');
+        setSubmitterName(event.submitterName || '');
+        setSubmitterEmail(event.submitterEmail || '');
         setRsvpEnabled(event.rsvpEnabled || false);
         setMaxAttendees(event.maxAttendees || '');
         setPreviewUrl(event.posterUrl || null);
@@ -126,23 +195,37 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setAttendees(event.attendees || []);
         setAttendeeNames(event.attendeeNames || []);
 
-        // Only update local RSVP state from props if user hasn't interacted recently
-        // This ensures the optimistic update loop (Modal -> App -> Modal) doesn't reset state weirdly
-        // effectively, checks "if we haven't touched the button, trust the prop"
         if (!hasInteractedWithRsvp.current) {
           setUserHasRsvped(event.attendees?.includes(currentUserId) || false);
         }
 
-        // Format Date for Input (YYYY-MM-DD)
+        // Format Start Date for Input (YYYY-MM-DD)
         const yyyy = event.date.getFullYear();
         const mm = String(event.date.getMonth() + 1).padStart(2, '0');
         const dd = String(event.date.getDate()).padStart(2, '0');
-        setDateStr(`${yyyy}-${mm}-${dd}`);
+        const sDate = `${yyyy}-${mm}-${dd}`;
+        setStartDateStr(sDate);
 
-        // Format Time for Input (HH:MM)
+        // Format Start Time for Input (HH:MM)
         const hh = String(event.date.getHours()).padStart(2, '0');
         const min = String(event.date.getMinutes()).padStart(2, '0');
-        setTimeStr(`${hh}:${min}`);
+        setStartTimeStr(`${hh}:${min}`);
+
+        // Format End Date & Time
+        if (event.endDate) {
+          const endYyyy = event.endDate.getFullYear();
+          const endMm = String(event.endDate.getMonth() + 1).padStart(2, '0');
+          const endDd = String(event.endDate.getDate()).padStart(2, '0');
+          setEndDateStr(`${endYyyy}-${endMm}-${endDd}`);
+
+          const endHh = String(event.endDate.getHours()).padStart(2, '0');
+          const endMin = String(event.endDate.getMinutes()).padStart(2, '0');
+          setEndTimeStr(`${endHh}:${endMin}`);
+        } else {
+          setEndDateStr(sDate);
+          const startM = event.date.getHours() * 60 + event.date.getMinutes();
+          setEndTimeStr(minutesToTime(startM + 90));
+        }
 
         setPosterFile(null);
         setNewAttachments([]);
@@ -164,14 +247,11 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setFieldErrors({});
 
         // LAZY LOAD: If details are missing, fetch them in background (no loading state)
-        // Note: optimistic update in App.tsx might add attendees, so check other fields too
         const needsLoading = !event.comments || !event.history || !event.attachments || !event.attendees || (!event.attendeeNames && role === UserRole.ADMIN);
 
-        // Ref to track if the effect is still valid
         let isActive = true;
 
         if (needsLoading) {
-          // Load in background without blocking UI (per-occurrence for recurring events)
           fetchEventDetails(event.id, event.date).then(details => {
             if (!isActive) return;
 
@@ -181,8 +261,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
             if (details.attendees) {
               setAttendees(details.attendees);
               if (details.attendeeNames) setAttendeeNames(details.attendeeNames);
-              // Re-check RSVP status with fresh attendees list
-              // ONLY update if user hasn't interacted yet to avoid overwriting optimistic updates
               if (!hasInteractedWithRsvp.current) {
                 setUserHasRsvped(details.attendees.includes(currentUserId));
               }
@@ -200,20 +278,21 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         // Create Mode
         setTitle('');
         setDescription('');
-        if (initialDate) {
-          const yyyy = initialDate.getFullYear();
-          const mm = String(initialDate.getMonth() + 1).padStart(2, '0');
-          const dd = String(initialDate.getDate()).padStart(2, '0');
-          setDateStr(`${yyyy}-${mm}-${dd}`);
-          setTimeStr('09:00');
-        } else {
-          setDateStr('');
-          setTimeStr('');
-        }
+        const defaultDate = initialDate || new Date(Date.now() + 86400000);
+        const yyyy = defaultDate.getFullYear();
+        const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(defaultDate.getDate()).padStart(2, '0');
+        const defDateStr = `${yyyy}-${mm}-${dd}`;
+        setStartDateStr(defDateStr);
+        setStartTimeStr('10:00');
+        setEndDateStr(defDateStr);
+        setEndTimeStr('11:30');
         setLocation('');
-        setCategory('');
-        setStatus('draft');
+        setCategory(EVENT_CATEGORIES[0]);
+        setStatus('published');
         setTags('');
+        setSubmitterName(currentUserName || '');
+        setSubmitterEmail('');
         setRsvpEnabled(true);
         setMaxAttendees('');
         setPosterFile(null);
@@ -226,7 +305,6 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setAttendeeNames([]);
         setUserHasRsvped(false);
         setIsEditing(false);
-        // Reset Recurrence
         setRecurrenceType('none');
         setRecurrenceInterval(1);
         setRecurrenceEndDate('');
@@ -234,20 +312,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setFieldErrors({});
       }
     }
-  }, [isOpen, event, initialDate, currentUserId]);
-
-  // Load categories when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      getCategories()
-        .then(setCategories)
-        .catch(err => {
-          console.error('Failed to load categories:', err);
-          // Fallback to empty array
-          setCategories([]);
-        });
-    }
-  }, [isOpen]);
+  }, [isOpen, event, initialDate, currentUserId, currentUserName]);
 
   if (!isOpen) return null;
 
@@ -260,7 +325,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
     setIsCreatingCategory(true);
     try {
       const newCategory = await createCategory(newCategoryName.trim(), currentUserId);
-      setCategories(prev => [...prev, newCategory].sort((a, b) => a.name.localeCompare(b.name)));
+      setCustomCategories(prev => [...prev, newCategory.name]);
       setCategory(newCategory.name);
       setNewCategoryName('');
       setShowAddCategoryModal(false);
@@ -273,26 +338,83 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setPosterFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, or WEBP).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image size must be under 10MB.');
+      return;
+    }
+
+    setPosterFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePoster = () => {
+    setPosterFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate form
-    const dateTime = new Date(`${dateStr}T${timeStr}`);
+    if (!title.trim()) {
+      setFieldErrors(prev => ({ ...prev, title: 'Please enter an event title.' }));
+      return;
+    }
+    if (!startDateStr || !startTimeStr) {
+      setFieldErrors(prev => ({ ...prev, date: 'Please select a start date and time.' }));
+      return;
+    }
+
+    const startDateTime = new Date(`${startDateStr}T${startTimeStr}`);
+    if (isNaN(startDateTime.getTime())) {
+      setFieldErrors(prev => ({ ...prev, date: 'Invalid start date or time.' }));
+      return;
+    }
+
+    let endDateTime: Date | undefined = undefined;
+    if (endDateStr && endTimeStr) {
+      endDateTime = new Date(`${endDateStr}T${endTimeStr}`);
+      if (isNaN(endDateTime.getTime())) {
+        setFieldErrors(prev => ({ ...prev, endDate: 'Invalid end date or time.' }));
+        return;
+      }
+      if (endDateTime < startDateTime) {
+        setFieldErrors(prev => ({ ...prev, endDate: 'End Date & Time cannot be earlier than Start Date & Time.' }));
+        return;
+      }
+    }
+
+    if (!location.trim()) {
+      setFieldErrors(prev => ({ ...prev, location: 'Please specify the venue/location.' }));
+      return;
+    }
+    if (!description.trim()) {
+      setFieldErrors(prev => ({ ...prev, description: 'Please provide a description.' }));
+      return;
+    }
+
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
-    const eventData = {
-      title,
-      description,
-      location,
-      date: dateTime,
-      endDate: event?.endDate,
+    const eventDataToValidate = {
+      title: title.trim(),
+      description: description.trim(),
+      location: location.trim(),
+      date: startDateTime,
+      endDate: endDateTime,
       category: category || undefined,
       status: status || 'published',
       tags: tagsArray.length > 0 ? tagsArray : undefined,
@@ -306,10 +428,10 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
       } : undefined
     };
 
-    const validationErrors = validateEvent(eventData);
+    const validationErrors = validateEvent(eventDataToValidate);
     if (validationErrors.length > 0) {
       const byField: Record<string, string> = {};
-      validationErrors.forEach(e => { byField[e.field] = e.message; });
+      validationErrors.forEach(err => { byField[err.field] = err.message; });
       setFieldErrors(byField);
       setIsSubmitting(false);
       return;
@@ -318,11 +440,37 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
 
     setIsSubmitting(true);
     try {
-      let posterUrl = event?.posterUrl; // Default to existing URL if editing
+      let finalPosterUrl: string | undefined = previewUrl || undefined;
 
-      // Upload to R2 if a new file is selected
+      // Upload to R2 or Supabase storage if a new file is selected
       if (posterFile) {
-        posterUrl = await uploadPosterToR2(posterFile);
+        try {
+          finalPosterUrl = await uploadPosterToR2(posterFile);
+        } catch (r2Err) {
+          // Fallback to Supabase Storage bucket 'event-attachments'
+          const fileExt = posterFile.name.split('.').pop() || 'jpg';
+          const fileName = `posters/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('event-attachments')
+            .upload(fileName, posterFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (!uploadError && uploadData) {
+            const { data: publicUrlData } = supabase.storage
+              .from('event-attachments')
+              .getPublicUrl(fileName);
+            finalPosterUrl = publicUrlData.publicUrl;
+          } else {
+            console.warn('Poster upload skipped:', uploadError || r2Err);
+          }
+        }
+      }
+
+      // If user removed the poster, finalPosterUrl is undefined
+      if (!previewUrl && !posterFile) {
+        finalPosterUrl = undefined;
       }
 
       // Upload new attachments
@@ -334,16 +482,18 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         }
       }
 
-      const eventData = {
-        title,
-        description,
-        location,
-        date: dateTime,
-        endDate: event?.endDate,
-        posterUrl,
+      const fullEventData = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        date: startDateTime,
+        endDate: endDateTime,
+        posterUrl: finalPosterUrl,
         category: category || undefined,
         status: status || 'published',
         tags: tagsArray.length > 0 ? tagsArray : undefined,
+        submitterName: submitterName.trim() || undefined,
+        submitterEmail: submitterEmail.trim() || undefined,
         rsvpEnabled,
         maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
         attachments: [...attachments, ...uploadedAttachments],
@@ -357,9 +507,9 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
       };
 
       if (isCreating && onSave) {
-        await onSave(eventData);
+        await onSave(fullEventData);
       } else if (isEditing && event && onUpdate) {
-        await onUpdate(event.id, eventData);
+        await onUpdate(event.id, fullEventData);
       }
 
       onClose();
@@ -627,11 +777,23 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                   <div className="flex items-center gap-2 flex-wrap">
                     {event.status === 'draft' && <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full">Draft</span>}
                     {event.category && (
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${event.category === 'meeting' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-100' :
-                        event.category === 'workshop' ? 'bg-purple-50 text-purple-700 dark:bg-purple-900 dark:text-purple-100' :
-                          'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                        }`}>
+                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                        event.category === 'Enterprise & Employment' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' :
+                        event.category === 'Community & Family' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100' :
+                        event.category === 'Education & Training' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100' :
+                        event.category === 'Special Visits & Celebrations' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100' :
+                        event.category === 'Public Information Session' ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-100' :
+                        event.category === 'Health & Wellbeing' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-100' :
+                        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
                         {event.category}
+                      </span>
+                    )}
+                    {(event.submitterName || event.submitterEmail) && (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                        <User className="w-3 h-3 text-slate-400" />
+                        <span>{event.submitterName || 'Staff Member'}</span>
+                        {event.submitterEmail && <span className="text-slate-400 text-[11px]">({event.submitterEmail})</span>}
                       </span>
                     )}
                   </div>
@@ -854,41 +1016,38 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                     Please fix the errors below.
                   </div>
                 )}
+                {/* 1. Event Title */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Event Title</label>
-                  <input required type="text" value={title} onChange={(e) => { setTitle(e.target.value); clearFieldError('title'); }} className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} placeholder="e.g. Summer Strategy Meeting" />
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Event Name / Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={title}
+                    onChange={(e) => { setTitle(e.target.value); clearFieldError('title'); }}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    placeholder="e.g. Enterprise Network Breakfast, Community Family Day"
+                  />
                   {fieldErrors.title && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.title}</p>}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Date</label>
-                    <input required type="date" value={dateStr} onChange={(e) => { setDateStr(e.target.value); clearFieldError('date'); }} className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] ${fieldErrors.date ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} />
-                    {fieldErrors.date && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.date}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Time</label>
-                    <TimePickerInput required value={timeStr} onChange={(val) => setTimeStr(val)} className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Location</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 sm:top-2.5 h-4 w-4 text-slate-400" />
-                    <input required type="text" value={location} onChange={(e) => { setLocation(e.target.value); clearFieldError('location'); }} className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} placeholder="Conference Room A" />
-                  </div>
-                  {fieldErrors.location && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.location}</p>}
-                </div>
-
+                {/* 2. Category & Status */}
                 <div className={`grid gap-4 ${role === UserRole.ADMIN ? 'grid-cols-1 sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-1 sm:grid-cols-[1fr_auto]'}`}>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Category</label>
-                    <select value={category} onChange={(e) => setCategory(e.target.value as EventCategory | '')} className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Category <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as EventCategory | '')}
+                      className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                    >
                       <option value="">Select...</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.name}>
-                          {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                      {availableCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
                         </option>
                       ))}
                     </select>
@@ -906,7 +1065,11 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                   {role === UserRole.ADMIN && (
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
-                      <select value={status} onChange={(e) => setStatus(e.target.value as EventStatus)} className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0">
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value as EventStatus)}
+                        className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                      >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                       </select>
@@ -914,35 +1077,193 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                   )}
                 </div>
 
+                {/* 3. Start & End Date / Time */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Start Date & Time <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        required
+                        type="date"
+                        value={startDateStr}
+                        onChange={(e) => handleStartDateChange(e.target.value)}
+                        className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] ${fieldErrors.date ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                      />
+                      <TimePickerInput
+                        required
+                        value={startTimeStr}
+                        onChange={handleStartTimeChange}
+                        className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm"
+                        placeholder="10:00"
+                      />
+                    </div>
+                    {fieldErrors.date && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.date}</p>}
+                  </div>
 
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                        End Date & Time <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                      </label>
+                      {startDateStr && endDateStr && startDateStr === endDateStr && (
+                        <span className="text-[10px] text-brand-600 dark:text-brand-400 font-bold bg-brand-50 dark:bg-brand-900/30 px-1.5 py-0.5 rounded">
+                          Same day
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        min={startDateStr}
+                        value={endDateStr}
+                        onChange={(e) => handleEndDateChange(e.target.value)}
+                        className="block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] border-slate-200 dark:border-slate-700 focus:border-brand-500"
+                      />
+                      <TimePickerInput
+                        value={endTimeStr}
+                        onChange={handleEndTimeChange}
+                        referenceStartTime={startDateStr === endDateStr ? startTimeStr : undefined}
+                        className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm"
+                        placeholder="11:30"
+                      />
+                    </div>
+                    {fieldErrors.endDate && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.endDate}</p>}
+                  </div>
+                </div>
 
+                {/* 4. Location / Venue */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Description</label>
-                  <textarea required value={description} onChange={(e) => { setDescription(e.target.value); clearFieldError('description'); }} rows={4} className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-none min-h-[100px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`} placeholder="Enter event details..." />
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Location / Venue <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 sm:top-2.5 h-4 w-4 text-slate-400" />
+                    <input
+                      required
+                      type="text"
+                      value={location}
+                      onChange={(e) => { setLocation(e.target.value); clearFieldError('location'); }}
+                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                      placeholder="e.g. Heron House, Room 4 / Mahon Community Centre"
+                    />
+                  </div>
+                  {fieldErrors.location && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.location}</p>}
+                </div>
+
+                {/* 5. Short Description */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Short Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    value={description}
+                    onChange={(e) => { setDescription(e.target.value); clearFieldError('description'); }}
+                    rows={3}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-y min-h-[80px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    placeholder="A few lines explaining what the event is about, who it's for, and key details for the Board & staff to pencil in."
+                  />
                   {fieldErrors.description && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.description}</p>}
                 </div>
 
-                {/* File Uploads Section simplified */}
+                {/* 6. Poster / Flyer Upload & Removal */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Poster Image</label>
-                  <div onClick={() => fileInputRef.current?.click()} className="border border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                    {previewUrl ? (
-                      <LazyImage
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Poster / Flyer Image <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                  </label>
+
+                  {previewUrl ? (
+                    <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 p-2.5 flex items-center gap-4">
+                      <img
                         src={previewUrl}
-                        alt="Preview"
-                        className="h-32 mx-auto object-contain rounded-lg"
+                        alt="Poster preview"
+                        className="w-20 h-20 object-cover rounded-lg border border-slate-300 dark:border-slate-600"
                       />
-                    ) : (
-                      <Upload className="h-8 w-8 mx-auto text-slate-400 mb-2" />
-                    )}
-                    <span className="text-xs text-brand-600 font-bold">{previewUrl ? 'Change Image' : 'Click to Upload'}</span>
-                  </div>
-                  <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
+                          {posterFile?.name || (title ? `${title} flyer` : 'Current poster image')}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {posterFile ? `${(posterFile.size / 1024).toFixed(0)} KB` : 'Active poster'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemovePoster}
+                        className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                        title="Remove poster"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="cursor-pointer border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-brand-500 dark:hover:border-brand-400 rounded-xl p-5 text-center transition-colors bg-slate-50/50 dark:bg-slate-800/50"
+                    >
+                      <Upload className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Click or drag and drop to upload flyer / poster
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        PNG, JPG or WEBP up to 10MB
+                      </p>
+                    </div>
+                  )}
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
                 </div>
 
-                {/* Recurrence Section */}
+                {/* 7. Submitter Details */}
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3">RECURRENCE</h4>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">
+                    Submitter Details
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                        Submitter Name
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={submitterName}
+                          onChange={(e) => setSubmitterName(e.target.value)}
+                          placeholder="e.g. Sarah Murphy"
+                          className="block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400"
+                        />
+                        <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                        Submitter Email
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="email"
+                          value={submitterEmail}
+                          onChange={(e) => setSubmitterEmail(e.target.value)}
+                          placeholder="e.g. sarah@corkcitypartnership.ie"
+                          className="block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400"
+                        />
+                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 8. Recurrence Section */}
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">RECURRENCE</h4>
                   <div className="space-y-4">
                     <div className={recurrenceType !== 'custom' ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : ''}>
                       <div>
@@ -992,7 +1313,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
                         <DatePickerCalendar
                           selectedDates={customDates}
                           onChange={setCustomDates}
-                          referenceTime={timeStr ? { hours: parseInt(timeStr.split(':')[0]), minutes: parseInt(timeStr.split(':')[1]) } : undefined}
+                          referenceTime={startTimeStr ? { hours: parseInt(startTimeStr.split(':')[0]), minutes: parseInt(startTimeStr.split(':')[1]) } : undefined}
                         />
                       </div>
                     )}
@@ -1162,7 +1483,12 @@ export default React.memo(EventModal, (prevProps, nextProps) => {
   // Compare event objects
   if (prevProps.event?.id !== nextProps.event?.id) return false;
   if (prevProps.event?.title !== nextProps.event?.title) return false;
+  if (prevProps.event?.category !== nextProps.event?.category) return false;
+  if (prevProps.event?.location !== nextProps.event?.location) return false;
   if (prevProps.event?.date?.getTime() !== nextProps.event?.date?.getTime()) return false;
+  if (prevProps.event?.endDate?.getTime() !== nextProps.event?.endDate?.getTime()) return false;
+  if (prevProps.event?.submitterName !== nextProps.event?.submitterName) return false;
+  if (prevProps.event?.submitterEmail !== nextProps.event?.submitterEmail) return false;
   if (prevProps.event?.status !== nextProps.event?.status) return false;
   if (prevProps.initialDate?.getTime() !== nextProps.initialDate?.getTime()) return false;
 

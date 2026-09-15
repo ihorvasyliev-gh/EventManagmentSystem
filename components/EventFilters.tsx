@@ -3,6 +3,8 @@ import { Filter, X, Calendar, MapPin, User, Tag } from 'lucide-react';
 import { EventFilters, EventCategory, EventStatus, EventCategoryItem } from '../types';
 import { getCategories } from '../services/categoryService';
 
+import { EVENT_CATEGORIES } from '../constants/categories';
+
 interface EventFiltersProps {
   filters: EventFilters;
   onFiltersChange: (filters: EventFilters) => void;
@@ -26,15 +28,22 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
       .then(setCategories)
       .catch(err => {
         console.error('Failed to load categories:', err);
-        // Fallback to empty array
         setCategories([]);
       });
   }, []);
 
-  const categoryOptions: { value: EventCategory; label: string }[] = categories.map(cat => ({
-    value: cat.name,
-    label: cat.name.charAt(0).toUpperCase() + cat.name.slice(1)
-  }));
+  const categoryOptions: { value: EventCategory; label: string }[] = useMemo(() => {
+    const list: string[] = [...EVENT_CATEGORIES];
+    categories.forEach(cat => {
+      if (cat.name && !list.includes(cat.name)) {
+        list.push(cat.name);
+      }
+    });
+    return list.map(cat => ({
+      value: cat,
+      label: cat
+    }));
+  }, [categories]);
 
   const statuses: { value: EventStatus; label: string }[] = [
     { value: 'published', label: 'Published' },

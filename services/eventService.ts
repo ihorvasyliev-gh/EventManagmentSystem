@@ -331,6 +331,8 @@ export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>, us
       : null,
     rsvp_enabled: eventData.rsvpEnabled || false,
     max_attendees: eventData.maxAttendees || null,
+    submitter_name: eventData.submitterName || null,
+    submitter_email: eventData.submitterEmail || null,
     creator_id: userId
   };
 
@@ -419,7 +421,9 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
       ? eventData.recurrence.customDates.map(d => d.toISOString())
       : null,
     rsvp_enabled: eventData.rsvpEnabled || false,
-    max_attendees: eventData.maxAttendees || null
+    max_attendees: eventData.maxAttendees || null,
+    submitter_name: eventData.submitterName || null,
+    submitter_email: eventData.submitterEmail || null
   };
 
   const { data: updatedEventData, error: updateError } = await supabase

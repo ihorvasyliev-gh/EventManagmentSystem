@@ -115,10 +115,10 @@ const Navbar: React.FC<NavbarProps> = ({
                   <button
                     onClick={onOpenFortnightlyBulletin}
                     className="flex items-center space-x-1.5 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/50 font-medium px-3 py-1.5 rounded-lg transition-all text-sm border border-brand-200 dark:border-brand-800 shadow-xs"
-                    title="Generate 2-week PDF bulletin for Board and staff"
+                    title="Generate 2-week Upcoming Events Digest for Board and staff"
                   >
                     <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                    <span className="hidden sm:inline">Bulletin</span>
+                    <span className="hidden sm:inline">Events Digest</span>
                   </button>
                 )}
 
@@ -240,7 +240,7 @@ const Navbar: React.FC<NavbarProps> = ({
                     className="w-full flex items-center space-x-3 text-left px-4 py-3 min-h-[48px] text-brand-700 dark:text-brand-300 bg-brand-50/50 dark:bg-brand-950/20 hover:bg-brand-100 rounded-lg transition-all font-medium"
                   >
                     <FileText className="h-5 w-5 text-brand-600 dark:text-brand-400" />
-                    <span>Fortnightly Bulletin</span>
+                    <span>Upcoming Events Digest</span>
                   </button>
                 )}
 

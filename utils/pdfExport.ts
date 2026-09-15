@@ -191,9 +191,9 @@ const drawPinIcon = (doc: jsPDF, x: number, y: number): void => {
 };
 
 /**
- * Generate Fortnightly Bulletin PDF using jsPDF
+ * Generate Upcoming Events Digest PDF using jsPDF
  */
-export const generateFortnightlyPDF = async (
+export const generateEventsDigestPDF = async (
   events: Event[],
   options: BulletinOptions
 ): Promise<void> => {
@@ -263,7 +263,7 @@ export const generateFortnightlyPDF = async (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-    doc.text('UPCOMING EVENTS BULLETIN', headerTextX, margin + 13);
+    doc.text('UPCOMING EVENTS DIGEST', headerTextX, margin + 13);
 
     // Period Badge on right (Clean Executive Chip)
     const periodText = `Period: ${formatDateRange(options.startDate, options.endDate)}`;
@@ -313,7 +313,7 @@ export const generateFortnightlyPDF = async (
       { align: 'center' }
     );
     drawFooter(currentPage);
-    doc.save(`CCP-Events-Bulletin-${options.startDate.toISOString().slice(0, 10)}.pdf`);
+    doc.save(`CCP-Events-Digest-${(toDate(options.startDate) || new Date()).toISOString().slice(0, 10)}.pdf`);
     return;
   }
 
@@ -740,9 +740,10 @@ export const generateFortnightlyPDF = async (
 
   // Save the PDF
   const validStart = toDate(options.startDate) || new Date();
-  const filename = `CCP-Fortnightly-Events-${validStart.toISOString().slice(0, 10)}.pdf`;
+  const filename = `CCP-Events-Digest-${validStart.toISOString().slice(0, 10)}.pdf`;
   doc.save(filename);
 };
+export const generateFortnightlyPDF = generateEventsDigestPDF;
 
 /**
  * Generate a preformatted text digest for WhatsApp groups.
@@ -821,7 +822,7 @@ export const generateWhatsAppSummary = (
   });
 
   text += `────────────────────────────\n`;
-  text += `📌 *PDF Bulletin & Calendar:* Check company portal.`;
+  text += `📌 *PDF Digest & Calendar:* Check company portal.`;
 
   return text;
 };

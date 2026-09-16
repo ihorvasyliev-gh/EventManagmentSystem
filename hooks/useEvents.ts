@@ -20,6 +20,14 @@ function getInitialLoadingFromCache(): boolean {
   return !(cached && cached.length > 0);
 }
 
+const toTime = (d: any): number => {
+  if (!d) return 0;
+  if (typeof d === 'number') return d;
+  if (d instanceof Date) return isNaN(d.getTime()) ? 0 : d.getTime();
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
 const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -33,15 +41,15 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     if (
       ea.status !== eb.status ||
       ea.title !== eb.title ||
-      ea.date.getTime() !== eb.date.getTime() ||
-      ea.endDate?.getTime() !== eb.endDate?.getTime() ||
+      toTime(ea.date) !== toTime(eb.date) ||
+      toTime(ea.endDate) !== toTime(eb.endDate) ||
       ea.location !== eb.location ||
       ea.category !== eb.category ||
       ea.description !== eb.description ||
       ea.posterUrl !== eb.posterUrl ||
       ea.submitterName !== eb.submitterName ||
       ea.submitterEmail !== eb.submitterEmail ||
-      (ea.updatedAt?.getTime() || 0) !== (eb.updatedAt?.getTime() || 0) ||
+      toTime(ea.updatedAt) !== toTime(eb.updatedAt) ||
       (ea.tags?.join(',') || '') !== (eb.tags?.join(',') || '') ||
       (ea.attendees?.length || 0) !== (eb.attendees?.length || 0)
     ) {

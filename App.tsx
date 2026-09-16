@@ -163,6 +163,14 @@ const AppContent: React.FC = () => {
 
 
 
+const toTime = (d: any): number => {
+  if (!d) return 0;
+  if (typeof d === 'number') return d;
+  if (d instanceof Date) return isNaN(d.getTime()) ? 0 : d.getTime();
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
 const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -176,15 +184,15 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     if (
       ea.status !== eb.status ||
       ea.title !== eb.title ||
-      ea.date.getTime() !== eb.date.getTime() ||
-      ea.endDate?.getTime() !== eb.endDate?.getTime() ||
+      toTime(ea.date) !== toTime(eb.date) ||
+      toTime(ea.endDate) !== toTime(eb.endDate) ||
       ea.location !== eb.location ||
       ea.category !== eb.category ||
       ea.description !== eb.description ||
       ea.posterUrl !== eb.posterUrl ||
       ea.submitterName !== eb.submitterName ||
       ea.submitterEmail !== eb.submitterEmail ||
-      (ea.updatedAt?.getTime() || 0) !== (eb.updatedAt?.getTime() || 0) ||
+      toTime(ea.updatedAt) !== toTime(eb.updatedAt) ||
       (ea.tags?.join(',') || '') !== (eb.tags?.join(',') || '') ||
       (ea.attendees?.length || 0) !== (eb.attendees?.length || 0)
     ) {
@@ -365,8 +373,8 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
           const prevIds = prev.map(e => e.id).sort().join(',');
           const newIds = subs.map(e => e.id).sort().join(',');
           if (prevIds !== newIds) return subs;
-          const prevTimes = prev.map(e => e.updatedAt?.getTime() || 0).join(',');
-          const newTimes = subs.map(e => e.updatedAt?.getTime() || 0).join(',');
+          const prevTimes = prev.map(e => toTime(e.updatedAt)).join(',');
+          const newTimes = subs.map(e => toTime(e.updatedAt)).join(',');
           if (prevTimes !== newTimes) return subs;
           return prev;
         });

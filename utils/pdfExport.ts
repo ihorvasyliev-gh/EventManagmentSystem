@@ -20,6 +20,42 @@ const OUTLOOK_BLUE = [0, 120, 212]; // #0078D4 (Microsoft Outlook Brand Blue)
 const OUTLOOK_BG = [239, 246, 255]; // #EFF6FF (Soft Blue)
 const OUTLOOK_BORDER = [186, 215, 253]; // #BFDBFE
 
+const GOOGLE_BLUE = [26, 115, 232]; // #1A73E8 (Google Brand Blue)
+const GOOGLE_BG = [248, 250, 252]; // #F8FAFC
+const GOOGLE_BORDER = [203, 213, 225]; // #CBD5E1
+
+/**
+ * Generate deep link for adding an event directly into Google Calendar on the Web
+ */
+export const createGoogleCalendarUrl = (event: {
+  title: string;
+  description?: string;
+  location?: string;
+  date: Date | string;
+  endDate?: Date | string;
+}): string => {
+  const start = toDate(event.date) || new Date();
+  const end = toDate(event.endDate) || new Date(start.getTime() + 60 * 60 * 1000);
+
+  const formatGCalDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: event.title || 'Event',
+    dates: `${formatGCalDate(start)}/${formatGCalDate(end)}`,
+  });
+
+  if (event.location) {
+    params.set('location', event.location);
+  }
+  if (event.description) {
+    const descShort = event.description.length > 1000 ? event.description.slice(0, 1000) : event.description;
+    params.set('details', descShort);
+  }
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
+
 /**
  * Generate deep link for adding an event directly into Outlook 365 on the Web
  */
@@ -501,6 +537,27 @@ export const generateEventsDigestPDF = async (
     format: 'a4'
   });
 
+  // Configure PDF OCG (Optional Content Group) layer for screen-only interactive elements
+  // When printed to physical printer or print dialog, this layer is suppressed.
+  let ocgObjId: number;
+  (doc.internal.events as any).subscribe('putAdditionalObjects', () => {
+    ocgObjId = (doc.internal as any).newObject();
+    (doc.internal as any).out('<< /Type /OCG /Name (ScreenButtons) >>');
+    (doc.internal as any).out('endobj');
+  });
+
+  (doc.internal.events as any).subscribe('putXobjectDict', () => {
+    (doc.internal as any).out('>>');
+    (doc.internal as any).out('/Properties << /OC1 ' + ocgObjId + ' 0 R >>');
+    (doc.internal as any).out('/XObject <<');
+  });
+
+  (doc.internal.events as any).subscribe('putCatalog', () => {
+    (doc.internal as any).write(
+      '/OCProperties << /OCGs [' + ocgObjId + ' 0 R] /D << /BaseState /ON /Usage << /Print << /PrintState /OFF >> /View << /ViewState /ON >> >> >> >>'
+    );
+  });
+
   const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
   const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
   const margin = 14;
@@ -645,7 +702,7 @@ export const generateEventsDigestPDF = async (
 
       // Event URLs
       const outlookUrl = createOutlookWebUrl(ev);
-      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+      const googleUrl = createGoogleCalendarUrl(ev);
       const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
 
       // Text column layout
@@ -891,16 +948,19 @@ export const generateEventsDigestPDF = async (
         }
       }
 
-      // Action Buttons (Outlook 365 Web & .ICS)
+      // Action Buttons (Outlook 365 Web & Google Calendar - Screen Only OCG Layer)
       const actionRight = hasFlyer && flyer ? (flyerX - 3) : (pageWidth - margin - 4);
       const btnY = currentY + cardHeight - btnHeight - 2.5;
 
-      const icsBtnW = 14;
-      const outlookBtnW = 21;
+      const googleBtnW = 18;
+      const outlookBtnW = 20;
       const btnGap = 2;
 
-      const icsBtnX = actionRight - icsBtnW;
-      const outlookBtnX = icsBtnX - btnGap - outlookBtnW;
+      const googleBtnX = actionRight - googleBtnW;
+      const outlookBtnX = googleBtnX - btnGap - outlookBtnW;
+
+      // Begin OCG Layer for screen-only interactive buttons (hidden when printing)
+      (doc.internal as any).write('/OC /OC1 BDC');
 
       // 1. Outlook Web Button
       doc.setFillColor(OUTLOOK_BG[0], OUTLOOK_BG[1], OUTLOOK_BG[2]);
@@ -914,17 +974,20 @@ export const generateEventsDigestPDF = async (
       doc.text('+ Outlook', outlookBtnX + outlookBtnW / 2, btnY + 3.2, { align: 'center' });
       doc.link(outlookBtnX, btnY, outlookBtnW, btnHeight, { url: outlookUrl });
 
-      // 2. .ICS Download Button
-      doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1.2, 1.2, 'F');
-      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.roundedRect(icsBtnX, btnY, icsBtnW, btnHeight, 1.2, 1.2, 'S');
+      // 2. Google Calendar Button
+      doc.setFillColor(GOOGLE_BG[0], GOOGLE_BG[1], GOOGLE_BG[2]);
+      doc.roundedRect(googleBtnX, btnY, googleBtnW, btnHeight, 1.2, 1.2, 'F');
+      doc.setDrawColor(GOOGLE_BORDER[0], GOOGLE_BORDER[1], GOOGLE_BORDER[2]);
+      doc.roundedRect(googleBtnX, btnY, googleBtnW, btnHeight, 1.2, 1.2, 'S');
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text('.ICS', icsBtnX + icsBtnW / 2, btnY + 3.2, { align: 'center' });
-      doc.link(icsBtnX, btnY, icsBtnW, btnHeight, { url: icsUrl });
+      doc.setTextColor(GOOGLE_BLUE[0], GOOGLE_BLUE[1], GOOGLE_BLUE[2]);
+      doc.text('+ Google', googleBtnX + googleBtnW / 2, btnY + 3.2, { align: 'center' });
+      doc.link(googleBtnX, btnY, googleBtnW, btnHeight, { url: googleUrl });
+
+      // End OCG Layer
+      (doc.internal as any).write('EMC');
 
       // Submitter info footer line inside card (to the left of action buttons)
       if (ev.submitterName) {
@@ -1005,7 +1068,7 @@ export const generateEventsDigestPDF = async (
 
       // URLs for calendar integration
       const outlookUrl = createOutlookWebUrl(ev);
-      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+      const googleUrl = createGoogleCalendarUrl(ev);
       const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
 
       // Event Title (Clean text, NOT clickable as requested)
@@ -1042,19 +1105,23 @@ export const generateEventsDigestPDF = async (
       const catLines = doc.splitTextToSize(cleanCat, 24);
       doc.text(catLines[0], colX.category, currentY + 5);
 
-      // Calendar quick links in Compact format
+      // Calendar quick links in Compact format (Screen Only OCG Layer)
+      (doc.internal as any).write('/OC /OC1 BDC');
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6);
       doc.setTextColor(OUTLOOK_BLUE[0], OUTLOOK_BLUE[1], OUTLOOK_BLUE[2]);
       doc.text('+Outlook', colX.category, currentY + 9.5);
-      doc.link(colX.category, currentY + 7, 10, 4, { url: outlookUrl });
+      doc.link(colX.category, currentY + 7, 9, 4, { url: outlookUrl });
 
       doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      doc.text('•', colX.category + 11.5, currentY + 9.5);
+      doc.text('•', colX.category + 9.8, currentY + 9.5);
 
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text('.ics', colX.category + 14.5, currentY + 9.5);
-      doc.link(colX.category + 13.5, currentY + 7, 8, 4, { url: icsUrl });
+      doc.setTextColor(GOOGLE_BLUE[0], GOOGLE_BLUE[1], GOOGLE_BLUE[2]);
+      doc.text('+Google', colX.category + 12.2, currentY + 9.5);
+      doc.link(colX.category + 12.2, currentY + 7, 9, 4, { url: googleUrl });
+
+      (doc.internal as any).write('EMC');
 
       currentY += rowHeight;
     }

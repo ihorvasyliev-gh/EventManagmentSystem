@@ -51,6 +51,8 @@ const AppContent: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
+  const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('view');
+  const [modalAutoApprove, setModalAutoApprove] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
@@ -517,18 +519,24 @@ const AppContent: React.FC = () => {
   // Event Handlers - memoized callbacks
   const handleEventClick = useCallback((event: Event) => {
     setSelectedEvent(event);
+    setModalInitialMode('view');
+    setModalAutoApprove(false);
     setIsModalOpen(true);
   }, []);
 
   const handleCreateClick = useCallback(() => {
     setSelectedEvent(null);
     setCreateWithDate(null);
+    setModalInitialMode('edit');
+    setModalAutoApprove(false);
     setIsModalOpen(true);
   }, []);
 
   const handleAddEventForDate = useCallback((date: Date) => {
     setCreateWithDate(date);
     setSelectedEvent(null);
+    setModalInitialMode('edit');
+    setModalAutoApprove(false);
     setIsModalOpen(true);
   }, []);
 
@@ -591,11 +599,13 @@ const AppContent: React.FC = () => {
   const handleUpdateEvent = useCallback(async (id: string, eventData: Omit<Event, 'id' | 'createdAt'>) => {
     if (!user) return;
 
-    // Find original event for rollback
-    const originalEvent = events.find(e => e.id === id);
+    // Find original event for rollback (check events, pendingSubmissions, or selectedEvent)
+    const originalEvent = events.find(e => e.id === id) || pendingSubmissions.find(e => e.id === id) || (selectedEvent?.id === id ? selectedEvent : null);
     if (!originalEvent) {
       throw new Error('Event not found');
     }
+
+    const isDraftBeingPublished = (originalEvent.status === 'draft' || modalAutoApprove) && eventData.status === 'published';
 
     // Optimistic update: update event immediately
     const optimisticEvent: Event = {
@@ -608,26 +618,46 @@ const AppContent: React.FC = () => {
 
     // Update UI immediately
     setEvents((prev) => {
-      const next = prev.map((e) => (e.id === id ? optimisticEvent : e));
+      const exists = prev.some(e => e.id === id);
+      const next = exists ? prev.map((e) => (e.id === id ? optimisticEvent : e)) : [...prev, optimisticEvent];
       cacheEvents(next);
       return next;
     });
     setSelectedEvent(prev => prev?.id === id ? optimisticEvent : prev);
 
+    if (isDraftBeingPublished) {
+      setPendingSubmissions(prev => prev.filter(e => e.id !== id));
+    }
+
     // Close modal immediately for better UX
     setIsModalOpen(false);
-    setTimeout(() => setSelectedEvent(null), 200);
+    setTimeout(() => {
+      setSelectedEvent(null);
+      setModalInitialMode('view');
+      setModalAutoApprove(false);
+    }, 200);
 
     // Sync with server in background
     try {
       const serverEvent = await updateEvent(id, eventData, user.id, user.fullName);
       // Replace optimistic event with server response
       setEvents((prev) => {
-        const next = prev.map((e) => (e.id === id ? serverEvent : e));
+        const exists = prev.some(e => e.id === id);
+        const next = exists ? prev.map((e) => (e.id === id ? serverEvent : e)) : [...prev, serverEvent];
         cacheEvents(next);
         return next;
       });
-      showToast('Event updated successfully', 'success');
+
+      if (user.role === UserRole.ADMIN && isDraftBeingPublished) {
+        refreshSubmissions();
+      }
+      refreshEvents(true);
+
+      if (isDraftBeingPublished) {
+        showToast(`Event "${serverEvent.title}" updated and approved!`, 'success');
+      } else {
+        showToast('Event updated successfully', 'success');
+      }
     } catch (e) {
       console.error("Error updating event", e);
       // Rollback optimistic update on error
@@ -636,19 +666,31 @@ const AppContent: React.FC = () => {
         cacheEvents(next);
         return next;
       });
+      if (isDraftBeingPublished) {
+        setPendingSubmissions(prev => {
+          if (prev.some(e => e.id === id)) return prev;
+          return [originalEvent, ...prev];
+        });
+      }
       setSelectedEvent(prev => prev?.id === id ? originalEvent : prev);
       showToast('Failed to update event', 'error');
       // Reopen modal with original data on error
       setIsModalOpen(true);
       setSelectedEvent(originalEvent);
+      setModalInitialMode('edit');
+      setModalAutoApprove(modalAutoApprove);
       throw e;
     }
-  }, [user, showToast, events]);
+  }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setCreateWithDate(null);
-    setTimeout(() => setSelectedEvent(null), 200); // Clear after animation
+    setTimeout(() => {
+      setSelectedEvent(null);
+      setModalInitialMode('view');
+      setModalAutoApprove(false);
+    }, 200); // Clear after animation
   }, []);
 
   const handleEventUpdate = useCallback((updatedEvent: Event) => {
@@ -938,6 +980,8 @@ const AppContent: React.FC = () => {
             onEventUpdate={handleEventUpdate}
             onDelete={handleDeleteEvent}
             onDeleteInstance={handleDeleteInstance}
+            initialMode={modalInitialMode}
+            autoApproveOnSave={modalAutoApprove}
           />
         </Suspense>
       )}
@@ -972,6 +1016,8 @@ const AppContent: React.FC = () => {
             onApprove={handleApproveSubmission}
             onEdit={(ev) => {
               setSelectedEvent(ev);
+              setModalInitialMode('edit');
+              setModalAutoApprove(true);
               setIsModalOpen(true);
             }}
             onReject={handleRejectSubmission}

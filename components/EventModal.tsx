@@ -44,12 +44,29 @@ interface EventModalProps {
   onEventUpdate?: (event: Event) => void; // For RSVP and comment updates
   onDelete?: (id: string) => Promise<void>; // For event deletion
   onDeleteInstance?: (eventId: string, instanceDate: Date) => Promise<void>; // For instance deletion
+  initialMode?: 'view' | 'edit';
+  autoApproveOnSave?: boolean;
 }
 
-const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initialDate, role, currentUserId = '1', currentUserName = 'User', onSave, onUpdate, onEventUpdate, onDelete, onDeleteInstance }) => {
+const EventModal: React.FC<EventModalProps> = ({
+  isOpen,
+  onClose,
+  event,
+  initialDate,
+  role,
+  currentUserId = '1',
+  currentUserName = 'User',
+  onSave,
+  onUpdate,
+  onEventUpdate,
+  onDelete,
+  onDeleteInstance,
+  initialMode = 'view',
+  autoApproveOnSave = false
+}) => {
   const { theme } = useTheme();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(initialMode === 'edit');
   const [isRsvping, setIsRsvping] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -180,7 +197,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setDescription(event.description);
         setLocation(event.location);
         setCategory(event.category || '');
-        setStatus(event.status || 'published');
+        setStatus(autoApproveOnSave ? 'published' : (event.status || 'published'));
         setTags(event.tags?.join(', ') || '');
         setSubmitterName(event.submitterName || '');
         setSubmitterEmail(event.submitterEmail || '');
@@ -243,7 +260,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
           setCustomDates([]);
         }
 
-        setIsEditing(false); // Reset to view mode initially
+        setIsEditing(initialMode === 'edit');
         setFieldErrors({});
 
         // LAZY LOAD: If details are missing, fetch them in background (no loading state)
@@ -266,37 +283,52 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
               }
             }
           }).catch(err => {
-            if (isActive) console.error("Failed to load event details", err);
+            console.error('Failed to lazy load event details:', err);
           });
         }
 
         return () => {
           isActive = false;
         };
-
       } else {
-        // Create Mode
+        // We are creating a new event
         setTitle('');
         setDescription('');
-        const defaultDate = initialDate || new Date(Date.now() + 86400000);
-        const yyyy = defaultDate.getFullYear();
-        const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(defaultDate.getDate()).padStart(2, '0');
-        const defDateStr = `${yyyy}-${mm}-${dd}`;
-        setStartDateStr(defDateStr);
-        setStartTimeStr('10:00');
-        setEndDateStr(defDateStr);
-        setEndTimeStr('11:30');
         setLocation('');
-        setCategory(EVENT_CATEGORIES[0]);
+        setCategory('');
         setStatus('published');
         setTags('');
-        setSubmitterName(currentUserName || '');
+        setSubmitterName('');
         setSubmitterEmail('');
-        setRsvpEnabled(true);
+        setRsvpEnabled(false);
         setMaxAttendees('');
-        setPosterFile(null);
         setPreviewUrl(null);
+        setPosterFile(null);
+
+        // Auto-select date & time
+        const baseDate = initialDate ? new Date(initialDate) : new Date();
+        const yyyy = baseDate.getFullYear();
+        const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(baseDate.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+
+        setStartDateStr(dateStr);
+        setEndDateStr(dateStr);
+
+        let sTime = '10:00';
+        let eTime = '11:30';
+
+        if (!initialDate) {
+          const now = new Date();
+          const nextHour = now.getHours() + 1;
+          const clampedHour = Math.min(Math.max(nextHour, 8), 20);
+          sTime = `${String(clampedHour).padStart(2, '0')}:00`;
+          eTime = `${String(Math.min(clampedHour + 1, 23)).padStart(2, '0')}:30`;
+        }
+
+        setStartTimeStr(sTime);
+        setEndTimeStr(eTime);
+
         setAttachments([]);
         setNewAttachments([]);
         setComments([]);
@@ -312,7 +344,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         setFieldErrors({});
       }
     }
-  }, [isOpen, event, initialDate, currentUserId, currentUserName]);
+  }, [isOpen, event, initialDate, currentUserId, currentUserName, initialMode, autoApproveOnSave]);
 
   if (!isOpen) return null;
 
@@ -490,7 +522,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
         endDate: endDateTime,
         posterUrl: finalPosterUrl,
         category: category || undefined,
-        status: status || 'published',
+        status: autoApproveOnSave ? 'published' : (status || 'published'),
         tags: tagsArray.length > 0 ? tagsArray : undefined,
         submitterName: submitterName.trim() || undefined,
         submitterEmail: submitterEmail.trim() || undefined,
@@ -1011,6 +1043,12 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
             ) : (
               // FORM MODE
               <form id="event-form" onSubmit={handleSubmit} className="space-y-5">
+                {autoApproveOnSave && (
+                  <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Saving your edits will automatically approve and publish this submission to the calendar.</span>
+                  </div>
+                )}
                 {Object.keys(fieldErrors).length > 0 && (
                   <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                     Please fix the errors below.
@@ -1453,9 +1491,9 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, event, initial
             {showForm ? (
               <>
                 <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-slate-900 text-white font-medium hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
-                  {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? 'Save Changes' : 'Create Event')}
+                  {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? (autoApproveOnSave ? 'Save & Approve' : 'Save Changes') : 'Create Event')}
                 </button>
-                <button type="button" onClick={() => { isEditing ? setIsEditing(false) : onClose() }} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
+                <button type="button" onClick={() => { (isEditing && !autoApproveOnSave && initialMode !== 'edit') ? setIsEditing(false) : onClose() }} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                   Cancel
                 </button>
               </>
@@ -1479,6 +1517,8 @@ export default React.memo(EventModal, (prevProps, nextProps) => {
   if (prevProps.role !== nextProps.role) return false;
   if (prevProps.currentUserId !== nextProps.currentUserId) return false;
   if (prevProps.currentUserName !== nextProps.currentUserName) return false;
+  if (prevProps.initialMode !== nextProps.initialMode) return false;
+  if (prevProps.autoApproveOnSave !== nextProps.autoApproveOnSave) return false;
 
   // Compare event objects
   if (prevProps.event?.id !== nextProps.event?.id) return false;

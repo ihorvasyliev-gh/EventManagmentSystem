@@ -74,6 +74,7 @@ This calendar includes a dedicated, streamlined workflow tailored to Cork City P
 
 ### Database Setup
 To enable anonymous draft submissions in Supabase, execute `submission-migration.sql` in your Supabase SQL Editor.
+To enable real-time instant updates for submissions without refreshing the page (F5), execute `realtime-events-migration.sql` in Supabase SQL Editor.
 
 ---
 

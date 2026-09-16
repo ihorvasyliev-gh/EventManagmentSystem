@@ -147,6 +147,7 @@ const AppContent: React.FC = () => {
         userIdRef.current = null;
         setUser(null);
         setEvents([]);
+        setPendingSubmissions([]);
         clearUserCache();
         clearEventsCache();
       }
@@ -369,6 +370,7 @@ const AppContent: React.FC = () => {
     clearRsvpsCache();
     setUser(null);
     setEvents([]);
+    setPendingSubmissions([]);
     setUserRsvpEventIds(new Set());
   }, []);
 
@@ -377,7 +379,15 @@ const AppContent: React.FC = () => {
     if (user?.role === UserRole.ADMIN) {
       try {
         const subs = await getPendingSubmissions();
-        setPendingSubmissions(subs);
+        setPendingSubmissions((prev) => {
+          const prevIds = prev.map(e => e.id).sort().join(',');
+          const newIds = subs.map(e => e.id).sort().join(',');
+          if (prevIds !== newIds) return subs;
+          const prevTimes = prev.map(e => e.updatedAt?.getTime() || 0).join(',');
+          const newTimes = subs.map(e => e.updatedAt?.getTime() || 0).join(',');
+          if (prevTimes !== newTimes) return subs;
+          return prev;
+        });
       } catch (err) {
         console.error('Error fetching submissions:', err);
       }
@@ -389,6 +399,86 @@ const AppContent: React.FC = () => {
       refreshSubmissions();
     }
   }, [user, refreshSubmissions]);
+
+  // Realtime subscription for live updates of events & submissions
+  useEffect(() => {
+    if (!user) return;
+    if (import.meta.env.VITE_SUPABASE_REALTIME === 'false') return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel('events-realtime-channel')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'events' },
+          (payload) => {
+            if (import.meta.env.DEV) {
+              console.log('[Realtime] Events table change:', payload.eventType, payload);
+            }
+
+            if (user.role === UserRole.ADMIN) {
+              refreshSubmissions();
+              if (payload.eventType === 'INSERT') {
+                const newRow = payload.new as any;
+                if (newRow && (newRow.status === 'draft' || !newRow.status)) {
+                  showToast(`New submission received: "${newRow.title || 'Untitled Event'}"`, 'info');
+                }
+              }
+            }
+
+            refreshEvents(false);
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {
+            console.warn('[Realtime] Subscription error; fallback polling is active.');
+          }
+        });
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.warn('[Realtime] Could not subscribe to channel:', err);
+      }
+    }
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [user, refreshSubmissions, refreshEvents, showToast]);
+
+  // Fallback sync: tab focus, visibility change, and periodic poll for admin submissions
+  useEffect(() => {
+    if (!user) return;
+
+    const handleSyncOnVisible = () => {
+      if (document.visibilityState === 'visible') {
+        if (user.role === UserRole.ADMIN) {
+          refreshSubmissions();
+        }
+        refreshEvents(false);
+      }
+    };
+
+    window.addEventListener('focus', handleSyncOnVisible);
+    document.addEventListener('visibilitychange', handleSyncOnVisible);
+
+    let adminPollInterval: any = null;
+    if (user.role === UserRole.ADMIN) {
+      adminPollInterval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          refreshSubmissions();
+        }
+      }, 25000);
+    }
+
+    return () => {
+      window.removeEventListener('focus', handleSyncOnVisible);
+      document.removeEventListener('visibilitychange', handleSyncOnVisible);
+      if (adminPollInterval) clearInterval(adminPollInterval);
+    };
+  }, [user, refreshSubmissions, refreshEvents]);
 
   const handleApproveSubmission = useCallback(async (event: Event) => {
     try {

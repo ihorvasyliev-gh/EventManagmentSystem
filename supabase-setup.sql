@@ -695,6 +695,23 @@ DROP CONSTRAINT IF EXISTS events_category_check;
 -- или NULL, что позволяет гибко управлять категориями
 
 -- ============================================
+-- 12. SUPABASE REALTIME
+-- ============================================
+
+-- Включаем Realtime для таблицы events, чтобы изменения и заявки приходили вживую
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'events'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
+  END IF;
+END $$;
+
+ALTER TABLE public.events REPLICA IDENTITY FULL;
+
+-- ============================================
 -- ГОТОВО!
 -- ============================================
 -- База данных настроена. Теперь вы можете:

@@ -33,6 +33,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   });
 
   const [format, setFormat] = useState<'executive' | 'compact'>('executive');
+  const [includeCalendarButtons, setIncludeCalendarButtons] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -56,7 +57,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         startDate,
         endDate,
         format,
-        baseUrl: window.location.origin
+        baseUrl: window.location.origin,
+        includeCalendarButtons
       });
     } catch (err) {
       console.error('Failed to generate PDF:', err);
@@ -217,6 +219,28 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
               <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">
                 Ready to export
               </span>
+            </div>
+
+            {/* Calendar Buttons Toggle (Digital vs Print-Ready) */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeCalendarButtons}
+                  onChange={(e) => setIncludeCalendarButtons(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                />
+                <div className="flex-1 text-xs">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                    Interactive calendar buttons (+Outlook, +Google)
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    {includeCalendarButtons
+                      ? 'Buttons will be included for quick 1-click addition. Uncheck for a clean print-ready paper copy.'
+                      : 'Clean print-ready mode: web buttons are hidden for neat printing.'}
+                  </span>
+                </div>
+              </label>
             </div>
 
             {/* Action Buttons */}

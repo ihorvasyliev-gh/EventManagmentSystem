@@ -244,7 +244,6 @@ export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | nul
       const blobUrl = URL.createObjectURL(blob);
       try {
         const img = new Image();
-        img.crossOrigin = 'anonymous';
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
           img.onerror = reject;
@@ -331,11 +330,31 @@ export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | nul
     });
 
     if (!base64) return null;
+
+    let naturalW = 100;
+    let naturalH = 100;
+    if (typeof document !== 'undefined') {
+      try {
+        const testImg = new Image();
+        testImg.src = base64;
+        await new Promise<void>((res) => {
+          testImg.onload = () => res();
+          testImg.onerror = () => res();
+        });
+        if (testImg.naturalWidth && testImg.naturalHeight) {
+          naturalW = testImg.naturalWidth;
+          naturalH = testImg.naturalHeight;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return {
       dataUrl: base64,
-      width: 100,
-      height: 100,
-      aspectRatio: 1,
+      width: naturalW,
+      height: naturalH,
+      aspectRatio: naturalW / naturalH,
       format: isPng ? 'PNG' : 'JPEG'
     };
   } catch (err) {
@@ -843,6 +862,7 @@ export const generateEventsDigestPDF = async (
 
       // Right Column: Flyer Thumbnail (True Aspect Ratio & EXIF Orientation Preserved)
       let flyerW = 0;
+      let flyerH = 0;
       let flyerX = pageWidth - margin;
       if (hasFlyer && flyer) {
         try {

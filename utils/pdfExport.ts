@@ -93,20 +93,260 @@ export const createIcsDownloadUrl = (
   return `${base}/api/calendar?${params.toString()}`;
 };
 
-const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+export interface LoadedPdfFlyer {
+  dataUrl: string;
+  width: number;
+  height: number;
+  aspectRatio: number; // width / height
+  format: 'JPEG' | 'PNG';
+}
+
+/**
+ * Reads EXIF orientation (1-8) from JPEG ArrayBuffer. Returns 1 if not JPEG or no tag.
+ */
+const getExifOrientation = (buffer: ArrayBuffer): number => {
+  try {
+    const view = new DataView(buffer);
+    if (view.byteLength < 4 || view.getUint16(0, false) !== 0xFFD8) {
+      return 1;
+    }
+    let offset = 2;
+    const maxOffset = view.byteLength;
+    while (offset < maxOffset) {
+      if (view.getUint8(offset) !== 0xFF) return 1;
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xE1) {
+        // APP1
+        const length = view.getUint16(offset + 2, false);
+        const exifStart = offset + 4;
+        if (
+          view.getUint32(exifStart, false) === 0x45786966 && // "Exif"
+          view.getUint16(exifStart + 4, false) === 0x0000
+        ) {
+          const tiffStart = exifStart + 6;
+          const isLittleEndian = view.getUint16(tiffStart, false) === 0x4949;
+          if (view.getUint16(tiffStart + 2, isLittleEndian) !== 0x002A) return 1;
+          const firstIfdOffset = view.getUint32(tiffStart + 4, isLittleEndian);
+          if (firstIfdOffset < 8) return 1;
+          const ifdStart = tiffStart + firstIfdOffset;
+          const tagCount = view.getUint16(ifdStart, isLittleEndian);
+          for (let i = 0; i < tagCount; i++) {
+            const entryOffset = ifdStart + 2 + i * 12;
+            if (entryOffset + 12 > maxOffset) break;
+            const tag = view.getUint16(entryOffset, isLittleEndian);
+            if (tag === 0x0112) { // Orientation tag
+              return view.getUint16(entryOffset + 8, isLittleEndian);
+            }
+          }
+        }
+        offset += 2 + length;
+      } else if ((marker & 0xFF00) !== 0xFF00 && marker !== 0xD9 && marker !== 0xDA) {
+        const segLen = view.getUint16(offset + 2, false);
+        offset += 2 + segLen;
+      } else {
+        break;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 1;
+};
+
+/**
+ * Loads an image from URL, resolves EXIF orientation (so phone photos are upright),
+ * preserves the original aspect ratio, and returns optimized base64 for jsPDF.
+ */
+export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | null> => {
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) return null;
     const blob = await res.blob();
-    return new Promise((resolve) => {
+    const isPng = blob.type === 'image/png' || url.toLowerCase().includes('.png');
+    const buffer = await blob.arrayBuffer();
+    const exifOrientation = getExifOrientation(buffer);
+
+    // 1. Try ImageBitmap with 'from-image' orientation
+    if (typeof createImageBitmap !== 'undefined' && typeof document !== 'undefined') {
+      try {
+        const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let w = bitmap.width;
+        let h = bitmap.height;
+
+        let needManualRotate = false;
+        let rotateDeg = 0;
+        if ((exifOrientation === 6 || exifOrientation === 8) && w > h) {
+          needManualRotate = true;
+          rotateDeg = exifOrientation === 6 ? 90 : 270;
+        } else if (exifOrientation === 3) {
+          needManualRotate = true;
+          rotateDeg = 180;
+        }
+
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          if (needManualRotate) {
+            if (rotateDeg === 90) {
+              canvas.width = h;
+              canvas.height = w;
+              ctx.translate(h, 0);
+              ctx.rotate(Math.PI / 2);
+              ctx.drawImage(bitmap, 0, 0, w, h);
+            } else if (rotateDeg === 270) {
+              canvas.width = h;
+              canvas.height = w;
+              ctx.translate(0, w);
+              ctx.rotate(-Math.PI / 2);
+              ctx.drawImage(bitmap, 0, 0, w, h);
+            } else if (rotateDeg === 180) {
+              canvas.width = w;
+              canvas.height = h;
+              ctx.translate(w, h);
+              ctx.rotate(Math.PI);
+              ctx.drawImage(bitmap, 0, 0, w, h);
+            }
+          } else {
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(bitmap, 0, 0, w, h);
+          }
+
+          const outFormat = isPng ? 'PNG' : 'JPEG';
+          const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88);
+          bitmap.close();
+          return {
+            dataUrl,
+            width: canvas.width,
+            height: canvas.height,
+            aspectRatio: canvas.width / canvas.height,
+            format: outFormat
+          };
+        }
+      } catch (bitmapErr) {
+        console.warn('createImageBitmap failed, trying Image element:', bitmapErr);
+      }
+    }
+
+    // 2. Fallback: HTMLImageElement
+    if (typeof document !== 'undefined') {
+      const blobUrl = URL.createObjectURL(blob);
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = blobUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+
+        let needManualRotate = false;
+        let rotateDeg = 0;
+        if ((exifOrientation === 6 || exifOrientation === 8) && w > h) {
+          needManualRotate = true;
+          rotateDeg = exifOrientation === 6 ? 90 : 270;
+        } else if (exifOrientation === 3) {
+          needManualRotate = true;
+          rotateDeg = 180;
+        }
+
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          if (needManualRotate) {
+            if (rotateDeg === 90) {
+              canvas.width = h;
+              canvas.height = w;
+              ctx.translate(h, 0);
+              ctx.rotate(Math.PI / 2);
+              ctx.drawImage(img, 0, 0, w, h);
+            } else if (rotateDeg === 270) {
+              canvas.width = h;
+              canvas.height = w;
+              ctx.translate(0, w);
+              ctx.rotate(-Math.PI / 2);
+              ctx.drawImage(img, 0, 0, w, h);
+            } else if (rotateDeg === 180) {
+              canvas.width = w;
+              canvas.height = h;
+              ctx.translate(w, h);
+              ctx.rotate(Math.PI);
+              ctx.drawImage(img, 0, 0, w, h);
+            }
+          } else {
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+          }
+
+          const outFormat = isPng ? 'PNG' : 'JPEG';
+          const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88);
+          URL.revokeObjectURL(blobUrl);
+          return {
+            dataUrl,
+            width: canvas.width,
+            height: canvas.height,
+            aspectRatio: canvas.width / canvas.height,
+            format: outFormat
+          };
+        }
+      } catch (imgErr) {
+        console.warn('HTMLImageElement fallback failed:', imgErr);
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    }
+
+    // 3. Fallback: raw FileReader
+    const base64 = await new Promise<string | null>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
-  } catch {
+
+    if (!base64) return null;
+    return {
+      dataUrl: base64,
+      width: 100,
+      height: 100,
+      aspectRatio: 1,
+      format: isPng ? 'PNG' : 'JPEG'
+    };
+  } catch (err) {
+    console.warn('loadImageForPdf error:', err);
     return null;
   }
+};
+
+const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+  const loaded = await loadImageForPdf(url);
+  return loaded ? loaded.dataUrl : null;
 };
 
 const toDate = (d: Date | string | number | undefined | null): Date | null => {
@@ -174,7 +414,7 @@ const WINANSI_SUPPORTED_EXTRA = new Set([
  * Sanitizes strings for jsPDF standard fonts (Helvetica) to prevent switching to 16-bit encoding
  * which injects null bytes and corrupts letter spacing and glyphs.
  */
-export const cleanPdfText = (text: string | null | undefined): string => {
+export const cleanPdfText = (text: string | null | undefined, preserveNewlines = false): string => {
   if (!text) return '';
   let result = '';
   const stripped = String(text)
@@ -190,6 +430,16 @@ export const cleanPdfText = (text: string | null | undefined): string => {
       result += ' ';
     }
   }
+
+  if (preserveNewlines) {
+    return result
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
   return result.replace(/\s+/g, ' ').trim();
 };
 
@@ -349,14 +599,14 @@ export const generateEventsDigestPDF = async (
   }
 
   // Pre-load flyers if in executive format
-  const flyerMap = new Map<string, string>();
+  const flyerMap = new Map<string, LoadedPdfFlyer>();
   if (options.format === 'executive') {
     await Promise.all(
       filteredEvents.map(async (ev) => {
         const imgUrl = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (imgUrl) {
-          const b64 = await loadImageAsBase64(imgUrl);
-          if (b64) flyerMap.set(ev.id, b64);
+          const flyerObj = await loadImageForPdf(imgUrl);
+          if (flyerObj) flyerMap.set(ev.id, flyerObj);
         }
       })
     );
@@ -368,20 +618,69 @@ export const generateEventsDigestPDF = async (
 
     for (let i = 0; i < filteredEvents.length; i++) {
       const ev = filteredEvents[i];
-      const flyerData = flyerMap.get(ev.id);
+      const flyer = flyerMap.get(ev.id);
+      const hasFlyer = !!flyer;
       const evDate = toDate(ev.date) || new Date();
       const endEvDate = toDate(ev.endDate);
       const isMultiDay = isMultiDayEvent(ev.date, ev.endDate);
 
+      // Event URLs
+      const outlookUrl = createOutlookWebUrl(ev);
+      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
+      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
+
+      // Text column layout
+      const textStartX = margin + 33;
+      // Reserve 30mm on right for flyer when present (24mm flyer + 3mm right margin + 3mm gap)
+      const textWidth = hasFlyer ? contentWidth - 33 - 30 : contentWidth - 35;
+
+      // 1. Category Pill Height
+      const catHeight = ev.category ? 6.2 : 0;
+
+      // 2. Title Lines (all lines preserved)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      const cleanTitle = cleanPdfText(ev.title);
+      const titleLines = doc.splitTextToSize(cleanTitle, textWidth);
+      const titleHeight = titleLines.length * 4.0;
+
+      // 3. Venue Lines
+      let venueLines: string[] = [];
+      let venueHeight = 0;
+      if (ev.location) {
+        const cleanLoc = cleanPdfText(ev.location);
+        if (cleanLoc) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          venueLines = doc.splitTextToSize(cleanLoc, textWidth - 3);
+          venueHeight = venueLines.length * 3.5 + 1.5;
+        }
+      }
+
+      // 4. Description Lines (all lines preserved, support newlines!)
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      const cleanDesc = cleanPdfText(ev.description || '', true);
+      const descLines = cleanDesc ? doc.splitTextToSize(cleanDesc, textWidth) : [];
+      const descHeight = descLines.length > 0 ? (descLines.length * 2.9) : 0;
+
+      // 5. Action Buttons & Submitter footer row
+      const btnHeight = 4.6;
+      const bottomFooterHeight = btnHeight + 3.0 + 2.5;
+
+      // Calculate dynamic card height to ensure all content always fits
+      const contentHeight = 4.5 + catHeight + titleHeight + venueHeight + descHeight + bottomFooterHeight;
+      const minCardHeight = hasFlyer ? 41 : 35;
+      const cardHeight = Math.max(minCardHeight, contentHeight);
+
       // Check if we need to print a week header
       const diffDays = Math.floor((evDate.getTime() - startMs) / (1000 * 60 * 60 * 24));
       const weekNum = diffDays < 7 ? 1 : 2;
+      const isNewWeek = weekNum !== lastWeekNum;
+      const weekBannerH = isNewWeek ? 10 : 0;
 
-      const hasFlyer = !!flyerData;
-      const cardHeight = hasFlyer ? 41 : 35;
-
-      // Page break check
-      if (currentY + cardHeight > pageHeight - 16) {
+      // Page break check (ensures week header + dynamic card fit on current page)
+      if (currentY + weekBannerH + cardHeight > pageHeight - 16) {
         drawFooter(currentPage);
         doc.addPage();
         currentPage++;
@@ -390,7 +689,7 @@ export const generateEventsDigestPDF = async (
       }
 
       // Week Section Banner
-      if (weekNum !== lastWeekNum) {
+      if (isNewWeek) {
         lastWeekNum = weekNum;
         doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
         doc.roundedRect(margin, currentY, contentWidth, 7, 1.5, 1.5, 'F');
@@ -433,7 +732,6 @@ export const generateEventsDigestPDF = async (
       // Badge Top Ribbon (Month)
       doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
       doc.roundedRect(badgeX, badgeY, badgeW, 5.5, 1.8, 1.8, 'F');
-      // Square off bottom corners of header ribbon
       doc.rect(badgeX, badgeY + 3, badgeW, 2.5, 'F');
 
       const monthName = evDate.toLocaleDateString('en-IE', { month: 'short' }).toUpperCase();
@@ -475,14 +773,6 @@ export const generateEventsDigestPDF = async (
       doc.text(timeLines[0], badgeX + badgeW / 2, badgeY + badgeH + 4.2, { align: 'center' });
 
       // Middle Column: Category, Title, Venue (Clickable Maps), Description
-      const textStartX = margin + 33;
-      const textWidth = hasFlyer ? contentWidth - 33 - 27 : contentWidth - 35;
-
-      // Event URLs
-      const outlookUrl = createOutlookWebUrl(ev);
-      const icsUrl = createIcsDownloadUrl(ev, options.baseUrl);
-      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
-
       let infoY = currentY + 4.5;
 
       // Category Pill & optional Multi-day indicator
@@ -521,68 +811,53 @@ export const generateEventsDigestPDF = async (
         infoY += pillHeight + 2;
       }
 
-      // Event Title (Clean text, NOT clickable as requested)
+      // Event Title (ALL lines rendered)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
       doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      const cleanTitle = cleanPdfText(ev.title);
-      const titleLines = doc.splitTextToSize(cleanTitle, textWidth);
-      doc.text(titleLines.slice(0, 2), textStartX, infoY + 1);
-      const titleHeight = (titleLines.slice(0, 2).length) * 4;
+      doc.text(titleLines, textStartX, infoY + 1);
       infoY += titleHeight + 1.5;
 
       // Venue / Location (Clickable to Google Maps)
-      if (ev.location) {
-        const cleanLoc = cleanPdfText(ev.location);
-        if (cleanLoc) {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          doc.setTextColor(2, 132, 199); // Maps Link Blue
-          drawPinIcon(doc, textStartX, infoY);
-          const venueLines = doc.splitTextToSize(cleanLoc, textWidth - 3);
-          doc.text(venueLines[0], textStartX + 2.8, infoY);
+      if (venueLines.length > 0) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(2, 132, 199); // Maps Link Blue
+        drawPinIcon(doc, textStartX, infoY);
+        doc.text(venueLines, textStartX + 2.8, infoY);
 
-          if (mapsUrl) {
-            const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 4);
-            doc.link(textStartX, infoY - 3, venueW, 4.2, { url: mapsUrl });
-          }
-          infoY += 3.5;
+        if (mapsUrl) {
+          const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 4);
+          doc.link(textStartX, infoY - 3, venueW, venueHeight, { url: mapsUrl });
         }
+        infoY += venueHeight;
       }
 
-      // Description (wrapped)
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const maxDescLines = hasFlyer ? 2 : 3;
-      const cleanDesc = cleanPdfText(ev.description || '');
-      const descLines = doc.splitTextToSize(cleanDesc, textWidth);
-      doc.text(descLines.slice(0, maxDescLines), textStartX, infoY);
+      // Description (ALL lines printed, never truncated!)
+      if (descLines.length > 0) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+        doc.text(descLines, textStartX, infoY);
+      }
 
-      // Right Column: Flyer Thumbnail
+      // Right Column: Flyer Thumbnail (True Aspect Ratio & EXIF Orientation Preserved)
       let flyerW = 0;
       let flyerX = pageWidth - margin;
-      if (hasFlyer && flyerData) {
+      if (hasFlyer && flyer) {
         try {
-          const maxW = 23;
-          const maxH = cardHeight - 6;
-          flyerW = maxW;
-          let flyerH = maxH;
-          try {
-            const fProps = doc.getImageProperties(flyerData);
-            if (fProps && fProps.width && fProps.height) {
-              const fRatio = fProps.width / fProps.height;
-              if (fRatio > maxW / maxH) {
-                flyerW = maxW;
-                flyerH = maxW / fRatio;
-              } else {
-                flyerH = maxH;
-                flyerW = maxH * fRatio;
-              }
-            }
-          } catch {
-            // fallback to box bounds
+          const maxW = 24;
+          const maxH = Math.min(cardHeight - 6, 38);
+          const fRatio = flyer.aspectRatio; // True visual aspect ratio (width / height)
+
+          if (fRatio > maxW / maxH) {
+            flyerW = maxW;
+            flyerH = maxW / fRatio;
+          } else {
+            flyerH = maxH;
+            flyerW = maxH * fRatio;
           }
+
           flyerX = pageWidth - margin - flyerW - 3;
           const flyerY = currentY + 3 + (maxH - flyerH) / 2;
 
@@ -590,16 +865,15 @@ export const generateEventsDigestPDF = async (
           doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
           doc.roundedRect(flyerX - 0.5, flyerY - 0.5, flyerW + 1, flyerH + 1, 1, 1, 'S');
 
-          doc.addImage(flyerData, 'JPEG', flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
+          doc.addImage(flyer.dataUrl, flyer.format, flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
         } catch (imgErr) {
           console.warn('Could not embed flyer thumbnail in PDF:', imgErr);
         }
       }
 
       // Action Buttons (Outlook 365 Web & .ICS)
-      const actionRight = hasFlyer && flyerData ? (flyerX - 3) : (pageWidth - margin - 4);
-      const btnHeight = 4.6;
-      const btnY = currentY + cardHeight - btnHeight - 2;
+      const actionRight = hasFlyer && flyer ? (flyerX - 3) : (pageWidth - margin - 4);
+      const btnY = currentY + cardHeight - btnHeight - 2.5;
 
       const icsBtnW = 14;
       const outlookBtnW = 21;
@@ -640,7 +914,7 @@ export const generateEventsDigestPDF = async (
         const maxSubWidth = outlookBtnX - textStartX - 3;
         const subText = cleanPdfText(`Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`);
         const subLines = doc.splitTextToSize(subText, Math.max(20, maxSubWidth));
-        doc.text(subLines[0], textStartX, currentY + cardHeight - 3.2);
+        doc.text(subLines[0], textStartX, currentY + cardHeight - 3.5);
       }
 
       currentY += cardHeight + 3.5;

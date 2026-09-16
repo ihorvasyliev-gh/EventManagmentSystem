@@ -13,7 +13,7 @@ const mapSupabaseUserToUser = (supabaseUser: any): User => {
 };
 
 // Вспомогательная функция для таймаута запросов с поддержкой отмены
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
+const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs: number = 10000): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((_, reject) => {
     timeoutId = setTimeout(() => {
@@ -22,7 +22,7 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 10000): Promise
   });
 
   return Promise.race([
-    promise
+    Promise.resolve(promise)
       .then(result => {
         clearTimeout(timeoutId);
         return result;

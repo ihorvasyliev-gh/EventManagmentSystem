@@ -3,7 +3,7 @@ import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail,
 import { submitEvent } from '../services/eventService';
 import { User as AuthUser, UserRole } from '../types';
 import TimePickerInput from '../components/TimePickerInput';
-import { EVENT_CATEGORIES } from '../constants/categories';
+import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
 
 const CATEGORIES = EVENT_CATEGORIES;
 
@@ -39,7 +39,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   // Form State
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [category, setCategory] = useState<EventCategoryName>(CATEGORIES[0]);
 
   const defaultDateStr = useMemo(() => {
     const d = new Date();
@@ -356,7 +356,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             <div className="relative">
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => setCategory(e.target.value as EventCategoryName)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm appearance-none"
               >
                 {CATEGORIES.map((cat) => (

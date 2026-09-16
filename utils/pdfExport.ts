@@ -55,13 +55,42 @@ export const createOutlookWebUrl = (event: {
  * Generate link for single-event .ics download (Desktop Outlook / Apple / Mobile)
  */
 export const createIcsDownloadUrl = (
-  event: { id: string; date: Date | string },
+  event: {
+    id: string;
+    date: Date | string;
+    title?: string;
+    endDate?: Date | string;
+    location?: string;
+    description?: string;
+    category?: string;
+  },
   baseUrl?: string
 ): string => {
-  const base = baseUrl || (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://ccp-event-calendar.pages.dev');
+  let base = baseUrl;
+  if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
+    if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
+      base = window.location.origin;
+    } else {
+      base = 'https://ccp-event-calendar.pages.dev';
+    }
+  }
+
   const d = toDate(event.date);
-  const dateParam = d ? `&date=${encodeURIComponent(d.toISOString())}` : '';
-  return `${base}/api/calendar?event_id=${encodeURIComponent(event.id)}${dateParam}`;
+  const endD = toDate(event.endDate);
+
+  const params = new URLSearchParams();
+  params.set('event_id', event.id);
+  if (d) params.set('date', d.toISOString());
+  if (event.title) params.set('title', event.title);
+  if (endD) params.set('end_date', endD.toISOString());
+  if (event.location) params.set('location', event.location);
+  if (event.category) params.set('category', event.category);
+  if (event.description) {
+    const descShort = event.description.length > 400 ? event.description.slice(0, 400) : event.description;
+    params.set('description', descShort);
+  }
+
+  return `${base}/api/calendar?${params.toString()}`;
 };
 
 const loadImageAsBase64 = async (url: string): Promise<string | null> => {
@@ -746,13 +775,15 @@ export const generateEventsDigestPDF = async (
 export const generateFortnightlyPDF = generateEventsDigestPDF;
 
 /**
- * Generate a preformatted text digest for WhatsApp groups.
+ * Generate a preformatted text digest for WhatsApp groups (clean plain text without * or _ formatting).
  */
 export const generateWhatsAppSummary = (
   events: Event[],
   startDate: Date | string,
   endDate: Date | string
 ): string => {
+  const cleanWa = (val?: string | null) => (val || '').replace(/[*_]/g, '').trim();
+
   const startMs = (toDate(startDate) || new Date()).getTime();
   const endMs = (toDate(endDate) || new Date()).getTime();
   const filteredEvents = events
@@ -768,10 +799,10 @@ export const generateWhatsAppSummary = (
       return ta - tb;
     });
 
-  const dateRangeStr = formatDateRange(startDate, endDate);
+  const dateRangeStr = cleanWa(formatDateRange(startDate, endDate));
 
-  let text = `📅 *CORK CITY PARTNERSHIP — UPCOMING EVENTS*\n`;
-  text += `*Schedule:* ${dateRangeStr}\n`;
+  let text = `📅 CORK CITY PARTNERSHIP — UPCOMING EVENTS\n`;
+  text += `Schedule: ${dateRangeStr}\n`;
   text += `────────────────────────────\n\n`;
 
   if (filteredEvents.length === 0) {
@@ -795,34 +826,39 @@ export const generateWhatsAppSummary = (
       const multiHeader = `${formatDateRange(ev.date, ev.endDate)} (Multi-day)`;
       if (multiHeader !== currentDateGroup) {
         currentDateGroup = multiHeader;
-        text += `🗓 *${currentDateGroup}*\n`;
+        text += `🗓 ${cleanWa(currentDateGroup)}\n`;
       }
     } else if (evDateStr !== currentDateGroup) {
       currentDateGroup = evDateStr;
-      text += `🗓 *${currentDateGroup}*\n`;
+      text += `🗓 ${cleanWa(currentDateGroup)}\n`;
     }
 
-    const timeStr = formatEventTime(ev.date, ev.endDate);
-    text += `⏰ *${timeStr}* | *${ev.title}*\n`;
+    const timeStr = cleanWa(formatEventTime(ev.date, ev.endDate));
+    const titleStr = cleanWa(ev.title);
+    text += `⏰ ${timeStr} | ${titleStr}\n`;
     if (ev.location) {
-      const mapUrl = createGoogleMapsUrl(ev.location);
-      text += `📍 *Venue:* ${ev.location} (${mapUrl})\n`;
+      const cleanLoc = cleanWa(ev.location);
+      const mapUrl = createGoogleMapsUrl(cleanLoc);
+      text += `📍 Venue: ${cleanLoc} (${mapUrl})\n`;
     }
     if (ev.category) {
-      text += `🏷 *Category:* ${ev.category}\n`;
+      text += `🏷 Category: ${cleanWa(ev.category)}\n`;
     }
     if (ev.description) {
       const firstLines = ev.description.split('\n').filter(Boolean).slice(0, 2).join(' ');
-      text += `ℹ️ ${firstLines}\n`;
+      const cleanDesc = cleanWa(firstLines);
+      if (cleanDesc) {
+        text += `ℹ️ ${cleanDesc}\n`;
+      }
     }
     if (ev.submitterName) {
-      text += `👤 _Contact: ${ev.submitterName}_\n`;
+      text += `👤 Contact: ${cleanWa(ev.submitterName)}\n`;
     }
     text += `\n`;
   });
 
   text += `────────────────────────────\n`;
-  text += `📌 *PDF Digest & Calendar:* Check company portal.`;
+  text += `📌 PDF Digest & Calendar: Check company portal.`;
 
   return text;
 };

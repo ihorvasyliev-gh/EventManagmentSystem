@@ -11,8 +11,10 @@
  */
 
 interface Env {
-    SUPABASE_URL: string;
-    SUPABASE_ANON_KEY: string;
+    SUPABASE_URL?: string;
+    SUPABASE_ANON_KEY?: string;
+    VITE_SUPABASE_URL?: string;
+    VITE_SUPABASE_ANON_KEY?: string;
 }
 
 interface SupabaseEvent {
@@ -178,53 +180,45 @@ function buildICS(events: SupabaseEvent[]): string {
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
     const { env } = context;
-
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-        return new Response('Server misconfiguration: missing Supabase credentials.', { status: 500 });
-    }
+    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 
     try {
         const reqUrl = new URL(context.request.url);
         const eventId = reqUrl.searchParams.get('event_id');
         const specificDate = reqUrl.searchParams.get('date');
+        const titleParam = reqUrl.searchParams.get('title');
 
-        if (eventId) {
-            // Fetch single event (e.g. clicked from PDF bulletin)
-            const url = `${env.SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(eventId)}&select=*`;
-            const res = await fetch(url, {
-                headers: {
-                    'apikey': env.SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            });
+        // Mode 1: Event details provided directly in query parameters (Self-contained / offline-safe from PDF)
+        if (titleParam) {
+            const start = specificDate ? new Date(specificDate) : new Date();
+            const validStart = isNaN(start.getTime()) ? new Date() : start;
+            const endDateParam = reqUrl.searchParams.get('end_date');
+            const parsedEnd = endDateParam ? new Date(endDateParam) : null;
+            const validEnd = parsedEnd && !isNaN(parsedEnd.getTime())
+                ? parsedEnd
+                : new Date(validStart.getTime() + 60 * 60 * 1000);
 
-            if (!res.ok) {
-                return new Response('Failed to fetch event.', { status: res.status });
-            }
-
-            const events: SupabaseEvent[] = await res.json();
-            if (!events || events.length === 0) {
-                return new Response('Event not found.', { status: 404 });
-            }
-
-            const ev = { ...events[0] };
-            if (specificDate) {
-                const parsed = new Date(specificDate);
-                if (!isNaN(parsed.getTime())) {
-                    if (ev.end_date) {
-                        const originalStart = new Date(ev.date).getTime();
-                        const originalEnd = new Date(ev.end_date).getTime();
-                        const duration = Math.max(30 * 60 * 1000, originalEnd - originalStart);
-                        ev.end_date = new Date(parsed.getTime() + duration).toISOString();
-                    }
-                    ev.date = parsed.toISOString();
-                }
-            }
+            const ev: SupabaseEvent = {
+                id: eventId || `ev_${validStart.getTime()}`,
+                title: titleParam,
+                description: reqUrl.searchParams.get('description') || null,
+                date: validStart.toISOString(),
+                end_date: validEnd.toISOString(),
+                location: reqUrl.searchParams.get('location') || null,
+                category: reqUrl.searchParams.get('category') || null,
+                status: 'published',
+                recurrence_type: null,
+                recurrence_interval: null,
+                recurrence_end_date: null,
+                recurrence_occurrences: null,
+                recurrence_days_of_week: null,
+                recurrence_custom_dates: null,
+                created_at: new Date().toISOString(),
+            };
 
             const ics = buildICS([ev]);
-            const rawTitle = ev.title || 'event';
-            const slug = rawTitle
+            const slug = titleParam
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, '-')
                 .replace(/^-|-$/g, '')
@@ -241,12 +235,105 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             });
         }
 
-        // Fetch published events from Supabase REST API
-        const url = `${env.SUPABASE_URL}/rest/v1/events?status=eq.published&order=date.asc`;
+        // Mode 2: Single event requested by ID (e.g. from previously generated PDF bulletins)
+        if (eventId) {
+            if (supabaseUrl && supabaseAnonKey) {
+                const url = `${supabaseUrl}/rest/v1/events?id=eq.${encodeURIComponent(eventId)}&select=*`;
+                const res = await fetch(url, {
+                    headers: {
+                        'apikey': supabaseAnonKey,
+                        'Authorization': `Bearer ${supabaseAnonKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (res.ok) {
+                    const events: SupabaseEvent[] = await res.json();
+                    if (events && events.length > 0) {
+                        const ev = { ...events[0] };
+                        if (specificDate) {
+                            const parsed = new Date(specificDate);
+                            if (!isNaN(parsed.getTime())) {
+                                if (ev.end_date) {
+                                    const originalStart = new Date(ev.date).getTime();
+                                    const originalEnd = new Date(ev.end_date).getTime();
+                                    const duration = Math.max(30 * 60 * 1000, originalEnd - originalStart);
+                                    ev.end_date = new Date(parsed.getTime() + duration).toISOString();
+                                }
+                                ev.date = parsed.toISOString();
+                            }
+                        }
+
+                        const ics = buildICS([ev]);
+                        const rawTitle = ev.title || 'event';
+                        const slug = rawTitle
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, '-')
+                            .replace(/^-|-$/g, '')
+                            .slice(0, 40) || 'ccp-event';
+
+                        return new Response(ics, {
+                            status: 200,
+                            headers: {
+                                'Content-Type': 'text/calendar; charset=utf-8',
+                                'Content-Disposition': `attachment; filename="${slug}.ics"`,
+                                'Cache-Control': 'public, max-age=3600',
+                                'Access-Control-Allow-Origin': '*',
+                            },
+                        });
+                    }
+                }
+            }
+
+            // Fallback: If Supabase credentials are missing or record not found, generate a valid calendar invite
+            // from the available event metadata instead of failing with a 500 error screen.
+            const start = specificDate ? new Date(specificDate) : new Date();
+            const validStart = isNaN(start.getTime()) ? new Date() : start;
+            const validEnd = new Date(validStart.getTime() + 60 * 60 * 1000);
+
+            const fallbackEv: SupabaseEvent = {
+                id: eventId,
+                title: 'CCP Calendar Event',
+                description: 'Please visit the CCP Calendar portal for full event details.',
+                date: validStart.toISOString(),
+                end_date: validEnd.toISOString(),
+                location: null,
+                category: null,
+                status: 'published',
+                recurrence_type: null,
+                recurrence_interval: null,
+                recurrence_end_date: null,
+                recurrence_occurrences: null,
+                recurrence_days_of_week: null,
+                recurrence_custom_dates: null,
+                created_at: new Date().toISOString(),
+            };
+
+            const ics = buildICS([fallbackEv]);
+            return new Response(ics, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/calendar; charset=utf-8',
+                    'Content-Disposition': `attachment; filename="ccp-event.ics"`,
+                    'Cache-Control': 'public, max-age=3600',
+                    'Access-Control-Allow-Origin': '*',
+                },
+            });
+        }
+
+        // Mode 3: Live calendar feed subscription (/api/calendar)
+        if (!supabaseUrl || !supabaseAnonKey) {
+            return new Response(
+                'Server misconfiguration: missing Supabase credentials. Ensure SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY) are configured in Cloudflare Pages.',
+                { status: 500 }
+            );
+        }
+
+        const url = `${supabaseUrl}/rest/v1/events?status=eq.published&order=date.asc`;
         const res = await fetch(url, {
             headers: {
-                'apikey': env.SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${supabaseAnonKey}`,
                 'Content-Type': 'application/json',
             },
         });

@@ -1133,7 +1133,7 @@ const EventModal: React.FC<EventModalProps> = ({
                         required
                         value={startTimeStr}
                         onChange={handleStartTimeChange}
-                        className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm"
+                        className="!rounded-lg !pl-3 !pr-9 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm border-slate-200 dark:border-slate-700 dark:!bg-slate-800 focus:border-brand-500"
                         placeholder="10:00"
                       />
                     </div>
@@ -1163,7 +1163,7 @@ const EventModal: React.FC<EventModalProps> = ({
                         value={endTimeStr}
                         onChange={handleEndTimeChange}
                         referenceStartTime={startDateStr === endDateStr ? startTimeStr : undefined}
-                        className="!rounded-lg !px-3 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm"
+                        className="!rounded-lg !pl-3 !pr-9 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm border-slate-200 dark:border-slate-700 dark:!bg-slate-800 focus:border-brand-500"
                         placeholder="11:30"
                       />
                     </div>

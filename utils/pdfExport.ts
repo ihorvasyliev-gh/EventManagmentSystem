@@ -838,8 +838,9 @@ export const generateWhatsAppSummary = (
     text += `⏰ ${timeStr} | ${titleStr}\n`;
     if (ev.location) {
       const cleanLoc = cleanWa(ev.location);
-      const mapUrl = createGoogleMapsUrl(cleanLoc);
-      text += `📍 Venue: ${cleanLoc} (${mapUrl})\n`;
+      if (cleanLoc) {
+        text += `📍 Venue: ${cleanLoc}\n`;
+      }
     }
     if (ev.category) {
       text += `🏷 Category: ${cleanWa(ev.category)}\n`;

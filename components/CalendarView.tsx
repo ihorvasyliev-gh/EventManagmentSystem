@@ -502,41 +502,5 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
   );
 };
 
-// Memoize component to prevent unnecessary re-renders
-export default React.memo(CalendarView, (prevProps, nextProps) => {
-  // Only re-render if events array changed (by length or IDs)
-  if (prevProps.events.length !== nextProps.events.length) return false;
-
-  // Check if any event IDs changed
-  const prevIds = prevProps.events.map(e => e.id).sort().join(',');
-  const nextIds = nextProps.events.map(e => e.id).sort().join(',');
-  if (prevIds !== nextIds) return false;
-
-  // Check if event dates changed (for recurring events)
-  const prevDates = prevProps.events.map(e => e.date.getTime()).sort().join(',');
-  const nextDates = nextProps.events.map(e => e.date.getTime()).sort().join(',');
-  if (prevDates !== nextDates) return false;
-
-  // Check if recurrence exceptions changed
-  if (prevProps.recurrenceExceptions !== nextProps.recurrenceExceptions) {
-    // Compare map sizes and keys
-    if (prevProps.recurrenceExceptions?.size !== nextProps.recurrenceExceptions?.size) return false;
-    if (prevProps.recurrenceExceptions && nextProps.recurrenceExceptions) {
-      for (const [key, value] of prevProps.recurrenceExceptions) {
-        const nextValue = nextProps.recurrenceExceptions.get(key);
-        if (!nextValue || nextValue.length !== value.length) return false;
-        // Compare dates
-        const prevDates = value.map(d => d.getTime()).sort().join(',');
-        const nextDates = nextValue.map(d => d.getTime()).sort().join(',');
-        if (prevDates !== nextDates) return false;
-      }
-    }
-  }
-
-  if (prevProps.onEventClick !== nextProps.onEventClick) return false;
-  if (prevProps.onPrefetchMonth !== nextProps.onPrefetchMonth) return false;
-  if (prevProps.onAddEventForDate !== nextProps.onAddEventForDate) return false;
-  if (prevProps.userRole !== nextProps.userRole) return false;
-
-  return true; // Props are equal, skip re-render
-});
+// Memoize component to prevent unnecessary re-renders when parent states change
+export default React.memo(CalendarView);

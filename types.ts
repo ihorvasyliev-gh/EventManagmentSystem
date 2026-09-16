@@ -87,6 +87,7 @@ export interface Event {
   history?: EventHistoryEntry[];
   creatorId?: string;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export type ViewMode = 'grid' | 'list' | 'agenda';

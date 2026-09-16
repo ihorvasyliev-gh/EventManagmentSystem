@@ -163,6 +163,37 @@ const AppContent: React.FC = () => {
 
 
 
+const areEventsEqual = (a: Event[], b: Event[]): boolean => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  const bMap = new Map<string, Event>();
+  for (const eb of b) {
+    bMap.set(eb.id, eb);
+  }
+  for (const ea of a) {
+    const eb = bMap.get(ea.id);
+    if (!eb) return false;
+    if (
+      ea.status !== eb.status ||
+      ea.title !== eb.title ||
+      ea.date.getTime() !== eb.date.getTime() ||
+      ea.endDate?.getTime() !== eb.endDate?.getTime() ||
+      ea.location !== eb.location ||
+      ea.category !== eb.category ||
+      ea.description !== eb.description ||
+      ea.posterUrl !== eb.posterUrl ||
+      ea.submitterName !== eb.submitterName ||
+      ea.submitterEmail !== eb.submitterEmail ||
+      (ea.updatedAt?.getTime() || 0) !== (eb.updatedAt?.getTime() || 0) ||
+      (ea.tags?.join(',') || '') !== (eb.tags?.join(',') || '') ||
+      (ea.attendees?.length || 0) !== (eb.attendees?.length || 0)
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
   // Refresh Events Handler — при обновлении показываем кеш + крутим логотип, скелетоны только при первой загрузке без кеша
   const refreshEvents = useCallback(async (isManual = false) => {
     if (!user) return;
@@ -171,18 +202,14 @@ const AppContent: React.FC = () => {
 
     try {
       const data = await getEvents();
-      // Only update if data actually changed to avoid unnecessary re-renders
+      // If manual refresh requested, always update state.
+      // Otherwise, update if any event data actually changed.
       setEvents((prev) => {
-        const prevIds = prev.map(e => e.id).sort().join(',');
-        const newIds = data.map(e => e.id).sort().join(',');
-        const prevDates = prev.map(e => e.createdAt.getTime()).sort().join(',');
-        const newDates = data.map(e => e.createdAt.getTime()).sort().join(',');
-
-        if (prevIds !== newIds || prevDates !== newDates) {
+        if (isManual || !areEventsEqual(prev, data)) {
           cacheEvents(data);
           return data;
         }
-        return prev; // Return same reference if no changes
+        return prev;
       });
 
       // Always cache new data even if state didn't update (to ensure cache is fresh)
@@ -270,65 +297,18 @@ const AppContent: React.FC = () => {
     }
   }, [user, refreshEvents]);
 
-  // Background periodic sync (every 2 minutes) when user is active
+  // Background periodic sync (every 30 seconds) when page is visible
   useEffect(() => {
     if (!user) return;
 
     const syncInterval = setInterval(() => {
-      // Only sync if page is visible and not in background
       if (document.visibilityState === 'visible') {
-        const syncEvents = async () => {
-          try {
-            const data = await getEvents();
-            setEvents((prev) => {
-              // Only update if data actually changed
-              const prevIds = prev.map(e => e.id).sort().join(',');
-              const newIds = data.map(e => e.id).sort().join(',');
-              if (prevIds !== newIds) {
-                cacheEvents(data);
-                return data;
-              }
-              return prev;
-            });
-
-            // Update recurrence exceptions
-            const recurringEventIds = data
-              .filter(e => e.recurrence && e.recurrence.type !== 'none')
-              .map(e => e.id);
-
-            if (recurringEventIds.length > 0) {
-              const exceptionsMap = new Map<string, Date[]>();
-              await Promise.all(
-                recurringEventIds.map(async (eventId) => {
-                  try {
-                    const exceptions = await getRecurrenceExceptions(eventId);
-                    if (exceptions.length > 0) {
-                      exceptionsMap.set(eventId, exceptions);
-                    }
-                  } catch (err) {
-                    console.error(`Error loading exceptions for event ${eventId}:`, err);
-                  }
-                })
-              );
-              setRecurrenceExceptions(exceptionsMap);
-              cacheExceptions(exceptionsMap);
-            }
-          } catch (error) {
-            console.error('Background sync error:', error);
-            // Silent fail for background sync
-          }
-        };
-
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(syncEvents, { timeout: 5000 });
-        } else {
-          setTimeout(syncEvents, 100);
-        }
+        refreshEvents(false);
       }
-    }, 2 * 60 * 1000); // Every 2 minutes
+    }, 30 * 1000);
 
     return () => clearInterval(syncInterval);
-  }, [user]);
+  }, [user, refreshEvents]);
 
   // Pull-to-refresh on mobile when at top of page
   const pullStartYRef = React.useRef<number | null>(null);
@@ -429,7 +409,7 @@ const AppContent: React.FC = () => {
               }
             }
 
-            refreshEvents(false);
+            refreshEvents(true);
           }
         )
         .subscribe((status) => {
@@ -483,36 +463,104 @@ const AppContent: React.FC = () => {
   }, [user, refreshSubmissions, refreshEvents]);
 
   const handleApproveSubmission = useCallback(async (event: Event) => {
+    // Optimistic update: instantly remove from inbox & mark published in events
+    setPendingSubmissions((prev) => prev.filter((e) => e.id !== event.id));
+    setEvents((prev) => {
+      const exists = prev.some((e) => e.id === event.id);
+      const updatedEvent: Event = { ...event, status: 'published', updatedAt: new Date() };
+      const next = exists
+        ? prev.map((e) => (e.id === event.id ? updatedEvent : e))
+        : [...prev, updatedEvent];
+      cacheEvents(next);
+      return next;
+    });
+
     try {
-      await approveSubmission(event.id);
+      const serverEvent = await approveSubmission(event.id);
       showToast(`Event "${event.title}" approved and published!`, 'success');
+      setEvents((prev) => {
+        const next = prev.map((e) => (e.id === event.id ? serverEvent : e));
+        cacheEvents(next);
+        return next;
+      });
       refreshSubmissions();
       refreshEvents(true);
     } catch (err: any) {
+      // Rollback on failure
+      setPendingSubmissions((prev) => [event, ...prev]);
+      setEvents((prev) => {
+        const next = prev.map((e) => (e.id === event.id ? event : e));
+        cacheEvents(next);
+        return next;
+      });
       showToast(err?.message || 'Failed to approve event', 'error');
     }
   }, [refreshSubmissions, refreshEvents, showToast]);
 
   const handleRejectSubmission = useCallback(async (eventId: string) => {
+    const rejectedSub = pendingSubmissions.find((e) => e.id === eventId);
+    // Optimistic update: remove from submissions inbox and events list
+    setPendingSubmissions((prev) => prev.filter((e) => e.id !== eventId));
+    setEvents((prev) => {
+      const next = prev.filter((e) => e.id !== eventId);
+      cacheEvents(next);
+      return next;
+    });
+
     try {
       await rejectSubmission(eventId);
       showToast('Submission removed', 'info');
       refreshSubmissions();
+      refreshEvents(true);
     } catch (err: any) {
+      // Rollback on failure
+      if (rejectedSub) {
+        setPendingSubmissions((prev) => [rejectedSub, ...prev]);
+        setEvents((prev) => {
+          const next = [...prev, rejectedSub];
+          cacheEvents(next);
+          return next;
+        });
+      }
       showToast(err?.message || 'Failed to reject event', 'error');
     }
-  }, [refreshSubmissions, showToast]);
+  }, [pendingSubmissions, refreshSubmissions, refreshEvents, showToast]);
 
   const handleApproveAllSubmissions = useCallback(async () => {
+    const subsToApprove = [...pendingSubmissions];
+    if (subsToApprove.length === 0) return;
+
+    // Optimistic update: clear inbox and publish all events immediately
+    setPendingSubmissions([]);
+    setEvents((prev) => {
+      const subMap = new Map(subsToApprove.map((s) => [s.id, s]));
+      const next = prev.map((e) => {
+        if (subMap.has(e.id)) {
+          return { ...e, status: 'published' as EventStatus, updatedAt: new Date() };
+        }
+        return e;
+      });
+      for (const sub of subsToApprove) {
+        if (!next.some((e) => e.id === sub.id)) {
+          next.push({ ...sub, status: 'published' as EventStatus, updatedAt: new Date() });
+        }
+      }
+      cacheEvents(next);
+      return next;
+    });
+
     try {
-      for (const sub of pendingSubmissions) {
+      for (const sub of subsToApprove) {
         await approveSubmission(sub.id);
       }
-      showToast(`All ${pendingSubmissions.length} events approved and published!`, 'success');
+      showToast(`All ${subsToApprove.length} events approved and published!`, 'success');
       refreshSubmissions();
       refreshEvents(true);
     } catch (err: any) {
+      // Rollback on failure
+      setPendingSubmissions(subsToApprove);
       showToast(err?.message || 'Failed to approve all events', 'error');
+      refreshEvents(true);
     }
   }, [pendingSubmissions, refreshSubmissions, refreshEvents, showToast]);
 
@@ -1002,7 +1050,7 @@ const AppContent: React.FC = () => {
           <FortnightlyBulletinModal
             isOpen={isBulletinModalOpen}
             onClose={() => setIsBulletinModalOpen(false)}
-            events={filteredEvents}
+            events={events}
           />
         </Suspense>
       )}

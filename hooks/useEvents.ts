@@ -20,6 +20,37 @@ function getInitialLoadingFromCache(): boolean {
   return !(cached && cached.length > 0);
 }
 
+const areEventsEqual = (a: Event[], b: Event[]): boolean => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  const bMap = new Map<string, Event>();
+  for (const eb of b) {
+    bMap.set(eb.id, eb);
+  }
+  for (const ea of a) {
+    const eb = bMap.get(ea.id);
+    if (!eb) return false;
+    if (
+      ea.status !== eb.status ||
+      ea.title !== eb.title ||
+      ea.date.getTime() !== eb.date.getTime() ||
+      ea.endDate?.getTime() !== eb.endDate?.getTime() ||
+      ea.location !== eb.location ||
+      ea.category !== eb.category ||
+      ea.description !== eb.description ||
+      ea.posterUrl !== eb.posterUrl ||
+      ea.submitterName !== eb.submitterName ||
+      ea.submitterEmail !== eb.submitterEmail ||
+      (ea.updatedAt?.getTime() || 0) !== (eb.updatedAt?.getTime() || 0) ||
+      (ea.tags?.join(',') || '') !== (eb.tags?.join(',') || '') ||
+      (ea.attendees?.length || 0) !== (eb.attendees?.length || 0)
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export function useEvents(user: User | null, showToast: (msg: string, type: 'success' | 'error' | 'info') => void) {
   const [events, setEvents] = useState<Event[]>(getInitialEventsFromCache);
   const [loadingEvents, setLoadingEvents] = useState<boolean>(getInitialLoadingFromCache);
@@ -53,11 +84,7 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
     try {
       const data = await getEvents();
       setEvents((prev) => {
-        const prevIds = prev.map(e => e.id).sort().join(',');
-        const newIds = data.map(e => e.id).sort().join(',');
-        const prevDates = prev.map(e => e.createdAt.getTime()).sort().join(',');
-        const newDates = data.map(e => e.createdAt.getTime()).sort().join(',');
-        if (prevIds !== newIds || prevDates !== newDates) {
+        if (isManual || !areEventsEqual(prev, data)) {
           cacheEvents(data);
           return data;
         }
@@ -127,53 +154,16 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
     }
   }, [user, refreshEvents]);
 
-  // Periodic sync
+  // Periodic sync (every 30 seconds when visible)
   useEffect(() => {
     if (!user) return;
     const syncInterval = setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      const syncEvents = async () => {
-        try {
-          const data = await getEvents();
-          setEvents((prev) => {
-            const prevIds = prev.map(e => e.id).sort().join(',');
-            const newIds = data.map(e => e.id).sort().join(',');
-            if (prevIds !== newIds) {
-              cacheEvents(data);
-              return data;
-            }
-            return prev;
-          });
-          const recurringEventIds = data
-            .filter(e => e.recurrence && e.recurrence.type !== 'none')
-            .map(e => e.id);
-          if (recurringEventIds.length > 0) {
-            const exceptionsMap = new Map<string, Date[]>();
-            await Promise.all(
-              recurringEventIds.map(async (eventId) => {
-                try {
-                  const exceptions = await getRecurrenceExceptions(eventId);
-                  if (exceptions.length > 0) exceptionsMap.set(eventId, exceptions);
-                } catch (err) {
-                  console.error(`Error loading exceptions for event ${eventId}:`, err);
-                }
-              })
-            );
-            setRecurrenceExceptions(exceptionsMap);
-            cacheExceptions(exceptionsMap);
-          }
-        } catch (error) {
-          console.error('Background sync error:', error);
-        }
-      };
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(syncEvents, { timeout: 5000 });
-      } else {
-        setTimeout(syncEvents, 100);
+      if (document.visibilityState === 'visible') {
+        refreshEvents(false);
       }
-    }, 2 * 60 * 1000);
+    }, 30 * 1000);
     return () => clearInterval(syncInterval);
-  }, [user]);
+  }, [user, refreshEvents]);
 
   // Realtime (optional: set VITE_SUPABASE_REALTIME=false to disable and avoid WebSocket errors in strict networks)
   useEffect(() => {
@@ -184,7 +174,7 @@ export function useEvents(user: User | null, showToast: (msg: string, type: 'suc
       channel = supabase
         .channel('events-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-          refreshEvents(false);
+          refreshEvents(true);
         })
         .subscribe((status) => {
           if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {

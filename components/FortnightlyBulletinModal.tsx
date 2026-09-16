@@ -41,8 +41,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const startDate = new Date(`${startDateStr}T00:00:00`);
   const endDate = new Date(`${endDateStr}T23:59:59`);
 
-  // Count events in range
+  // Count events in range (only published events, excluding drafts/submissions)
   const matchingEvents = events.filter((e) => {
+    if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
     const d = e.date instanceof Date ? e.date : new Date(e.date);
     const t = d.getTime();
     return !isNaN(t) && t >= startDate.getTime() && t <= endDate.getTime();

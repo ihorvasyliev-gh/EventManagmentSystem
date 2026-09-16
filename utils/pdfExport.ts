@@ -240,11 +240,13 @@ export const generateEventsDigestPDF = async (
   // Pre-load CCP logo
   const logoData = await loadImageAsBase64('/assets/ccp-logo.png');
 
-  // Filter events within selected date range and sort chronologically
+  // Filter events within selected date range and sort chronologically (only published events, strictly excluding drafts/submissions)
   const startMs = (toDate(options.startDate) || new Date()).getTime();
   const endMs = (toDate(options.endDate) || new Date()).getTime();
   const filteredEvents = events
     .filter((e) => {
+      // Exclude drafts and pending submissions
+      if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
       const d = toDate(e.date);
       if (!d) return false;
       const t = d.getTime();
@@ -788,6 +790,8 @@ export const generateWhatsAppSummary = (
   const endMs = (toDate(endDate) || new Date()).getTime();
   const filteredEvents = events
     .filter((e) => {
+      // Exclude drafts and pending submissions
+      if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
       const d = toDate(e.date);
       if (!d) return false;
       const t = d.getTime();

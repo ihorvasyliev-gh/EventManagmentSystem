@@ -51,7 +51,9 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   const handleExport = async () => {
     setExporting(true);
     try {
-      const eventsWithRelated = await getEventsWithRelated(events);
+      // Export published events only (strictly excluding drafts and pending submissions)
+      const publishedOnly = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
+      const eventsWithRelated = await getEventsWithRelated(publishedOnly);
       const recurringIds = eventsWithRelated
         .filter(e => e.recurrence && e.recurrence.type !== 'none')
         .map(e => e.id);
@@ -201,7 +203,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
                         <FileSpreadsheet className="h-5 w-5 text-green-500 dark:text-green-400 mr-2" />
                         <span className="text-sm font-medium text-gray-900 dark:text-white">Excel (.xlsx)</span>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">All events including recurring, with comments and description</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Published events with start & end dates, posters, and comments</p>
                     </div>
                   </label>
                 </div>

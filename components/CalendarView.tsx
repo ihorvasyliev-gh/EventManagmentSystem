@@ -122,6 +122,25 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
 
   const goToday = useCallback(() => setCurrentDate(new Date()), []);
 
+  useEffect(() => {
+    const handleCalendarKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        prevMonth();
+      } else if (e.key === 'ArrowRight') {
+        nextMonth();
+      } else if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey) {
+        goToday();
+      }
+    };
+
+    window.addEventListener('keydown', handleCalendarKeyDown);
+    return () => window.removeEventListener('keydown', handleCalendarKeyDown);
+  }, [prevMonth, nextMonth, goToday]);
+
   // Prefetch next/previous month on hover over navigation buttons
   const handleNextMonthHover = useCallback(() => {
     if (onPrefetchMonth) {

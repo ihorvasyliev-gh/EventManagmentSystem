@@ -20,6 +20,7 @@ import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, ca
 import { clearRecurrenceCache } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
+import { EVENT_CATEGORIES } from './constants/categories';
 
 // Lazy load modals for code splitting
 const EventModal = lazy(() => import('./components/EventModal'));
@@ -894,6 +895,38 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     setIsExportModalOpen(true);
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) {
+        if (e.key === 'Escape') {
+          target.blur();
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (isModalOpen) handleCloseModal();
+        if (isExportModalOpen) setIsExportModalOpen(false);
+        if (isSubmissionsModalOpen) setIsSubmissionsModalOpen(false);
+        if (isBulletinModalOpen) setIsBulletinModalOpen(false);
+      } else if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[type="text"][placeholder*="Search"]') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+      } else if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) {
+        if (user.role === UserRole.ADMIN) {
+          e.preventDefault();
+          handleCreateClick();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [user, isModalOpen, isExportModalOpen, isSubmissionsModalOpen, isBulletinModalOpen, handleCloseModal, handleCreateClick]);
+
   // Filtered events
   const filteredEvents = useMemo(() => {
     return filterEvents(events, { ...filters, search: searchQuery }, user?.role);
@@ -993,6 +1026,36 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             availableLocations={availableLocations}
             availableSubmitterEmails={availableSubmitterEmails}
           />
+        </div>
+
+        {/* Quick Category Filter Pills */}
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
+          <button
+            onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
+            className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+              !filters.category
+                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            All Categories
+          </button>
+          {EVENT_CATEGORIES.map(cat => {
+            const isSelected = filters.category === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                  isSelected
+                    ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-400 dark:ring-brand-500'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
         </div>
 
         {loadingEvents ? (

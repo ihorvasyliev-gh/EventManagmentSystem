@@ -173,6 +173,31 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
     return expanded.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [events, monthStart, monthEnd, recurrenceExceptions]);
 
+  const toDayKey = (d: Date): string => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const eventsByDayKey = useMemo(() => {
+    const map = new Map<string, Event[]>();
+    for (const ev of displayEvents) {
+      const s = new Date(ev.date);
+      s.setHours(0, 0, 0, 0);
+      const isMulti = isMultiDayEvent(ev);
+      const e = ev.endDate && isMulti ? new Date(ev.endDate) : new Date(s);
+      e.setHours(0, 0, 0, 0);
+
+      const curr = new Date(s);
+      while (curr <= e) {
+        const key = toDayKey(curr);
+        const list = map.get(key) || [];
+        list.push(ev);
+        map.set(key, list);
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
+    return map;
+  }, [displayEvents]);
+
   // For List View: Filter out past events (strictly before now) AND limit to current month
   const listViewEvents = useMemo(() => {
     return displayEvents.filter(e => {
@@ -292,7 +317,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
               {calendarDays.map((day, idx) => {
                 if (!day) return <div key={`empty-${idx}`} className="min-h-[5rem] sm:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
 
-                const dayEvents = displayEvents.filter(e => isEventOnDay(e, day));
+                const dayEvents = day ? (eventsByDayKey.get(toDayKey(day)) || []) : [];
                 const isToday = isSameDay(day, new Date());
                 const hasEvents = dayEvents.length > 0;
 
@@ -391,7 +416,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {/* Group events by day */}
                 {Array.from(
-                  listViewEvents.reduce((groups, event) => {
+                  visibleListEvents.reduce((groups, event) => {
                     const dateKey = event.date.toDateString();
                     if (!groups.has(dateKey)) {
                       groups.set(dateKey, []);
@@ -493,6 +518,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                     </div>
                   );
                 })}
+                {hasMoreListEvents && (
+                  <div className="p-4 text-center">
+                    <button
+                      onClick={showMoreListEvents}
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Show more events ({listViewEvents.length - visibleListCount} remaining)
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -959,6 +959,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600"></div></div>}>
         <SubmitEventPage
           currentUser={user}
+          events={events}
           onBackToLogin={() => {
             setIsSubmitPageOpen(false);
             if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {

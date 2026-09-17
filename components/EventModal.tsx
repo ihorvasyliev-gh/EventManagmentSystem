@@ -188,12 +188,14 @@ const EventModal: React.FC<EventModalProps> = ({
     if (isNaN(start.getTime())) {
       return { hasConflict: false, conflictingEvents: [] };
     }
+    const end = endDateStr && endTimeStr ? new Date(`${endDateStr}T${endTimeStr}:00`) : undefined;
     const partialEvent: Partial<Event> = {
       date: start,
+      endDate: end && !isNaN(end.getTime()) ? end : undefined,
       location: location.trim() || undefined
     };
     return detectConflicts(partialEvent, events || [], event?.id);
-  }, [startDateStr, startTimeStr, location, isOpen, showForm, events, event?.id]);
+  }, [startDateStr, startTimeStr, endDateStr, endTimeStr, location, isOpen, showForm, events, event?.id]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);

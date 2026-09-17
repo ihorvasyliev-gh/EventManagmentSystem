@@ -1,9 +1,10 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Calendar, Clock, MapPin, Tag, FileText, Image as ImageIcon, User, Mail, CheckCircle2, AlertCircle, Upload, X, ArrowLeft } from 'lucide-react';
-import { submitEvent } from '../services/eventService';
-import { User as AuthUser, UserRole } from '../types';
+import { submitEvent, getEvents } from '../services/eventService';
+import { User as AuthUser, UserRole, Event } from '../types';
 import TimePickerInput from '../components/TimePickerInput';
 import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
+import { detectConflicts, formatConflictMessage } from '../utils/conflictDetection';
 
 const CATEGORIES = EVENT_CATEGORIES;
 
@@ -33,13 +34,36 @@ const minutesToTime = (totalMinutes: number): string => {
 interface SubmitEventPageProps {
   onBackToLogin?: () => void;
   currentUser?: AuthUser | null;
+  events?: Event[];
 }
 
-const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser }) => {
+const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [] }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   // Form State
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<EventCategoryName>(CATEGORIES[0]);
+
+  const [activeEvents, setActiveEvents] = useState<Event[]>(events || []);
+
+  useEffect(() => {
+    if (events && events.length > 0) {
+      setActiveEvents(events);
+    } else {
+      let isMounted = true;
+      getEvents()
+        .then((fetched) => {
+          if (isMounted && fetched && fetched.length > 0) {
+            setActiveEvents(fetched);
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to load events for conflict detection in SubmitEventPage:', err);
+        });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [events]);
 
   const defaultDateStr = useMemo(() => {
     const d = new Date();
@@ -85,6 +109,23 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [description, setDescription] = useState('');
   const [submitterName, setSubmitterName] = useState(currentUser?.fullName || '');
   const [submitterEmail, setSubmitterEmail] = useState(currentUser?.email || '');
+
+  const conflictInfo = useMemo(() => {
+    if (!startDateStr || !startTimeStr) {
+      return { hasConflict: false, conflictingEvents: [] };
+    }
+    const start = new Date(`${startDateStr}T${startTimeStr}:00`);
+    if (isNaN(start.getTime())) {
+      return { hasConflict: false, conflictingEvents: [] };
+    }
+    const end = endDateStr && endTimeStr ? new Date(`${endDateStr}T${endTimeStr}:00`) : undefined;
+    const partialEvent: Partial<Event> = {
+      date: start,
+      endDate: end && !isNaN(end.getTime()) ? end : undefined,
+      location: location.trim() || undefined
+    };
+    return detectConflicts(partialEvent, activeEvents);
+  }, [startDateStr, startTimeStr, endDateStr, endTimeStr, location, activeEvents]);
 
   // Poster state
   const [posterFile, setPosterFile] = useState<File | null>(null);
@@ -420,8 +461,42 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   placeholder="11:30"
                 />
               </div>
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mr-1">Duration:</span>
+                {[
+                  { label: '30m', mins: 30 },
+                  { label: '1h', mins: 60 },
+                  { label: '1.5h', mins: 90 },
+                  { label: '2h', mins: 120 },
+                  { label: '3h', mins: 180 }
+                ].map(({ label, mins }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      const startM = timeToMinutes(startTimeStr);
+                      setEndDateStr(startDateStr);
+                      setEndTimeStr(minutesToTime(startM + mins));
+                    }}
+                    className="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          {/* Schedule Conflict Notice */}
+          {conflictInfo.hasConflict && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3.5 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-300 animate-fade-in">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold block">Schedule Notice</span>
+                <span>{formatConflictMessage(conflictInfo.conflictingEvents)}</span>
+              </div>
+            </div>
+          )}
 
           {/* 4. Location / Venue */}
           <div>

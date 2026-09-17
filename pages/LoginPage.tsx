@@ -11,6 +11,7 @@ interface LoginPageProps {
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMeState] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = React.useRef(0);
@@ -38,7 +39,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
     setError('');
 
     try {
-      const user = await login(email, password);
+      const user = await login(email, password, rememberMe);
       
       // Проверяем, что это все еще актуальный запрос и компонент смонтирован
       if (currentRequestId !== requestIdRef.current || !isMountedRef.current) {
@@ -127,6 +128,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
                 placeholder="••••••••"
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMeState(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 bg-white dark:bg-slate-700 cursor-pointer"
+              />
+              <span>Remember me</span>
+            </label>
           </div>
 
           <button

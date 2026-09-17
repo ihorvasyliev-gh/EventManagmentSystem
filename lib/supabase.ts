@@ -17,8 +17,11 @@ if (supabaseUrl.includes('your-project') || supabaseAnonKey.includes('your-anon'
   throw new Error('Invalid Supabase configuration. Please check your .env.local file.');
 }
 
+import { authStorageAdapter } from '../utils/authStorage';
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storage: authStorageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true

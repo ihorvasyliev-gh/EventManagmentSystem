@@ -1,6 +1,7 @@
 import { User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 import { cacheUser, clearUserCache } from '../utils/sessionCache';
+import { setRememberMe, clearAllAuthTokens } from '../utils/authStorage';
 
 // Преобразуем данные пользователя из Supabase в наш формат
 const mapSupabaseUserToUser = (supabaseUser: any): User => {
@@ -134,8 +135,11 @@ export const signUp = async (
 };
 
 // Вход пользователя
-export const login = async (email: string, password: string): Promise<User> => {
+export const login = async (email: string, password: string, rememberMe: boolean = true): Promise<User> => {
   try {
+    // Устанавливаем предпочтение хранилища перед аутентификацией
+    setRememberMe(rememberMe);
+
     // Добавляем таймаут для запроса аутентификации
     const authPromise = supabase.auth.signInWithPassword({
       email,
@@ -222,8 +226,9 @@ export const login = async (email: string, password: string): Promise<User> => {
 // Выход пользователя
 export const logout = async (): Promise<void> => {
   const { error } = await supabase.auth.signOut();
-  // Очищаем кэш пользователя при выходе
+  // Очищаем кэш пользователя и все токены при выходе
   clearUserCache();
+  clearAllAuthTokens();
   if (error) {
     throw new Error(error.message || 'Failed to logout');
   }

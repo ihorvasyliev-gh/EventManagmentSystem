@@ -1021,6 +1021,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             isOpen={isModalOpen}
             onClose={handleCloseModal}
             event={selectedEvent}
+            events={events}
             initialDate={createWithDate}
             role={user.role}
             currentUserId={user.id}

@@ -15,6 +15,7 @@ import DatePickerCalendar from './DatePickerCalendar';
 import TimePickerInput from './TimePickerInput';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
+import { detectConflicts, formatConflictMessage } from '../utils/conflictDetection';
 
 // Convert "HH:mm" to minutes
 const timeToMinutes = (t: string): number => {
@@ -35,6 +36,7 @@ interface EventModalProps {
   isOpen: boolean;
   onClose: () => void;
   event: Event | null; // If null, we are in "Create Mode"
+  events?: Event[];
   initialDate?: Date | null; // Pre-fill date when creating from calendar day plus
   role: UserRole;
   currentUserId?: string;
@@ -52,6 +54,7 @@ const EventModal: React.FC<EventModalProps> = ({
   isOpen,
   onClose,
   event,
+  events = [],
   initialDate,
   role,
   currentUserId = '1',
@@ -176,6 +179,21 @@ const EventModal: React.FC<EventModalProps> = ({
   const isCreating = !event;
   // Show form if we are creating OR editing
   const showForm = isCreating || isEditing;
+
+  const conflictInfo = useMemo(() => {
+    if (!startDateStr || !startTimeStr || !isOpen || !showForm) {
+      return { hasConflict: false, conflictingEvents: [] };
+    }
+    const start = new Date(`${startDateStr}T${startTimeStr}:00`);
+    if (isNaN(start.getTime())) {
+      return { hasConflict: false, conflictingEvents: [] };
+    }
+    const partialEvent: Partial<Event> = {
+      date: start,
+      location: location.trim() || undefined
+    };
+    return detectConflicts(partialEvent, events || [], event?.id);
+  }, [startDateStr, startTimeStr, location, isOpen, showForm, events, event?.id]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
@@ -1167,9 +1185,43 @@ const EventModal: React.FC<EventModalProps> = ({
                         placeholder="11:30"
                       />
                     </div>
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mr-1">Duration:</span>
+                      {[
+                        { label: '30m', mins: 30 },
+                        { label: '1h', mins: 60 },
+                        { label: '1.5h', mins: 90 },
+                        { label: '2h', mins: 120 },
+                        { label: '3h', mins: 180 }
+                      ].map(({ label, mins }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            const startM = timeToMinutes(startTimeStr);
+                            setEndDateStr(startDateStr);
+                            setEndTimeStr(minutesToTime(startM + mins));
+                            clearFieldError('endDate');
+                          }}
+                          className="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md transition-colors"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     {fieldErrors.endDate && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.endDate}</p>}
                   </div>
                 </div>
+
+                {conflictInfo.hasConflict && (
+                  <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3.5 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-300 animate-fade-in">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold block">Schedule Notice</span>
+                      <span>{formatConflictMessage(conflictInfo.conflictingEvents)}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* 4. Location / Venue */}
                 <div>

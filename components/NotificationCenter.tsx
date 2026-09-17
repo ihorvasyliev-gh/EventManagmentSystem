@@ -62,10 +62,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
   }, [events, userRsvpEventIds]);
 
   useEffect(() => {
+    if (userId) {
+      loadNotifications();
+    }
+  }, [userId]);
+
+  useEffect(() => {
     if (isOpen) {
       loadNotifications();
     }
-  }, [isOpen, userId]);
+  }, [isOpen]);
 
   // Real-time updates simulation or actual subscription if available
   // notificationService mock doesn't support subscribeToNotifications yet in this file's imports?

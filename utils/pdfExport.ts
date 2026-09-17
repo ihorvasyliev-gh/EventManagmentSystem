@@ -1,4 +1,4 @@
-import jsPDF from 'jspdf';
+import type jsPDF from 'jspdf';
 import { Event } from '../types';
 import { formatLocalDate } from './date';
 
@@ -533,7 +533,8 @@ export const generateEventsDigestPDF = async (
   events: Event[],
   options: BulletinOptions
 ): Promise<void> => {
-  const doc = new jsPDF({
+  const jsPDFConstructor = (await import('jspdf')).default;
+  const doc = new jsPDFConstructor({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'

@@ -26,7 +26,7 @@ const EventModal = lazy(() => import('./components/EventModal'));
 const ExportModal = lazy(() => import('./components/ExportModal'));
 const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
 const FortnightlyBulletinModal = lazy(() => import('./components/FortnightlyBulletinModal'));
-import SubmitEventPage from './pages/SubmitEventPage';
+const SubmitEventPage = lazy(() => import('./pages/SubmitEventPage'));
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -923,19 +923,21 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   if (isSubmitPageOpen) {
     return (
-      <SubmitEventPage
-        currentUser={user}
-        onBackToLogin={() => {
-          setIsSubmitPageOpen(false);
-          if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {
-            window.history.pushState({}, '', '/');
-          }
-          refreshEvents(true);
-          if (user?.role === UserRole.ADMIN) {
-            refreshSubmissions();
-          }
-        }}
-      />
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600"></div></div>}>
+        <SubmitEventPage
+          currentUser={user}
+          onBackToLogin={() => {
+            setIsSubmitPageOpen(false);
+            if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {
+              window.history.pushState({}, '', '/');
+            }
+            refreshEvents(true);
+            if (user?.role === UserRole.ADMIN) {
+              refreshSubmissions();
+            }
+          }}
+        />
+      </Suspense>
     );
   }
 

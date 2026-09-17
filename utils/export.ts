@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import type ExcelJS from 'exceljs';
 import { Event } from '../types';
 
 interface LoadedPoster {
@@ -232,6 +232,8 @@ export const downloadBlob = (blob: Blob, filename: string) => {
  * - Gridlines enabled and text wrapping
  */
 export const exportToExcel = async (events: Event[]): Promise<Blob> => {
+  const ExcelJSConstructor = (await import('exceljs')).default;
+
   // 1. Strictly filter published events
   const publishedEvents = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
 
@@ -249,7 +251,7 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
   await Promise.allSettled(posterFetches);
 
   // 3. Create Workbook & Worksheet with gridlines enabled
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new ExcelJSConstructor.Workbook();
   const worksheet = workbook.addWorksheet('Events', {
     views: [{ showGridLines: true }]
   });

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Event } from '../types';
+import { formatLocalDate } from './date';
 
 export interface BulletinOptions {
   startDate: Date;
@@ -644,13 +645,13 @@ export const generateEventsDigestPDF = async (
     doc.setFontSize(10);
     doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
     doc.text(
-      'No upcoming events scheduled for this two-week period.',
+      'No upcoming events scheduled for this period.',
       pageWidth / 2,
       currentY + 20,
       { align: 'center' }
     );
     drawFooter(currentPage);
-    doc.save(`CCP-Events-Digest-${(toDate(options.startDate) || new Date()).toISOString().slice(0, 10)}.pdf`);
+    doc.save(`CCP-Events-Digest-${formatLocalDate(toDate(options.startDate) || new Date())}.pdf`);
     return;
   }
 
@@ -1107,7 +1108,7 @@ export const generateEventsDigestPDF = async (
 
   // Save the PDF
   const validStart = toDate(options.startDate) || new Date();
-  const filename = `CCP-Events-Digest-${validStart.toISOString().slice(0, 10)}.pdf`;
+  const filename = `CCP-Events-Digest-${formatLocalDate(validStart)}.pdf`;
   doc.save(filename);
 };
 export const generateFortnightlyPDF = generateEventsDigestPDF;

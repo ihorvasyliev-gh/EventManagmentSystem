@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, FileText, Download, Copy, Check, Calendar, MessageSquare, LayoutGrid, List } from 'lucide-react';
 import { Event } from '../types';
 import { generateFortnightlyPDF, generateWhatsAppSummary } from '../utils/pdfExport';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
 
 interface FortnightlyBulletinModalProps {
   isOpen: boolean;
@@ -18,19 +19,44 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const modalPanelRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(isOpen, onClose, modalPanelRef);
 
-  // Default dates: Today -> +14 days
+  // Range preset selection: '2weeks' (default), '1week', '1month', 'all', or 'custom'
+  const [activePreset, setActivePreset] = useState<DateRangePreset | 'custom'>('2weeks');
+
+  // Default dates: Today -> +14 days in user's local timezone
   const [startDateStr, setStartDateStr] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString().slice(0, 10);
+    return calculatePresetDateRange('2weeks', { events }).startDateStr;
   });
 
   const [endDateStr, setEndDateStr] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    d.setHours(23, 59, 59, 999);
-    return d.toISOString().slice(0, 10);
+    return calculatePresetDateRange('2weeks', { events }).endDateStr;
   });
+
+  // Always reset to default 2 weeks when modal opens (no persistence needed)
+  useEffect(() => {
+    if (isOpen) {
+      setActivePreset('2weeks');
+      const range = calculatePresetDateRange('2weeks', { events });
+      setStartDateStr(range.startDateStr);
+      setEndDateStr(range.endDateStr);
+    }
+  }, [isOpen, events]);
+
+  const handleSelectPreset = (preset: DateRangePreset) => {
+    setActivePreset(preset);
+    const range = calculatePresetDateRange(preset, { events });
+    setStartDateStr(range.startDateStr);
+    setEndDateStr(range.endDateStr);
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDateStr(val);
+    setActivePreset('custom');
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDateStr(val);
+    setActivePreset('custom');
+  };
 
   const [format, setFormat] = useState<'executive' | 'compact'>('executive');
   const [includeCalendarButtons, setIncludeCalendarButtons] = useState(true);
@@ -40,7 +66,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   if (!isOpen) return null;
 
   const startDate = new Date(`${startDateStr}T00:00:00`);
-  const endDate = new Date(`${endDateStr}T23:59:59`);
+  const endDate = new Date(`${endDateStr}T23:59:59.999`);
 
   // Count events in range (only published events, excluding drafts/submissions)
   const matchingEvents = events.filter((e) => {
@@ -118,7 +144,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                   Upcoming Events Digest
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-300">
-                  Generate 2-week upcoming events digest for Board & Staff
+                  Generate upcoming events digest for Board & Staff
                 </p>
               </div>
             </div>
@@ -134,24 +160,73 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
             {/* 1. Date Range Picker */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
-                1. Date Range (Next 2 Weeks)
+                1. Date Range
               </label>
+
+              {/* Quick Preset Buttons */}
+              <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 dark:bg-slate-700/60 rounded-xl mb-3 border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('2weeks')}
+                  className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all text-center ${
+                    activePreset === '2weeks'
+                      ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  2 Weeks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('1week')}
+                  className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all text-center ${
+                    activePreset === '1week'
+                      ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  1 Week
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('1month')}
+                  className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all text-center ${
+                    activePreset === '1month'
+                      ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  1 Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('all')}
+                  className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all text-center ${
+                    activePreset === 'all'
+                      ? 'bg-brand-600 text-white font-semibold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="block text-[11px] text-slate-500 mb-1">From</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">From</span>
                   <input
                     type="date"
                     value={startDateStr}
-                    onChange={(e) => setStartDateStr(e.target.value)}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                 </div>
                 <div>
-                  <span className="block text-[11px] text-slate-500 mb-1">To</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">To</span>
                   <input
                     type="date"
                     value={endDateStr}
-                    onChange={(e) => setEndDateStr(e.target.value)}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                 </div>

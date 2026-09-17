@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { Event } from '../types';
 import { exportToICal, exportToExcel, downloadFile, downloadBlob } from '../utils/export';
-import { getEventsWithRelated, getRecurrenceExceptions } from '../services/eventService';
+import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
@@ -57,13 +57,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
       const recurringIds = eventsWithRelated
         .filter(e => e.recurrence && e.recurrence.type !== 'none')
         .map(e => e.id);
-      const exceptionsMap = new Map<string, Date[]>();
-      await Promise.all(
-        recurringIds.map(async (eventId) => {
-          const exceptions = await getRecurrenceExceptions(eventId);
-          if (exceptions.length > 0) exceptionsMap.set(eventId, exceptions);
-        })
-      );
+      const exceptionsMap = await getRecurrenceExceptionsBatch(recurringIds);
 
       const now = new Date();
       const rangeStart = eventsWithRelated.length > 0

@@ -557,6 +557,34 @@ export const getRecurrenceExceptions = async (eventId: string): Promise<Date[]> 
 };
 
 /**
+ * Получить список исключений для группы событий одним пакетным запросом (1 запрос вместо N)
+ */
+export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<Map<string, Date[]>> => {
+  const map = new Map<string, Date[]>();
+  if (!eventIds || eventIds.length === 0) {
+    return map;
+  }
+
+  const { data, error } = await supabase
+    .from('recurrence_exceptions')
+    .select('event_id, exception_date')
+    .in('event_id', eventIds);
+
+  if (error) {
+    console.error('Error fetching batch recurrence exceptions:', error);
+    return map;
+  }
+
+  for (const item of data || []) {
+    const list = map.get(item.event_id) || [];
+    list.push(new Date(item.exception_date));
+    map.set(item.event_id, list);
+  }
+
+  return map;
+};
+
+/**
  * Удалить конкретный экземпляр повторяющегося события
  */
 export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Date, userId: string, userName: string): Promise<void> => {

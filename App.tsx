@@ -8,8 +8,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { User, Event, EventFilters, UserRole } from './types';
-import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptions, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
+import { User, Event, EventFilters, UserRole, EventStatus } from './types';
+import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
 import { logout as logoutService, getCurrentUser } from './services/authService';
 import { getUserRsvps } from './services/rsvpService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
@@ -223,27 +223,19 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       // Always cache new data even if state didn't update (to ensure cache is fresh)
       cacheEvents(data);
 
-      // Load recurrence exceptions for recurring events
+      // Load recurrence exceptions for recurring events in one batch
       const recurringEventIds = data
         .filter(e => e.recurrence && e.recurrence.type !== 'none')
         .map(e => e.id);
 
       if (recurringEventIds.length > 0) {
-        const exceptionsMap = new Map<string, Date[]>();
-        await Promise.all(
-          recurringEventIds.map(async (eventId) => {
-            try {
-              const exceptions = await getRecurrenceExceptions(eventId);
-              if (exceptions.length > 0) {
-                exceptionsMap.set(eventId, exceptions);
-              }
-            } catch (err) {
-              console.error(`Error loading exceptions for event ${eventId}:`, err);
-            }
-          })
-        );
-        setRecurrenceExceptions(exceptionsMap);
-        cacheExceptions(exceptionsMap);
+        try {
+          const exceptionsMap = await getRecurrenceExceptionsBatch(recurringEventIds);
+          setRecurrenceExceptions(exceptionsMap);
+          cacheExceptions(exceptionsMap);
+        } catch (err) {
+          console.error('Error loading batch exceptions:', err);
+        }
       }
 
       // Load user RSVPs

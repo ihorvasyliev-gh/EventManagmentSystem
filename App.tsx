@@ -1029,10 +1029,11 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
 
         {/* Quick Category Filter Pills */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 no-scrollbar text-xs -mx-4 px-4 sm:mx-0 sm:px-0 touch-pan-x">
           <button
+            type="button"
             onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
-            className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+            className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
               !filters.category
                 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
@@ -1045,8 +1046,9 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             return (
               <button
                 key={cat}
+                type="button"
                 onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
                   isSelected
                     ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-400 dark:ring-brand-500'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'

@@ -1,5 +1,4 @@
-import { Event, RecurrenceRule } from '../types';
-import { getRecurrenceExceptions } from '../services/eventService';
+import type { Event, RecurrenceRule } from '../types.ts';
 
 /**
  * Checks if a date is actively within the recurrence range
@@ -101,6 +100,7 @@ export const expandRecurringEvents = (
 
     if (rule.type === 'custom' && rule.customDates && rule.customDates.length > 0) {
       const exceptions = exceptionsMap?.get(event.id);
+      const durationMs = event.endDate ? event.endDate.getTime() - event.date.getTime() : 0;
       rule.customDates.forEach(customDate => {
         const d = new Date(customDate);
         // Copy time from original event
@@ -118,10 +118,12 @@ export const expandRecurringEvents = (
 
           if (!isExcluded) {
             const instanceKey = `${event.id}_${d.getTime()}`;
+            const instanceEndDate = durationMs > 0 ? new Date(d.getTime() + durationMs) : undefined;
             expandedEvents.push({
               ...event,
               instanceKey,
               date: new Date(d),
+              endDate: instanceEndDate,
             });
           }
         }

@@ -22,7 +22,8 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-body.dark {
+/* The theme class lives on <html> (ThemeContext), so target body through it */
+.dark body {
     background-color: #0F172A;
     /* Slate-900 - dark backing */
     background-image:
@@ -235,6 +236,7 @@ textarea,
     
     /* Ensure form inputs are easily tappable */
     input[type="text"],
+    input[type="search"],
     input[type="email"],
     input[type="password"],
     input[type="date"],
@@ -259,6 +261,17 @@ a,
     * {
         -webkit-overflow-scrolling: touch;
     }
+}
+
+/* Keep fixed bottom bars clear of the iPhone home indicator */
+.pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Draft events in the month grid */
+.dashed-border {
+    outline: 1px dashed currentColor;
+    outline-offset: -1px;
 }
 
 /* Animation for slide down (used in mobile menus) */
@@ -313,4 +326,15 @@ a,
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

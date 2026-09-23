@@ -1,8 +1,8 @@
 // Service Worker for CCP Event Calendar
 // Provides offline support and cache-first loading strategy for better performance
 
-const CACHE_NAME = 'ccp-calendar-v1';
-const RUNTIME_CACHE = 'ccp-runtime-cache-v1';
+const CACHE_NAME = 'ccp-calendar-v2';
+const RUNTIME_CACHE = 'ccp-runtime-cache-v2';
 
 // Assets to precache on install
 const PRECACHE_URLS = [
@@ -37,6 +37,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
+
+    // The Cache API only stores GET responses (uploads are PUT) — let everything else through
+    if (request.method !== 'GET') {
+        return;
+    }
 
     // Skip cross-origin requests
     if (url.origin !== location.origin) {

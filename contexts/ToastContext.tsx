@@ -98,11 +98,17 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
+    // Above modals (z-[60]) so errors raised while a dialog is open are visible
+    <div
+      className="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-full sm:max-w-sm z-[100] space-y-2 pointer-events-none"
+      role="status"
+      aria-live="polite"
+    >
       {toasts.map(toast => (
         <div
           key={toast.id}
-          className={`${getStyles(toast.type)} border rounded-lg shadow-lg p-4 flex items-start space-x-3 animate-in slide-in-from-right`}
+          role={toast.type === 'error' ? 'alert' : undefined}
+          className={`${getStyles(toast.type)} pointer-events-auto border rounded-lg shadow-lg p-4 flex items-start space-x-3 animate-slide-down`}
         >
           <div className="flex-shrink-0 mt-0.5">
             {getIcon(toast.type)}
@@ -113,7 +119,7 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
           <button
             onClick={() => onRemove(toast.id)}
             className="flex-shrink-0 text-gray-400 hover:text-gray-300 dark:text-slate-400 dark:hover:text-slate-300"
-            aria-label="Close"
+            aria-label="Dismiss notification"
           >
             <X className="h-4 w-4" />
           </button>

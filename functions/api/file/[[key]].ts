@@ -1,7 +1,9 @@
-
 interface Env {
     BUCKET: R2Bucket;
 }
+
+// Types that are safe to render inline; everything else is forced to download.
+const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf']);
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
     const { params, env } = context;
@@ -25,6 +27,18 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set('etag', object.httpEtag);
+
+        // Older uploads were not type-checked: never let a stored file run as a page on this origin.
+        const contentType = (headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        headers.set('X-Content-Type-Options', 'nosniff');
+        if (!INLINE_TYPES.has(contentType)) {
+            headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
+            const fileName = key.replace(/^[0-9a-f-]{36}-/i, '');
+            headers.set('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+        }
+
+        // Keys contain a random UUID, so the content behind a URL never changes
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
 
         return new Response(object.body, {
             headers,

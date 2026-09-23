@@ -5,6 +5,7 @@ import { exportToICal, exportToExcel, downloadFile, downloadBlob } from '../util
 import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { useToast } from '../contexts/ToastContext';
 
 const EXPORT_RANGE_YEARS = 2;
 
@@ -21,6 +22,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
   const modalPanelRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
   useModalFocusTrap(isOpen, onClose, modalPanelRef);
 
   if (!isOpen) return null;
@@ -84,6 +86,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
       onClose();
     } catch (err) {
       console.error('Export failed:', err);
+      showToast('Export failed. Please check your connection and try again.', 'error');
     } finally {
       setExporting(false);
     }

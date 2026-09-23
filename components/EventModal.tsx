@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry, EventCategoryItem } from '../types';
-import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle } from 'lucide-react';
-import { formatDate, formatTime, isSameDay } from '../utils/date';
+import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat } from 'lucide-react';
+import { formatDate, formatTime, isSameDay, formatLocalDate } from '../utils/date';
 import { uploadPosterToR2, uploadAttachment, addComment, deleteComment, fetchEventDetails, deleteEvent, deleteRecurrenceInstance } from '../services/eventService';
 import { rsvpToEvent, cancelRsvp, hasUserRsvped } from '../services/rsvpService';
 import { getCategories, createCategory } from '../services/categoryService';
@@ -14,8 +14,27 @@ import LazyImage from './LazyImage';
 import MultiDatePicker from './MultiDatePicker';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
-import { detectMultiDateConflicts } from '../utils/conflictDetection';
+import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { expandRecurringEvents } from '../utils/recurrence';
+import { useToast } from '../contexts/ToastContext';
 
+
+/** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
+const parseLocalDateInput = (value: string): Date | undefined => {
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d);
+};
+
+const toTimeInputValue = (date: Date): string =>
+  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+/** Event end for calendar invites: the real end time, or 1 hour when none is set */
+const getEventEnd = (ev: Event): Date =>
+  ev.endDate && ev.endDate > ev.date ? ev.endDate : new Date(ev.date.getTime() + 60 * 60 * 1000);
+
+const isRecurringEvent = (ev?: Event | null): boolean =>
+  !!ev?.recurrence && ev.recurrence.type !== 'none';
 
 // Convert minutes to "HH:mm"
 const minutesToTime = (totalMinutes: number): string => {
@@ -41,6 +60,10 @@ interface EventModalProps {
   onDeleteInstance?: (eventId: string, instanceDate: Date) => Promise<void>; // For instance deletion
   initialMode?: 'view' | 'edit';
   autoApproveOnSave?: boolean;
+  /** Unsaved form data to restore (e.g. after a failed save) */
+  draft?: Omit<Event, 'id' | 'createdAt'> | null;
+  /** Builds a shareable link for an event occurrence */
+  getShareLink?: (event: Event) => string;
 }
 
 const EventModal: React.FC<EventModalProps> = ({
@@ -58,9 +81,15 @@ const EventModal: React.FC<EventModalProps> = ({
   onDelete,
   onDeleteInstance,
   initialMode = 'view',
-  autoApproveOnSave = false
+  autoApproveOnSave = false,
+  draft = null,
+  getShareLink
 }) => {
   const { theme } = useTheme();
+  const { showToast } = useToast();
+  // Latest events without making the form re-initialise on every background refresh
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(initialMode === 'edit');
   const [isRsvping, setIsRsvping] = useState(false);
@@ -143,26 +172,52 @@ const EventModal: React.FC<EventModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const modalPanelRef = useRef<HTMLDivElement>(null);
-  useModalFocusTrap(isOpen, onClose, modalPanelRef);
+  // Escape / backdrop / close button go through requestClose (defined below)
+  const requestCloseRef = useRef<() => void>(onClose);
+  useModalFocusTrap(isOpen, () => requestCloseRef.current(), modalPanelRef);
+  // Bumped to re-initialise the form from the event (e.g. "Cancel" back to details)
+  const [formResetKey, setFormResetKey] = useState(0);
 
   // Determine if we are creating a new event from scratch
   const isCreating = !event;
   // Show form if we are creating OR editing
   const showForm = isCreating || isEditing;
 
+  // "E" opens the edit form from the details view (admins)
+  useEffect(() => {
+    if (!isOpen || showForm || showDeleteDialog || role !== UserRole.ADMIN) return;
+    const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) return;
+      if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setIsEditing(true);
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isOpen, showForm, showDeleteDialog, role]);
+
   const conflictInfo = useMemo(() => {
     if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0 || !startTimeStr || !endTimeStr) {
       return { hasConflict: false, conflicts: [], summaryMessage: '' };
     }
-    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, events || [], event?.id);
+    const occurrences = getOccurrencesAroundDates(events || [], selectedDates);
+    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id);
   }, [selectedDates, startTimeStr, endTimeStr, events, event?.id, isOpen, showForm]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
+  // Unsaved-changes tracking (see formSnapshot below)
+  const [baselineTick, setBaselineTick] = useState(0);
+  const draftAppliedRef = useRef(false);
 
   // Initialize form state when opening or switching modes
   useEffect(() => {
     if (isOpen) {
+      // Re-capture the unsaved-changes baseline once this initialisation has rendered
+      setBaselineTick(t => t + 1);
+      draftAppliedRef.current = false;
       if (event) {
         // We have an event (View/Edit mode)
 
@@ -196,29 +251,28 @@ const EventModal: React.FC<EventModalProps> = ({
           setUserHasRsvped(event.attendees?.includes(currentUserId) || false);
         }
 
-        // Initialize selectedDates from recurrence customDates or event.date
-        if (event.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
-          setSelectedDates(event.recurrence.customDates.map(d => new Date(d)));
-        } else if (event.date) {
-          setSelectedDates([new Date(event.date)]);
+        // `event` may be one expanded occurrence of a series. The form edits the series,
+        // so take dates from the stored series — otherwise saving would move the whole
+        // series to the occurrence that was clicked.
+        const source = isRecurringEvent(event)
+          ? (eventsRef.current.find(e => e.id === event.id) ?? event)
+          : event;
+
+        if (source.recurrence?.type === 'custom' && source.recurrence.customDates && source.recurrence.customDates.length > 0) {
+          setSelectedDates(source.recurrence.customDates.map(d => new Date(d)));
+        } else if (source.date) {
+          setSelectedDates([new Date(source.date)]);
         } else if (initialDate) {
           setSelectedDates([new Date(initialDate)]);
         } else {
           setSelectedDates([new Date()]);
         }
 
-        // Format Start Time for Input (HH:MM)
-        const hh = String(event.date.getHours()).padStart(2, '0');
-        const min = String(event.date.getMinutes()).padStart(2, '0');
-        setStartTimeStr(`${hh}:${min}`);
-
-        // Format End Date & Time
-        if (event.endDate) {
-          const endHh = String(event.endDate.getHours()).padStart(2, '0');
-          const endMin = String(event.endDate.getMinutes()).padStart(2, '0');
-          setEndTimeStr(`${endHh}:${endMin}`);
+        setStartTimeStr(toTimeInputValue(source.date));
+        if (source.endDate) {
+          setEndTimeStr(toTimeInputValue(source.endDate));
         } else {
-          const startM = event.date.getHours() * 60 + event.date.getMinutes();
+          const startM = source.date.getHours() * 60 + source.date.getMinutes();
           setEndTimeStr(minutesToTime(startM + 90));
         }
 
@@ -229,13 +283,8 @@ const EventModal: React.FC<EventModalProps> = ({
         if (event.recurrence) {
           setRecurrenceType(event.recurrence.type as any);
           setRecurrenceInterval(event.recurrence.interval || 1);
-          setRecurrenceEndDate(
-            event.recurrence.endDate
-              ? (event.recurrence.endDate instanceof Date
-                  ? event.recurrence.endDate.toISOString().split('T')[0]
-                  : String(event.recurrence.endDate).split('T')[0])
-              : ''
-          );
+          const recurrenceEnd = event.recurrence.endDate ? new Date(event.recurrence.endDate) : null;
+          setRecurrenceEndDate(recurrenceEnd && !isNaN(recurrenceEnd.getTime()) ? formatLocalDate(recurrenceEnd) : '');
         } else {
           setRecurrenceType('none');
           setRecurrenceInterval(1);
@@ -322,13 +371,89 @@ const EventModal: React.FC<EventModalProps> = ({
         setFieldErrors({});
       }
     }
-  }, [isOpen, event, initialDate, currentUserId, currentUserName, initialMode, autoApproveOnSave]);
+  }, [isOpen, event, initialDate, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
+
+  // Restore unsaved form data (e.g. the save failed and the modal was reopened)
+  useEffect(() => {
+    if (!isOpen || !draft) return;
+    draftAppliedRef.current = true;
+    setTitle(draft.title || '');
+    setDescription(draft.description || '');
+    setLocation(draft.location || '');
+    setCategory(draft.category || '');
+    setStatus(draft.status || 'published');
+    setTags(draft.tags?.join(', ') || '');
+    setSubmitterName(draft.submitterName || '');
+    setSubmitterEmail(draft.submitterEmail || '');
+    setRsvpEnabled(!!draft.rsvpEnabled);
+    setMaxAttendees(draft.maxAttendees || '');
+    setPreviewUrl(draft.posterUrl || null);
+    setAttachments(draft.attachments || []);
+    setSelectedDates(
+      draft.recurrence?.type === 'custom' && draft.recurrence.customDates?.length
+        ? draft.recurrence.customDates.map(d => new Date(d))
+        : [new Date(draft.date)]
+    );
+    setStartTimeStr(toTimeInputValue(draft.date));
+    if (draft.endDate) setEndTimeStr(toTimeInputValue(draft.endDate));
+    if (draft.recurrence && draft.recurrence.type !== 'custom') {
+      setRecurrenceType(draft.recurrence.type);
+      setRecurrenceInterval(draft.recurrence.interval || 1);
+      setRecurrenceEndDate(draft.recurrence.endDate ? formatLocalDate(new Date(draft.recurrence.endDate)) : '');
+    }
+    if (event) setIsEditing(true);
+  }, [isOpen, draft]);
+
+  // Unsaved-changes tracking: snapshot of the form right after it was initialised
+  const formSnapshot = JSON.stringify([
+    title, description, location, category, status, tags, submitterName, submitterEmail,
+    rsvpEnabled, maxAttendees, selectedDates.map(d => formatLocalDate(d)), startTimeStr, endTimeStr,
+    recurrenceType, recurrenceInterval, recurrenceEndDate, previewUrl, posterFile?.name ?? null
+  ]);
+  const baselineRef = useRef<string | null>(null);
+  useEffect(() => {
+    baselineRef.current = formSnapshot;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baselineTick, isEditing]);
+  const isDirty = draftAppliedRef.current || (baselineRef.current !== null && baselineRef.current !== formSnapshot);
+
+  const confirmDiscard = (): boolean =>
+    !(showForm && isDirty) || window.confirm('You have unsaved changes. Discard them?');
+
+  requestCloseRef.current = () => {
+    // Close the innermost layer first
+    if (showDeleteDialog) {
+      if (!isDeleting) setShowDeleteDialog(false);
+      return;
+    }
+    if (showAddCategoryModal) {
+      setShowAddCategoryModal(false);
+      return;
+    }
+    if (showCalendarDropdown) {
+      setShowCalendarDropdown(false);
+      return;
+    }
+    if (isSubmitting || !confirmDiscard()) return;
+    onClose();
+  };
+  const requestClose = () => requestCloseRef.current();
+
+  const handleCancelForm = () => {
+    if (!confirmDiscard()) return;
+    if (isEditing && !autoApproveOnSave && initialMode !== 'edit') {
+      // Back to details: drop the edits so the next "Edit" starts from the saved event
+      setFormResetKey(k => k + 1);
+    } else {
+      onClose();
+    }
+  };
 
   if (!isOpen) return null;
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      alert('Please enter a category name');
+      showToast('Please enter a category name', 'warning');
       return;
     }
 
@@ -341,7 +466,7 @@ const EventModal: React.FC<EventModalProps> = ({
       setShowAddCategoryModal(false);
     } catch (err: any) {
       console.error('Failed to create category:', err);
-      alert(err.message || 'Failed to create category');
+      showToast(err.message || 'Failed to create category', 'error');
     } finally {
       setIsCreatingCategory(false);
     }
@@ -351,13 +476,13 @@ const EventModal: React.FC<EventModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file (PNG, JPG, or WEBP).');
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
+      showToast('Please upload a PNG, JPG, GIF or WEBP image.', 'warning');
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image size must be under 10MB.');
+      showToast('Image size must be under 10MB.', 'warning');
       return;
     }
 
@@ -441,7 +566,7 @@ const EventModal: React.FC<EventModalProps> = ({
       recurrence = {
         type: recurrenceType as 'daily' | 'weekly' | 'monthly' | 'yearly',
         interval: recurrenceInterval || 1,
-        endDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
+        endDate: recurrenceEndDate ? parseLocalDateInput(recurrenceEndDate) : undefined,
       };
     }
 
@@ -539,9 +664,12 @@ const EventModal: React.FC<EventModalProps> = ({
       }
 
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to save event');
+      // The parent already reported save failures (and reopened the form); only report upload errors here
+      if (!err?.handled) {
+        showToast(err?.message ? `Failed to save event: ${err.message}` : 'Failed to save event', 'error');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -591,7 +719,7 @@ const EventModal: React.FC<EventModalProps> = ({
         onEventUpdate(updatedEvent);
       }
       // Show error toast (non-blocking)
-      alert('Failed to update RSVP. Please try again.');
+      showToast('Failed to update RSVP. Please try again.', 'error');
     }
   };
 
@@ -653,7 +781,8 @@ const EventModal: React.FC<EventModalProps> = ({
         };
         onEventUpdate(updatedEvent);
       }
-      throw err; // Re-throw to show error in UI
+      showToast('Failed to post comment. Please try again.', 'error');
+      throw err; // Re-throw so the comment box keeps the text
     }
   };
 
@@ -668,7 +797,7 @@ const EventModal: React.FC<EventModalProps> = ({
       }
     } catch (error) {
       console.error('Failed to delete comment', error);
-      alert('Failed to delete comment');
+      showToast('Failed to delete comment', 'error');
     }
   };
 
@@ -684,13 +813,14 @@ const EventModal: React.FC<EventModalProps> = ({
       return date.toISOString().replace(/-|:|\.\d+/g, '');
     };
 
+    const endDate = getEventEnd(event);
     const start = formatDate(event.date);
-    const end = formatDate(new Date(event.date.getTime() + 60 * 60 * 1000)); // 1 hour default
+    const end = formatDate(endDate);
 
     return {
       google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${description}&location=${location}`,
-      outlook: `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${new Date(event.date.getTime() + 60 * 60 * 1000).toISOString()}`,
-      office365: `https://outlook.office.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${new Date(event.date.getTime() + 60 * 60 * 1000).toISOString()}`,
+      outlook: `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${endDate.toISOString()}`,
+      office365: `https://outlook.office.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${endDate.toISOString()}`,
     };
   };
 
@@ -710,14 +840,14 @@ const EventModal: React.FC<EventModalProps> = ({
     };
 
     const startDate = formatDate(event.date);
-    const endDate = formatDate(new Date(event.date.getTime() + 60 * 60 * 1000));
+    const endDate = formatDate(getEventEnd(event));
 
     const icsContent = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
       'PRODID:-//CCP Flow/Calendar//EN',
       'BEGIN:VEVENT',
-      `UID:${event.id || Date.now()}@ccpflow.com`,
+      `UID:${event.instanceKey || event.id || Date.now()}@ccpflow.com`,
       `DTSTAMP:${formatDate(new Date())}`,
       `DTSTART:${startDate}`,
       `DTEND:${endDate}`,
@@ -736,6 +866,17 @@ const EventModal: React.FC<EventModalProps> = ({
     link.click();
     document.body.removeChild(link);
     setShowCalendarDropdown(false);
+  };
+
+  const handleCopyLink = async () => {
+    if (!event || !getShareLink) return;
+    const link = getShareLink(event);
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('Link copied to clipboard', 'success', 2500);
+    } catch {
+      window.prompt('Copy this link:', link);
+    }
   };
 
   const handleDeleteClick = () => {
@@ -764,7 +905,7 @@ const EventModal: React.FC<EventModalProps> = ({
       setShowDeleteDialog(false);
     } catch (error) {
       console.error('Error deleting event:', error);
-      alert('Failed to delete event. Please try again.');
+      showToast('Failed to delete event. Please try again.', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -775,7 +916,7 @@ const EventModal: React.FC<EventModalProps> = ({
       <div className="flex items-end justify-center min-h-screen pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
 
         {/* Transparent Backdrop */}
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-fade-in" aria-hidden="true" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-fade-in" aria-hidden="true" onClick={requestClose}></div>
 
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
@@ -787,7 +928,7 @@ const EventModal: React.FC<EventModalProps> = ({
             <h3 className={`text-base sm:text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
               {isCreating ? 'Create New Event' : (isEditing ? 'Edit Event' : 'Event Details')}
             </h3>
-            <button onClick={onClose} className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
+            <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -828,12 +969,24 @@ const EventModal: React.FC<EventModalProps> = ({
                     <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                       {event.title}
                     </h2>
+                    <div className="flex gap-2 shrink-0">
+                      {getShareLink && (
+                        <button
+                          onClick={handleCopyLink}
+                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
+                          title="Copy link to this event"
+                          aria-label="Copy link to this event"
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </button>
+                      )}
                     {role === UserRole.ADMIN && (
-                      <div className="flex gap-2">
+                      <>
                         <button
                           onClick={() => setIsEditing(true)}
                           className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                          title="Edit Event"
+                          title="Edit Event (E)"
+                          aria-label="Edit event"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -841,16 +994,18 @@ const EventModal: React.FC<EventModalProps> = ({
                           onClick={handleDeleteClick}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                           title="Delete Event"
+                          aria-label="Delete event"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
-                      </div>
+                      </>
                     )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Poster & Attachments */}
-                {(event.posterUrl || (event.attachments && event.attachments.length > 0)) && (
+                {(event.posterUrl || attachments.length > 0) && (
                   <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
                     {event.posterUrl && (
                       <div className="relative group">
@@ -864,11 +1019,11 @@ const EventModal: React.FC<EventModalProps> = ({
                         </a>
                       </div>
                     )}
-                    {event.attachments && event.attachments.length > 0 && (
+                    {attachments.length > 0 && (
                       <div className={`p-4 ${event.posterUrl ? 'border-t border-slate-100 dark:border-slate-800' : ''} bg-slate-50/50 dark:bg-slate-800/30`}>
                         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</h4>
                         <div className="grid gap-2">
-                          {event.attachments.map((att, idx) => (
+                          {attachments.map((att, idx) => (
                             <a key={idx} href={att.url} download={att.name} className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-700 rounded-lg border border-slate-100 dark:border-slate-600 hover:border-brand-200 transition-colors group">
                               <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{att.name}</span>
                               <Download className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
@@ -1041,6 +1196,12 @@ const EventModal: React.FC<EventModalProps> = ({
                   <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
                     <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>Saving your edits will automatically approve and publish this submission to the calendar.</span>
+                  </div>
+                )}
+                {isEditing && event && isRecurringEvent(event) && (
+                  <div className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 p-3.5 flex items-center gap-3 text-xs text-sky-800 dark:text-sky-300">
+                    <Repeat className="w-4 h-4 shrink-0" />
+                    <span>This is a repeating event — changes apply to every occurrence. To remove a single date, use Delete → "Delete only this occurrence".</span>
                   </div>
                 )}
                 {Object.keys(fieldErrors).length > 0 && (
@@ -1227,7 +1388,7 @@ const EventModal: React.FC<EventModalProps> = ({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
                     className="hidden"
                     onChange={handleFileChange}
                   />
@@ -1467,7 +1628,7 @@ const EventModal: React.FC<EventModalProps> = ({
                 <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-slate-900 text-white font-medium hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
                   {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? (autoApproveOnSave ? 'Save & Approve' : 'Save Changes') : 'Create Event')}
                 </button>
-                <button type="button" onClick={() => { (isEditing && !autoApproveOnSave && initialMode !== 'edit') ? setIsEditing(false) : onClose() }} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
+                <button type="button" onClick={handleCancelForm} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                   Cancel
                 </button>
               </>
@@ -1493,6 +1654,9 @@ export default React.memo(EventModal, (prevProps, nextProps) => {
   if (prevProps.currentUserName !== nextProps.currentUserName) return false;
   if (prevProps.initialMode !== nextProps.initialMode) return false;
   if (prevProps.autoApproveOnSave !== nextProps.autoApproveOnSave) return false;
+  if (prevProps.draft !== nextProps.draft) return false;
+  // Needed for up-to-date conflict warnings and series lookups
+  if (prevProps.events !== nextProps.events) return false;
 
   // Compare event objects
   if (prevProps.event?.id !== nextProps.event?.id) return false;
@@ -1512,6 +1676,8 @@ export default React.memo(EventModal, (prevProps, nextProps) => {
   if (prevProps.onSave !== nextProps.onSave) return false;
   if (prevProps.onUpdate !== nextProps.onUpdate) return false;
   if (prevProps.onEventUpdate !== nextProps.onEventUpdate) return false;
+  if (prevProps.onDelete !== nextProps.onDelete) return false;
+  if (prevProps.onDeleteInstance !== nextProps.onDeleteInstance) return false;
 
   return true; // Props are equal, skip re-render
 });

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { User, UserRole } from '../types';
-import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, UserRole, Event } from '../types';
+import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, ClipboardList } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -18,6 +18,7 @@ interface NavbarProps {
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
   onOpenSubmitEvent?: () => void;
+  onEventClick?: (event: Event) => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -33,7 +34,8 @@ const Navbar: React.FC<NavbarProps> = ({
   pendingSubmissionsCount = 0,
   onOpenSubmissions,
   onOpenFortnightlyBulletin,
-  onOpenSubmitEvent
+  onOpenSubmitEvent,
+  onEventClick
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -47,6 +49,15 @@ const Navbar: React.FC<NavbarProps> = ({
   const handleMobileMenuClose = () => {
     setIsMobileMenuOpen(false);
   };
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMobileMenuOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isMobileMenuOpen]);
 
   const handleAddEventClickMobile = () => {
     onAddEventClick();
@@ -100,13 +111,15 @@ const Navbar: React.FC<NavbarProps> = ({
                   userId={user.id}
                   events={events} // Pass events
                   userRsvpEventIds={userRsvpEventIds} // Pass RSVP IDs
+                  onEventClick={onEventClick}
                   className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all btn-hover-effect rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                 />
 
                 <button
                   onClick={toggleTheme}
                   className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all btn-hover-effect rounded-lg"
-                  title="Toggle Theme"
+                  title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                  aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
                 >
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
@@ -148,11 +161,32 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {onOpenSubmitEvent && (
+                {user.role === UserRole.ADMIN && onOpenSubmitEvent && (
+                  <button
+                    onClick={onOpenSubmitEvent}
+                    className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all btn-hover-effect rounded-lg"
+                    title="Open the staff submission form"
+                    aria-label="Open the staff submission form"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                  </button>
+                )}
+
+                {user.role === UserRole.ADMIN ? (
+                  <button
+                    onClick={onAddEventClick}
+                    className="flex items-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs btn-hover-effect"
+                    title="Create a new event (shortcut: C)"
+                    aria-keyshortcuts="c"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    <span>New Event</span>
+                  </button>
+                ) : onOpenSubmitEvent && (
                   <button
                     onClick={onOpenSubmitEvent}
                     className="flex items-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-xs btn-hover-effect"
-                    title={user.role === UserRole.ADMIN ? "Create / Submit an event" : "Submit an event for review"}
+                    title="Submit an event for review"
                   >
                     <PlusCircle className="h-4 w-4" />
                     <span>Submit Event</span>
@@ -163,6 +197,7 @@ const Navbar: React.FC<NavbarProps> = ({
 
                 <button
                   onClick={onLogout}
+                  aria-label="Sign out"
                   className="group flex items-center gap-2 p-2 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 transition-colors rounded-lg btn-hover-effect"
                   title="Sign Out"
                 >
@@ -176,7 +211,8 @@ const Navbar: React.FC<NavbarProps> = ({
               <NotificationCenter
                 userId={user.id}
                 events={events} // Pass events
-                userRsvpEventIds={userRsvpEventIds} // Pass RSVP IDs 
+                userRsvpEventIds={userRsvpEventIds} // Pass RSVP IDs
+                onEventClick={onEventClick}
                 className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all btn-hover-effect rounded-lg"
               />
 
@@ -244,6 +280,16 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
+                {user.role === UserRole.ADMIN && (
+                  <button
+                    onClick={handleAddEventClickMobile}
+                    className="w-full flex items-center space-x-3 text-left px-4 py-3 min-h-[48px] text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-all font-medium"
+                  >
+                    <PlusCircle className="h-5 w-5" />
+                    <span>New Event</span>
+                  </button>
+                )}
+
                 {onOpenSubmitEvent && (
                   <button
                     onClick={() => {
@@ -278,7 +324,10 @@ const Navbar: React.FC<NavbarProps> = ({
                 )}
 
                 <button
-                  onClick={onLogout}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onLogout();
+                  }}
                   className="w-full flex items-center space-x-3 text-left px-4 py-3 min-h-[48px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all font-medium"
                 >
                   <LogOut className="h-5 w-5" />

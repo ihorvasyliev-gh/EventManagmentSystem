@@ -4,9 +4,21 @@ import { submitEvent, getEvents } from '../services/eventService';
 import { User as AuthUser, UserRole, Event, RecurrenceRule } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
-import { detectMultiDateConflicts } from '../utils/conflictDetection';
+import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 
 const CATEGORIES = EVENT_CATEGORIES;
+
+// Staff submit most weeks: remember who they are on this device
+const SUBMITTER_STORAGE_KEY = 'ccp_submitter_details';
+
+const readSavedSubmitter = (): { name: string; email: string } => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SUBMITTER_STORAGE_KEY) || '{}');
+    return { name: typeof parsed.name === 'string' ? parsed.name : '', email: typeof parsed.email === 'string' ? parsed.email : '' };
+  } catch {
+    return { name: '', email: '' };
+  }
+};
 
 interface SubmitEventPageProps {
   onBackToLogin?: () => void;
@@ -55,11 +67,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [dateError, setDateError] = useState<string | undefined>(undefined);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [submitterName, setSubmitterName] = useState(currentUser?.fullName || '');
-  const [submitterEmail, setSubmitterEmail] = useState(currentUser?.email || '');
+  const [submitterName, setSubmitterName] = useState(() => currentUser?.fullName || readSavedSubmitter().name);
+  const [submitterEmail, setSubmitterEmail] = useState(() => currentUser?.email || readSavedSubmitter().email);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const conflictInfo = useMemo(() => {
-    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, activeEvents);
+    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, getOccurrencesAroundDates(activeEvents, selectedDates));
   }, [selectedDates, startTimeStr, endTimeStr, activeEvents]);
 
   // Poster state
@@ -72,11 +85,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [submittedTitle, setSubmittedTitle] = useState<string | null>(null);
 
+  // The error box sits above the form: bring it into view (the submit button is far below)
+  useEffect(() => {
+    if (errorMsg) {
+      errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [errorMsg]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
       setErrorMsg('Please upload an image file (PNG, JPG, or WEBP).');
       return;
     }
@@ -164,7 +184,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       setErrorMsg('Please enter your name.');
       return;
     }
-    if (!submitterEmail.trim() || !submitterEmail.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail.trim())) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
@@ -194,6 +214,14 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       });
 
       setSubmittedTitle(title.trim());
+      window.scrollTo({ top: 0 });
+      if (!currentUser) {
+        try {
+          localStorage.setItem(SUBMITTER_STORAGE_KEY, JSON.stringify({ name: submitterName.trim(), email: submitterEmail.trim() }));
+        } catch {
+          // Storage unavailable — details just won't be prefilled next time
+        }
+      }
     } catch (err: any) {
       console.error('Submission error:', err);
       setErrorMsg(err?.message || 'Failed to submit event. Please check your connection and try again.');
@@ -326,7 +354,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-start gap-3">
+          <div ref={errorRef} role="alert" className="mb-6 p-4 rounded-xl scroll-mt-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-red-700 dark:text-red-300">{errorMsg}</p>
           </div>
@@ -483,7 +511,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/gif,image/webp"
               className="hidden"
               onChange={handleFileChange}
             />

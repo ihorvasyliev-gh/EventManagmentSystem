@@ -1,4 +1,8 @@
-import { Event, EventFilters, UserRole } from '../types';
+import { Event, EventFilters, UserRole } from '../types.ts';
+import { expandRecurringEvents } from './recurrence.ts';
+
+// Open-ended date filters still need a finite window to look for occurrences in
+const OPEN_RANGE_YEARS = 5;
 
 export const filterEvents = (events: Event[], filters: EventFilters, userRole?: UserRole): Event[] => {
   let filtered = [...events];
@@ -8,8 +12,10 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     const searchLower = filters.search.toLowerCase();
     filtered = filtered.filter(event =>
       event.title.toLowerCase().includes(searchLower) ||
-      event.description.toLowerCase().includes(searchLower) ||
-      event.location.toLowerCase().includes(searchLower) ||
+      (event.description || '').toLowerCase().includes(searchLower) ||
+      (event.location || '').toLowerCase().includes(searchLower) ||
+      (event.category || '').toLowerCase().includes(searchLower) ||
+      (event.submitterName || '').toLowerCase().includes(searchLower) ||
       event.tags?.some(tag => tag.toLowerCase().includes(searchLower))
     );
   }
@@ -32,17 +38,26 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     }
   }
 
-  // Date range filter
-  if (filters.dateRange) {
+  // Date range filter (start inclusive, end exclusive). Recurring series are kept when
+  // any occurrence falls inside the range, not only when the series itself starts there.
+  if (filters.dateRange && (filters.dateRange.start || filters.dateRange.end)) {
+    const { start, end } = filters.dateRange;
     filtered = filtered.filter(event => {
       const eventDate = new Date(event.date);
-      if (filters.dateRange?.start && eventDate < filters.dateRange.start) {
-        return false;
+      const isRecurring = !!event.recurrence && event.recurrence.type !== 'none';
+      if (!isRecurring) {
+        if (start && eventDate < start) return false;
+        if (end && eventDate >= end) return false;
+        return true;
       }
-      if (filters.dateRange?.end && eventDate >= filters.dateRange.end) {
-        return false;
-      }
-      return true;
+      const rangeStart = start ?? eventDate;
+      const rangeEnd = end
+        ? new Date(end.getTime() - 1)
+        : new Date(rangeStart.getFullYear() + OPEN_RANGE_YEARS, rangeStart.getMonth(), rangeStart.getDate());
+      if (rangeEnd < rangeStart) return false;
+      return expandRecurringEvents([event], rangeStart, rangeEnd).some(inst =>
+        inst.date >= rangeStart && inst.date <= rangeEnd
+      );
     });
   }
 

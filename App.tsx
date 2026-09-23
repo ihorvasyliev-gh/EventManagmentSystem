@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from
 import Navbar from './components/Navbar';
 import CalendarView from './components/CalendarView';
 import LoginPage from './pages/LoginPage';
-import SearchBar from './components/SearchBar';
+import SearchBar, { SEARCH_INPUT_ID } from './components/SearchBar';
 import EventFiltersComponent from './components/EventFilters';
 import ErrorBoundary from './components/ErrorBoundary';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
@@ -15,12 +15,24 @@ import { getUserRsvps } from './services/rsvpService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
+import { expandRecurringEvents } from './utils/recurrence';
 import { getCachedUser, cacheUser, clearUserCache, hasValidSession } from './utils/sessionCache';
 import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache } from './utils/eventsCache';
-import { clearRecurrenceCache } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
+import { isAnyModalOpen } from './hooks/useModalFocusTrap';
 import { EVENT_CATEGORIES } from './constants/categories';
+
+/** Flags an error as already reported to the user (EventModal won't show it again) */
+const markHandled = (e: unknown): Error => {
+  const err = e instanceof Error ? e : new Error(String(e));
+  (err as Error & { handled?: boolean }).handled = true;
+  return err;
+};
+
+const isSubmitUrl = (): boolean =>
+  window.location.pathname.startsWith('/submit') ||
+  new URLSearchParams(window.location.search).get('mode') === 'submit';
 
 // Lazy load modals for code splitting
 const EventModal = lazy(() => import('./components/EventModal'));
@@ -54,16 +66,27 @@ const AppContent: React.FC = () => {
   const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('view');
   const [modalAutoApprove, setModalAutoApprove] = useState(false);
+  // Unsaved form data to restore after a failed save
+  const [eventDraft, setEventDraft] = useState<Omit<Event, 'id' | 'createdAt'> | null>(null);
+
+  // Clears modal state after the close animation — unless the modal was reopened meanwhile
+  // (e.g. a fast save failure reopens the form with the user's draft).
+  const isModalOpenRef = React.useRef(false);
+  isModalOpenRef.current = isModalOpen;
+  const resetModalStateLater = useCallback(() => {
+    setTimeout(() => {
+      if (isModalOpenRef.current) return;
+      setSelectedEvent(null);
+      setModalInitialMode('view');
+      setModalAutoApprove(false);
+      setEventDraft(null);
+    }, 200);
+  }, []);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
   const [pendingSubmissions, setPendingSubmissions] = useState<Event[]>([]);
-  const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.location.pathname.startsWith('/submit') || window.location.search.includes('mode=submit');
-    }
-    return false;
-  });
+  const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => typeof window !== 'undefined' && isSubmitUrl());
 
   // Session restoration - мгновенное восстановление из кэша
   const userIdRef = React.useRef<string | null>(null);
@@ -316,7 +339,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   useEffect(() => {
     if (!user || !isMobile) return;
     const handleTouchStart = (e: TouchEvent) => {
-      if (window.scrollY <= 10) {
+      if (window.scrollY <= 10 && !isAnyModalOpen()) {
         pullStartYRef.current = e.touches[0].clientY;
       } else {
         pullStartYRef.current = null;
@@ -550,23 +573,29 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       return next;
     });
 
-    try {
-      for (const sub of subsToApprove) {
-        await approveSubmission(sub.id);
-      }
-      showToast(`All ${subsToApprove.length} events approved and published!`, 'success');
-      refreshSubmissions();
-      refreshEvents(true);
-    } catch (err: any) {
-      // Rollback on failure
-      setPendingSubmissions(subsToApprove);
-      showToast(err?.message || 'Failed to approve all events', 'error');
-      refreshEvents(true);
+    const results = await Promise.allSettled(subsToApprove.map((sub) => approveSubmission(sub.id)));
+    const failed = subsToApprove.filter((_, i) => results[i].status === 'rejected');
+    const approvedCount = subsToApprove.length - failed.length;
+
+    if (failed.length === 0) {
+      showToast(`All ${approvedCount} events approved and published!`, 'success');
+    } else {
+      // Roll back only the submissions that actually failed
+      setPendingSubmissions((prev) => [...failed, ...prev.filter((p) => !failed.some((f) => f.id === p.id))]);
+      showToast(
+        approvedCount > 0
+          ? `${approvedCount} approved, ${failed.length} failed — they are back in the inbox`
+          : 'Failed to approve submissions',
+        'error'
+      );
     }
+    refreshSubmissions();
+    refreshEvents(true);
   }, [pendingSubmissions, refreshSubmissions, refreshEvents, showToast]);
 
   // Event Handlers - memoized callbacks
   const handleEventClick = useCallback((event: Event) => {
+    setEventDraft(null);
     setSelectedEvent(event);
     setModalInitialMode('view');
     setModalAutoApprove(false);
@@ -574,6 +603,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   }, []);
 
   const handleCreateClick = useCallback(() => {
+    setEventDraft(null);
     setSelectedEvent(null);
     setCreateWithDate(null);
     setModalInitialMode('edit');
@@ -582,6 +612,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   }, []);
 
   const handleAddEventForDate = useCallback((date: Date) => {
+    setEventDraft(null);
     setCreateWithDate(date);
     setSelectedEvent(null);
     setModalInitialMode('edit');
@@ -614,7 +645,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
     // Close modal immediately for better UX
     setIsModalOpen(false);
-    setTimeout(() => setSelectedEvent(null), 200);
+    resetModalStateLater();
 
     // Sync with server in background
     try {
@@ -637,11 +668,13 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         cacheEvents(next);
         return next;
       });
-      showToast('Failed to create event', 'error');
-      // Reopen modal with previous data on error
-      setIsModalOpen(true);
+      showToast('Failed to create event — your details have been kept, please try again', 'error');
+      // Reopen the form with what the user typed
+      setEventDraft(eventData);
       setSelectedEvent(null);
-      throw e;
+      setModalInitialMode('edit');
+      setIsModalOpen(true);
+      throw markHandled(e);
     }
   }, [user, showToast]);
 
@@ -680,11 +713,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
     // Close modal immediately for better UX
     setIsModalOpen(false);
-    setTimeout(() => {
-      setSelectedEvent(null);
-      setModalInitialMode('view');
-      setModalAutoApprove(false);
-    }, 200);
+    resetModalStateLater();
 
     // Sync with server in background
     try {
@@ -722,45 +751,50 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         });
       }
       setSelectedEvent(prev => prev?.id === id ? originalEvent : prev);
-      showToast('Failed to update event', 'error');
-      // Reopen modal with original data on error
-      setIsModalOpen(true);
+      showToast('Failed to update event — your changes have been kept, please try again', 'error');
+      // Reopen the form with the unsaved changes
+      setEventDraft(eventData);
       setSelectedEvent(originalEvent);
       setModalInitialMode('edit');
       setModalAutoApprove(modalAutoApprove);
-      throw e;
+      setIsModalOpen(true);
+      throw markHandled(e);
     }
   }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setCreateWithDate(null);
-    setTimeout(() => {
-      setSelectedEvent(null);
-      setModalInitialMode('view');
-      setModalAutoApprove(false);
-    }, 200); // Clear after animation
-  }, []);
+    resetModalStateLater();
+  }, [resetModalStateLater]);
 
   const handleEventUpdate = useCallback((updatedEvent: Event) => {
-    setEvents((prev) => {
-      const next = prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e));
-      cacheEvents(next);
-      return next;
-    });
-    setSelectedEvent(prev => prev?.id === updatedEvent.id ? updatedEvent : prev);
+    const isRecurring = !!updatedEvent.recurrence && updatedEvent.recurrence.type !== 'none';
+    // Attendees/comments are per occurrence. For a recurring series, `updatedEvent` is one
+    // expanded instance (its own date), so it must never replace the series itself.
+    if (!isRecurring) {
+      setEvents((prev) => {
+        const next = prev.map((e) => (e.id === updatedEvent.id
+          ? { ...e, attendees: updatedEvent.attendees, attendeeNames: updatedEvent.attendeeNames, comments: updatedEvent.comments }
+          : e));
+        cacheEvents(next);
+        return next;
+      });
+    }
+    setSelectedEvent(prev => (prev && (prev.instanceKey ?? prev.id) === (updatedEvent.instanceKey ?? updatedEvent.id)) ? updatedEvent : prev);
 
-    // Update RSVP set if user's attendance status changed
+    // Update RSVP set if user's attendance status changed (keys match rsvpService.getUserRsvps)
     if (user && updatedEvent.attendees) {
       const isAttending = updatedEvent.attendees.includes(user.id);
+      const rsvpKey = `${updatedEvent.id}_${updatedEvent.date.getTime()}`;
       setUserRsvpEventIds(prev => {
-        const next = new Set(prev);
+        const next = new Set<string>(prev);
         if (isAttending) {
-          next.add(updatedEvent.id);
+          next.add(rsvpKey);
         } else {
-          next.delete(updatedEvent.id);
+          next.delete(rsvpKey);
         }
-        cacheRsvps(Array.from(next));
+        cacheRsvps(Array.from(next) as string[]);
         return next;
       });
     }
@@ -788,9 +822,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       cacheExceptions(next);
       return next;
     });
-
-    // Очищаем кэш повторений
-    clearRecurrenceCache();
 
     // Sync with server
     try {
@@ -834,13 +865,10 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       return next;
     });
 
-    // Clear recurrence cache
-    clearRecurrenceCache();
-
     // Close modal if it's open for this event
     if (selectedEvent?.id === id) {
       setIsModalOpen(false);
-      setTimeout(() => setSelectedEvent(null), 200);
+      resetModalStateLater();
     }
 
     // Sync with server in background
@@ -869,53 +897,27 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     }
   }, [user, events, selectedEvent, showToast]);
 
-  // Prefetch events for a specific month (for smooth navigation)
-  const handlePrefetchMonth = useCallback((date: Date) => {
-    // Prefetch in background using requestIdleCallback
-    const prefetchEvents = () => {
-      getEvents()
-        .then((data) => {
-          // Cache the prefetched events
-          cacheEvents(data);
-        })
-        .catch((error) => {
-          console.error('Prefetch error:', error);
-          // Silent fail for prefetch
-        });
-    };
-
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(prefetchEvents, { timeout: 3000 });
-    } else {
-      setTimeout(prefetchEvents, 500);
-    }
-  }, []);
-
   const handleExportClick = useCallback(() => {
     setIsExportModalOpen(true);
   }, []);
 
   useEffect(() => {
     if (!user) return;
+    // Escape inside modals is handled by useModalFocusTrap (one modal at a time)
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) {
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && !isAnyModalOpen()) {
           target.blur();
         }
         return;
       }
+      if (isAnyModalOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === 'Escape') {
-        if (isModalOpen) handleCloseModal();
-        if (isExportModalOpen) setIsExportModalOpen(false);
-        if (isSubmissionsModalOpen) setIsSubmissionsModalOpen(false);
-        if (isBulletinModalOpen) setIsBulletinModalOpen(false);
-      } else if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+      if (e.key === '/') {
         e.preventDefault();
-        const searchInput = document.querySelector('input[type="text"][placeholder*="Search"]') as HTMLInputElement;
-        if (searchInput) searchInput.focus();
-      } else if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) {
+        document.getElementById(SEARCH_INPUT_ID)?.focus();
+      } else if (e.key === 'c' || e.key === 'C') {
         if (user.role === UserRole.ADMIN) {
           e.preventDefault();
           handleCreateClick();
@@ -925,16 +927,74 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [user, isModalOpen, isExportModalOpen, isSubmissionsModalOpen, isBulletinModalOpen, handleCloseModal, handleCreateClick]);
+  }, [user, handleCreateClick]);
+
+  // Shareable links: /?event=<id>&at=<occurrence timestamp>
+  const getEventShareLink = useCallback((event: Event) => {
+    const url = new URL(window.location.origin);
+    url.searchParams.set('event', event.id);
+    if (event.recurrence && event.recurrence.type !== 'none') {
+      url.searchParams.set('at', String(event.date.getTime()));
+    }
+    return url.toString();
+  }, []);
+
+  // Open an event from a shared link once events are loaded
+  const deepLinkHandledRef = React.useRef(false);
+  useEffect(() => {
+    if (deepLinkHandledRef.current || !user || loadingEvents || events.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get('event');
+    if (!eventId) {
+      deepLinkHandledRef.current = true;
+      return;
+    }
+    deepLinkHandledRef.current = true;
+
+    const master = events.find(e => e.id === eventId);
+    const at = Number(params.get('at'));
+    let target: Event | undefined = master;
+    if (master && at && master.recurrence && master.recurrence.type !== 'none') {
+      const day = new Date(at);
+      const instances = expandRecurringEvents(
+        [master],
+        new Date(day.getFullYear(), day.getMonth(), day.getDate()),
+        new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999),
+        recurrenceExceptions
+      );
+      target = instances.find(i => i.date.getTime() === at) ?? instances[0] ?? master;
+    }
+
+    params.delete('event');
+    params.delete('at');
+    const query = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+
+    if (target) {
+      handleEventClick(target);
+    } else {
+      showToast('That event could not be found — it may have been removed.', 'warning');
+    }
+  }, [user, loadingEvents, events, recurrenceExceptions, handleEventClick, showToast]);
 
   // Filtered events
   const filteredEvents = useMemo(() => {
     return filterEvents(events, { ...filters, search: searchQuery }, user?.role);
   }, [events, filters, searchQuery, user?.role]);
 
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() || filters.category || filters.status || filters.dateRange ||
+    filters.location || filters.submitterEmail || filters.creatorId || filters.tags?.length
+  );
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setFilters({});
+  }, []);
+
   // Extract unique values for filters
   const availableLocations = useMemo(() => {
-    return Array.from(new Set(events.map(e => e.location))).sort();
+    return Array.from(new Set<string>(events.map(e => e.location?.trim()).filter((l): l is string => !!l)))
+      .sort((a, b) => a.localeCompare(b));
   }, [events]);
 
   // Extract unique submitter emails for filters
@@ -954,22 +1014,47 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     return Array.from(emails).sort((a, b) => a.localeCompare(b));
   }, [events]);
 
+  // Submit page navigation: keep the URL in sync so the browser Back button works
+  const openSubmitPage = useCallback(() => {
+    setIsSubmitPageOpen(true);
+    if (!isSubmitUrl()) {
+      window.history.pushState({}, '', '/?mode=submit');
+    }
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const closeSubmitPage = useCallback(() => {
+    setIsSubmitPageOpen(false);
+    if (isSubmitUrl()) {
+      window.history.pushState({}, '', '/');
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setIsSubmitPageOpen(isSubmitUrl());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Coming back from the submit page: pick up whatever was just submitted
+  const wasSubmitPageOpenRef = React.useRef(isSubmitPageOpen);
+  useEffect(() => {
+    if (wasSubmitPageOpenRef.current && !isSubmitPageOpen && user) {
+      refreshEvents(true);
+      if (user.role === UserRole.ADMIN) {
+        refreshSubmissions();
+      }
+    }
+    wasSubmitPageOpenRef.current = isSubmitPageOpen;
+  }, [isSubmitPageOpen, user, refreshEvents, refreshSubmissions]);
+
   if (isSubmitPageOpen) {
     return (
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600"></div></div>}>
         <SubmitEventPage
           currentUser={user}
           events={events}
-          onBackToLogin={() => {
-            setIsSubmitPageOpen(false);
-            if (window.location.search.includes('mode=submit') || window.location.pathname.startsWith('/submit')) {
-              window.history.pushState({}, '', '/');
-            }
-            refreshEvents(true);
-            if (user?.role === UserRole.ADMIN) {
-              refreshSubmissions();
-            }
-          }}
+          onBackToLogin={closeSubmitPage}
         />
       </Suspense>
     );
@@ -988,10 +1073,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     return (
       <LoginPage
         onLogin={handleLogin}
-        onOpenSubmitEvent={() => {
-          setIsSubmitPageOpen(true);
-          window.history.pushState({}, '', '/?mode=submit');
-        }}
+        onOpenSubmitEvent={openSubmitPage}
       />
     );
   }
@@ -1002,10 +1084,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         user={user}
         onLogout={handleLogout}
         onAddEventClick={handleCreateClick}
-        onOpenSubmitEvent={() => {
-          setIsSubmitPageOpen(true);
-          window.history.pushState({}, '', '/?mode=submit');
-        }}
+        onOpenSubmitEvent={openSubmitPage}
         onExportClick={handleExportClick}
         onRefresh={() => refreshEvents(true)}
         loadingEvents={loadingEvents}
@@ -1015,6 +1094,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         pendingSubmissionsCount={pendingSubmissions.length}
         onOpenSubmissions={() => setIsSubmissionsModalOpen(true)}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
+        onEventClick={handleEventClick}
       />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -1061,6 +1141,22 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
           })}
         </div>
 
+        {hasActiveFilters && !loadingEvents && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/30 px-4 py-2.5 text-sm text-brand-800 dark:text-brand-200" role="status">
+            <span>
+              Showing <strong>{filteredEvents.length}</strong> of {filterEvents(events, {}, user.role).length} events
+              {searchQuery.trim() && <> matching “{searchQuery.trim()}”</>}
+            </span>
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
         {loadingEvents ? (
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
             <div className="grid grid-cols-7 gap-2 lg:gap-4">
@@ -1073,10 +1169,12 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
           <CalendarView
             events={filteredEvents}
             onEventClick={handleEventClick}
-            onPrefetchMonth={handlePrefetchMonth}
             onAddEventForDate={user.role === UserRole.ADMIN ? handleAddEventForDate : undefined}
             recurrenceExceptions={recurrenceExceptions}
             userRole={user.role}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={clearAllFilters}
+            dateRange={filters.dateRange}
           />
         )}
       </main>
@@ -1099,6 +1197,8 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onDeleteInstance={handleDeleteInstance}
             initialMode={modalInitialMode}
             autoApproveOnSave={modalAutoApprove}
+            draft={eventDraft}
+            getShareLink={getEventShareLink}
           />
         </Suspense>
       )}
@@ -1120,6 +1220,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             isOpen={isBulletinModalOpen}
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
+            recurrenceExceptions={recurrenceExceptions}
           />
         </Suspense>
       )}
@@ -1132,6 +1233,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             submissions={pendingSubmissions}
             onApprove={handleApproveSubmission}
             onEdit={(ev) => {
+              setEventDraft(null);
               setSelectedEvent(ev);
               setModalInitialMode('edit');
               setModalAutoApprove(true);
@@ -1146,18 +1248,20 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-24 md:pb-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
           &copy; {new Date().getFullYear()} Cork City Partnership. Internal Use Only.
+          <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
+            Keyboard: <kbd className="font-sans font-semibold">/</kbd> search · <kbd className="font-sans font-semibold">←</kbd> <kbd className="font-sans font-semibold">→</kbd> previous / next · <kbd className="font-sans font-semibold">T</kbd> today
+            {user.role === UserRole.ADMIN && <> · <kbd className="font-sans font-semibold">C</kbd> new event · <kbd className="font-sans font-semibold">E</kbd> edit open event</>}
+            {' '}· <kbd className="font-sans font-semibold">Esc</kbd> close
+          </p>
         </div>
       </footer>
 
       {isMobile && (
         <BottomNavigation
           onHomeClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          onCreateClick={() => {
-            setIsSubmitPageOpen(true);
-            window.history.pushState({}, '', '/?mode=submit');
-          }}
+          onCreateClick={user.role === UserRole.ADMIN ? handleCreateClick : openSubmitPage}
           showCreateButton={true}
-          createLabel="Submit"
+          createLabel={user.role === UserRole.ADMIN ? 'New Event' : 'Submit'}
           activeTab="home"
         />
       )}

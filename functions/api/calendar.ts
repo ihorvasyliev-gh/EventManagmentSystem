@@ -36,89 +36,172 @@ interface SupabaseEvent {
 }
 
 // ─── Recurrence expansion (server-side, standalone) ───────────────────
+//
+// Workers run in UTC, but events are scheduled in Irish local time. All recurrence
+// arithmetic is done on Europe/Dublin wall-clock time so a weekly 10:00 event stays at
+// 10:00 after the clocks change, and every instance keeps the original duration.
 
-function expandRecurring(events: SupabaseEvent[], rangeStart: Date, rangeEnd: Date): SupabaseEvent[] {
+const FEED_TIMEZONE = 'Europe/Dublin';
+const MAX_INSTANCES_PER_EVENT = 1000;
+
+interface WallTime { y: number; m: number; d: number; h: number; mi: number; s: number }
+
+const wallFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: FEED_TIMEZONE,
+    hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
+function toWall(date: Date): WallTime {
+    const parts: Record<string, number> = {};
+    for (const p of wallFormatter.formatToParts(date)) {
+        if (p.type !== 'literal') parts[p.type] = Number(p.value);
+    }
+    return { y: parts.year, m: parts.month - 1, d: parts.day, h: parts.hour % 24, mi: parts.minute, s: parts.second };
+}
+
+function tzOffsetMs(date: Date): number {
+    const w = toWall(date);
+    return Date.UTC(w.y, w.m, w.d, w.h, w.mi, w.s) - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/** Converts a Europe/Dublin wall-clock time (fields may overflow, like Date.UTC) to an instant. */
+function fromWall(y: number, m: number, d: number, h: number, mi: number, s: number): Date {
+    const guess = Date.UTC(y, m, d, h, mi, s);
+    const firstOffset = tzOffsetMs(new Date(guess));
+    let t = guess - firstOffset;
+    const secondOffset = tzOffsetMs(new Date(t));
+    if (secondOffset !== firstOffset) t = guess - secondOffset;
+    return new Date(t);
+}
+
+const daysInMonth = (y: number, m: number) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+const wallDayKey = (date: Date) => { const w = toWall(date); return `${w.y}-${w.m}-${w.d}`; };
+
+function nthOccurrence(base: WallTime, type: string, steps: number): Date {
+    switch (type) {
+        case 'daily':
+            return fromWall(base.y, base.m, base.d + steps, base.h, base.mi, base.s);
+        case 'weekly':
+            return fromWall(base.y, base.m, base.d + steps * 7, base.h, base.mi, base.s);
+        case 'monthly': {
+            const first = new Date(Date.UTC(base.y, base.m + steps, 1));
+            const y = first.getUTCFullYear();
+            const m = first.getUTCMonth();
+            return fromWall(y, m, Math.min(base.d, daysInMonth(y, m)), base.h, base.mi, base.s);
+        }
+        case 'yearly':
+            return fromWall(base.y + steps, base.m, Math.min(base.d, daysInMonth(base.y + steps, base.m)), base.h, base.mi, base.s);
+        default:
+            return fromWall(base.y, base.m, base.d + steps, base.h, base.mi, base.s);
+    }
+}
+
+function expandRecurring(
+    events: SupabaseEvent[],
+    rangeStart: Date,
+    rangeEnd: Date,
+    exceptions: Map<string, Set<string>> = new Map()
+): SupabaseEvent[] {
     const result: SupabaseEvent[] = [];
 
     for (const ev of events) {
+        const baseStart = new Date(ev.date);
+        if (isNaN(baseStart.getTime())) continue;
+        const baseEnd = ev.end_date ? new Date(ev.end_date) : null;
+        const durationMs = baseEnd && baseEnd >= baseStart ? baseEnd.getTime() - baseStart.getTime() : null;
         const type = ev.recurrence_type;
+
+        const pushInstance = (start: Date) => {
+            if (start < rangeStart || start > rangeEnd) return;
+            if (exceptions.get(ev.id)?.has(wallDayKey(start))) return;
+            result.push({
+                ...ev,
+                id: `${ev.id}_${start.getTime()}`,
+                date: start.toISOString(),
+                end_date: durationMs !== null ? new Date(start.getTime() + durationMs).toISOString() : null,
+            });
+        };
+
         if (!type || type === 'none') {
-            // Non-recurring: include if within range
-            const d = new Date(ev.date);
-            if (d >= rangeStart && d <= rangeEnd) {
-                result.push(ev);
+            if (baseStart >= rangeStart && baseStart <= rangeEnd) result.push(ev);
+            continue;
+        }
+
+        const base = toWall(baseStart);
+
+        // Custom dates: each picked day at the original time of day
+        if (type === 'custom') {
+            const dates = ev.recurrence_custom_dates && ev.recurrence_custom_dates.length > 0
+                ? ev.recurrence_custom_dates
+                : [ev.date];
+            for (const iso of dates) {
+                const day = new Date(iso);
+                if (isNaN(day.getTime())) continue;
+                const w = toWall(day);
+                pushInstance(fromWall(w.y, w.m, w.d, base.h, base.mi, base.s));
             }
             continue;
         }
 
-        // Custom dates recurrence
-        if (type === 'custom' && ev.recurrence_custom_dates) {
-            for (const iso of ev.recurrence_custom_dates) {
-                const d = new Date(iso);
-                if (d >= rangeStart && d <= rangeEnd) {
-                    result.push({ ...ev, date: iso, id: `${ev.id}_${d.getTime()}` });
-                }
-            }
-            continue;
+        const interval = ev.recurrence_interval && ev.recurrence_interval > 0 ? ev.recurrence_interval : 1;
+        const maxOccurrences = ev.recurrence_occurrences || Infinity;
+        let endLimit = rangeEnd;
+        if (ev.recurrence_end_date) {
+            const w = toWall(new Date(ev.recurrence_end_date));
+            const inclusiveEnd = fromWall(w.y, w.m, w.d, 23, 59, 59);
+            if (inclusiveEnd < endLimit) endLimit = inclusiveEnd;
         }
 
-        // Standard recurrence (daily/weekly/monthly/yearly)
-        const interval = ev.recurrence_interval || 1;
-        const endDate = ev.recurrence_end_date ? new Date(ev.recurrence_end_date) : rangeEnd;
-        const maxOccurrences = ev.recurrence_occurrences || 730; // safety cap
-        const baseDate = new Date(ev.date);
-        let count = 0;
-
-        // For weekly with specific days
+        // Weekly on specific days of the week
         if (type === 'weekly' && ev.recurrence_days_of_week && ev.recurrence_days_of_week.length > 0) {
-            const cursor = new Date(baseDate);
-            cursor.setHours(0, 0, 0, 0);
-            // Start from the beginning of the week
-            const startDay = cursor.getDay();
-            cursor.setDate(cursor.getDate() - startDay);
-
-            while (cursor <= endDate && cursor <= rangeEnd && count < maxOccurrences) {
-                for (const dow of ev.recurrence_days_of_week) {
-                    const d = new Date(cursor);
-                    d.setDate(d.getDate() + dow);
-                    d.setHours(baseDate.getHours(), baseDate.getMinutes(), baseDate.getSeconds());
-                    if (d >= baseDate && d >= rangeStart && d <= endDate && d <= rangeEnd && count < maxOccurrences) {
-                        result.push({ ...ev, date: d.toISOString(), id: `${ev.id}_${d.getTime()}` });
-                        count++;
-                    }
+            const days = [...ev.recurrence_days_of_week].sort((a, b) => a - b);
+            const weekday = new Date(Date.UTC(base.y, base.m, base.d)).getUTCDay();
+            let count = 0;
+            for (let week = 0; week < MAX_INSTANCES_PER_EVENT && count < maxOccurrences; week++) {
+                const weekStartDay = base.d - weekday + week * 7 * interval;
+                let passedEnd = false;
+                for (const dow of days) {
+                    const start = fromWall(base.y, base.m, weekStartDay + dow, base.h, base.mi, base.s);
+                    if (start < baseStart) continue;
+                    if (start > endLimit) { passedEnd = true; break; }
+                    if (count >= maxOccurrences) break;
+                    count++;
+                    pushInstance(start);
                 }
-                cursor.setDate(cursor.getDate() + 7 * interval);
+                if (passedEnd) break;
             }
             continue;
         }
 
-        // Simple recurrence
-        const cursor = new Date(baseDate);
-        while (cursor <= endDate && cursor <= rangeEnd && count < maxOccurrences) {
-            if (cursor >= rangeStart) {
-                result.push({ ...ev, date: cursor.toISOString(), id: `${ev.id}_${cursor.getTime()}` });
-                count++;
-            }
-            switch (type) {
-                case 'daily':
-                    cursor.setDate(cursor.getDate() + interval);
-                    break;
-                case 'weekly':
-                    cursor.setDate(cursor.getDate() + 7 * interval);
-                    break;
-                case 'monthly':
-                    cursor.setMonth(cursor.getMonth() + interval);
-                    break;
-                case 'yearly':
-                    cursor.setFullYear(cursor.getFullYear() + interval);
-                    break;
-                default:
-                    cursor.setDate(cursor.getDate() + 1);
-            }
+        for (let k = 0; k < MAX_INSTANCES_PER_EVENT && k < maxOccurrences; k++) {
+            const start = nthOccurrence(base, type, k * interval);
+            if (start > endLimit) break;
+            pushInstance(start);
         }
     }
 
     return result;
+}
+
+async function fetchExceptions(supabaseUrl: string, anonKey: string): Promise<Map<string, Set<string>>> {
+    const map = new Map<string, Set<string>>();
+    try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/recurrence_exceptions?select=event_id,exception_date`, {
+            headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` },
+        });
+        if (!res.ok) return map;
+        const rows: { event_id: string; exception_date: string }[] = await res.json();
+        for (const row of rows) {
+            const set = map.get(row.event_id) ?? new Set<string>();
+            set.add(wallDayKey(new Date(row.exception_date)));
+            map.set(row.event_id, set);
+        }
+    } catch {
+        // Exceptions are best-effort: without them the feed still lists the full series
+    }
+    return map;
 }
 
 // ─── ICS generation ───────────────────────────────────────────────────
@@ -353,7 +436,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             : now;
         const rangeEnd = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
 
-        const expanded = expandRecurring(events, rangeStart, rangeEnd);
+        const exceptions = await fetchExceptions(supabaseUrl, supabaseAnonKey);
+        const expanded = expandRecurring(events, rangeStart, rangeEnd, exceptions);
 
         const ics = buildICS(expanded);
 

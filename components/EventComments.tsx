@@ -66,6 +66,8 @@ const EventComments: React.FC<EventCommentsProps> = ({
               </div>
               {onDeleteComment && comment.userId === currentUserId && (
                 <button
+                  type="button"
+                  aria-label="Delete comment"
                   onClick={() => onDeleteComment(comment.id)}
                   className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-full transition-colors"
                   title="Delete comment"
@@ -84,7 +86,15 @@ const EventComments: React.FC<EventCommentsProps> = ({
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment..."
+            onKeyDown={(e) => {
+              // Ctrl/Cmd + Enter posts the comment
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Add a comment… (Ctrl+Enter to post)"
+            aria-label="Add a comment"
             rows={2}
             className="block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none"
           />
@@ -92,7 +102,8 @@ const EventComments: React.FC<EventCommentsProps> = ({
         <button
           type="submit"
           disabled={!newComment.trim()}
-          className="flex-shrink-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          aria-label="Post comment"
+          className="flex-shrink-0 px-4 py-2 bg-brand-600 text-white rounded-md hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
           <Send className="h-4 w-4" />
         </button>
@@ -108,6 +119,7 @@ export default React.memo(EventComments, (prevProps, nextProps) => {
   if (prevProps.currentUserId !== nextProps.currentUserId) return false;
   if (prevProps.currentUserName !== nextProps.currentUserName) return false;
   if (prevProps.onDeleteComment !== nextProps.onDeleteComment) return false;
+  if (prevProps.onAddComment !== nextProps.onAddComment) return false;
   
   // Check if any comment IDs changed
   const prevIds = prevProps.comments.map(c => c.id).join(',');

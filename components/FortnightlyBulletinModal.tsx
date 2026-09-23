@@ -4,18 +4,24 @@ import { Event } from '../types';
 import { generateFortnightlyPDF, generateWhatsAppSummary } from '../utils/pdfExport';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
+import { expandRecurringEvents } from '../utils/recurrence';
+import { useToast } from '../contexts/ToastContext';
 
 interface FortnightlyBulletinModalProps {
   isOpen: boolean;
   onClose: () => void;
   events: Event[];
+  /** Deleted occurrences of recurring events */
+  recurrenceExceptions?: Map<string, Date[]>;
 }
 
 const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   isOpen,
   onClose,
-  events
+  events,
+  recurrenceExceptions
 }) => {
+  const { showToast } = useToast();
   const modalPanelRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(isOpen, onClose, modalPanelRef);
 
@@ -68,8 +74,13 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const startDate = new Date(`${startDateStr}T00:00:00`);
   const endDate = new Date(`${endDateStr}T23:59:59.999`);
 
+  // Every occurrence in the period: repeating and multi-date events are listed on each date
+  const periodEvents = isNaN(startDate.getTime()) || isNaN(endDate.getTime())
+    ? []
+    : expandRecurringEvents(events, startDate, endDate, recurrenceExceptions);
+
   // Count events in range (only published events, excluding drafts/submissions)
-  const matchingEvents = events.filter((e) => {
+  const matchingEvents = periodEvents.filter((e) => {
     if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
     const d = e.date instanceof Date ? e.date : new Date(e.date);
     const t = d.getTime();
@@ -79,7 +90,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const handleDownloadPDF = async () => {
     setIsGenerating(true);
     try {
-      await generateFortnightlyPDF(events, {
+      await generateFortnightlyPDF(periodEvents, {
         startDate,
         endDate,
         format,
@@ -88,13 +99,14 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       });
     } catch (err) {
       console.error('Failed to generate PDF:', err);
+      showToast('Failed to generate the PDF. Please try again.', 'error');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleCopyWhatsApp = async () => {
-    const text = generateWhatsAppSummary(events, startDate, endDate);
+    const text = generateWhatsAppSummary(periodEvents, startDate, endDate);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);

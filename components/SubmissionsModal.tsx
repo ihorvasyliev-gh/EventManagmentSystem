@@ -132,6 +132,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               )}
               <button
                 onClick={onClose}
+                aria-label="Close"
                 className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -202,6 +203,14 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           <span className="inline-flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
                             {formatDate(event.date)}
+                            {event.recurrence?.type === 'custom' && (event.recurrence.customDates?.length ?? 0) > 1 && (
+                              <span
+                                className="ml-1 px-1.5 py-0.5 rounded bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-brand-300 text-[10px] font-semibold"
+                                title={event.recurrence.customDates!.map(d => formatDate(d)).join('\n')}
+                              >
+                                +{event.recurrence.customDates!.length - 1} more date{event.recurrence.customDates!.length > 2 ? 's' : ''}
+                              </span>
+                            )}
                           </span>
                           <span className="inline-flex items-center gap-1.5">
                             <Clock className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
@@ -330,7 +339,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
       {/* Expanded Image Modal */}
       {expandedImage && (
         <div
-          className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setExpandedImage(null)}
         >
           <div className="relative max-w-2xl max-h-[85vh] bg-white rounded-xl overflow-hidden shadow-2xl">

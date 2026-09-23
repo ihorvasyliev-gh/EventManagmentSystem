@@ -1,7 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Filter, X, Calendar, MapPin, Mail, Tag } from 'lucide-react';
 import { EventFilters, EventCategory, EventStatus } from '../types';
 import { EVENT_CATEGORIES } from '../constants/categories';
+import { formatLocalDate } from '../utils/date';
+
+/** YYYY-MM-DD (date input) → local midnight */
+const parseDateInput = (value: string): Date | undefined => {
+  const [y, m, d] = value.split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : undefined;
+};
+
+/** An empty range means "no date filter" (keeps the active-filter badge accurate) */
+const normalizeRange = (range: { start?: Date; end?: Date }) =>
+  range.start || range.end ? range : undefined;
+
+const addDays = (date: Date, days: number): Date =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
 interface EventFiltersProps {
   filters: EventFilters;
@@ -19,6 +33,15 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   onClose
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isOpen]);
 
   const categoryOptions: { value: EventCategory; label: string }[] = useMemo(() => {
     return EVENT_CATEGORIES.map(cat => ({
@@ -41,10 +64,11 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
       return { start: today, end: tomorrow };
     }},
     { label: 'This Week', getRange: () => {
+      // Monday-based, like the calendar
       const today = new Date();
-      const dayOfWeek = today.getDay();
+      const daysSinceMonday = (today.getDay() + 6) % 7;
       const start = new Date(today);
-      start.setDate(today.getDate() - dayOfWeek);
+      start.setDate(today.getDate() - daysSinceMonday);
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
       end.setDate(start.getDate() + 7);
@@ -153,24 +177,28 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <input
                   type="date"
-                  value={filters.dateRange?.start ? filters.dateRange.start.toISOString().split('T')[0] : ''}
+                  aria-label="From date"
+                  value={filters.dateRange?.start ? formatLocalDate(filters.dateRange.start) : ''}
                   onChange={(e) => {
-                    const start = e.target.value ? new Date(e.target.value) : undefined;
+                    const start = e.target.value ? parseDateInput(e.target.value) : undefined;
                     onFiltersChange({
                       ...filters,
-                      dateRange: { ...filters.dateRange, start }
+                      dateRange: normalizeRange({ ...filters.dateRange, start })
                     });
                   }}
                   className="px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200"
                 />
                 <input
                   type="date"
-                  value={filters.dateRange?.end ? filters.dateRange.end.toISOString().split('T')[0] : ''}
+                  aria-label="To date (inclusive)"
+                  // The range end is exclusive (next midnight); show the last included day
+                  value={filters.dateRange?.end ? formatLocalDate(addDays(filters.dateRange.end, -1)) : ''}
                   onChange={(e) => {
-                    const end = e.target.value ? new Date(e.target.value) : undefined;
+                    const lastDay = e.target.value ? parseDateInput(e.target.value) : undefined;
+                    const end = lastDay ? addDays(lastDay, 1) : undefined;
                     onFiltersChange({
                       ...filters,
-                      dateRange: { ...filters.dateRange, end }
+                      dateRange: normalizeRange({ ...filters.dateRange, end })
                     });
                   }}
                   className="px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200"

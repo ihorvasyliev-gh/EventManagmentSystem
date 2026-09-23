@@ -8,9 +8,10 @@ interface NotificationCenterProps {
   events?: Event[];
   userRsvpEventIds?: Set<string>;
   className?: string;
+  onEventClick?: (event: Event) => void;
 }
 
-const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events = [], userRsvpEventIds = new Set(), className = '' }) => {
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events = [], userRsvpEventIds = new Set(), className = '', onEventClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,11 +46,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
           const instanceDate = new Date(timestamp);
 
           if (instanceDate > now) {
-            // Create a virtual instance for this RSVP
+            // Virtual instance for this RSVP (keeps the real id so it can be opened)
+            const durationMs = baseEvent.endDate ? baseEvent.endDate.getTime() - baseEvent.date.getTime() : null;
             rsvpEvents.push({
               ...baseEvent,
-              id: rsvpId, // Use unique composite ID
-              date: instanceDate // Use specific instance date
+              instanceKey: rsvpId,
+              date: instanceDate,
+              endDate: durationMs !== null && durationMs >= 0 ? new Date(timestamp + durationMs) : undefined
             });
           }
         }
@@ -118,9 +121,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
       }
     };
 
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, []);
 
@@ -143,6 +152,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
         onClick={() => setIsOpen(!isOpen)}
         className={`relative ${className || 'p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-800'}`}
         aria-label="Notifications"
+        aria-expanded={isOpen}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -177,7 +187,24 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
                   Upcoming Events
                 </div>
                 {upcomingRsvpEvents.map(event => (
-                  <div key={`upcoming-${event.id}`} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-l-2 border-green-500 bg-green-50/10">
+                  <div
+                    key={`upcoming-${event.instanceKey ?? event.id}`}
+                    role={onEventClick ? 'button' : undefined}
+                    tabIndex={onEventClick ? 0 : undefined}
+                    onClick={() => {
+                      if (!onEventClick) return;
+                      setIsOpen(false);
+                      onEventClick(event);
+                    }}
+                    onKeyDown={(e) => {
+                      if (onEventClick && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        setIsOpen(false);
+                        onEventClick(event);
+                      }
+                    }}
+                    className={`px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-l-2 border-green-500 bg-green-50/10 ${onEventClick ? 'cursor-pointer' : ''}`}
+                  >
                     <div className="flex gap-3">
                       <div className="flex-shrink-0 mt-1">
                         <div className="p-1.5 rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">

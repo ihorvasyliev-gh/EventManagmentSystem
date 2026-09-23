@@ -130,7 +130,12 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
       commitTypedValue(inputValue);
       setIsOpen(false);
     } else if (e.key === 'Escape') {
-      setIsOpen(false);
+      if (isOpen) {
+        // Close just the dropdown, not the surrounding modal
+        e.preventDefault();
+        e.stopPropagation();
+        setIsOpen(false);
+      }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {

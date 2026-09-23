@@ -1,3 +1,6 @@
+import { expandRecurringEvents } from './recurrence.ts';
+import type { Event } from '../types.ts';
+
 export interface ConflictEvent {
   id: string;
   title: string;
@@ -140,3 +143,18 @@ export function detectMultiDateConflicts(
   };
 }
 
+
+/**
+ * Occurrences of `events` around the given days, with recurring series expanded,
+ * so conflict checks also see later occurrences of weekly/monthly/custom events.
+ */
+export function getOccurrencesAroundDates(events: Event[], dates: Date[]): Event[] {
+  const valid = dates.filter(d => d instanceof Date && !isNaN(d.getTime()));
+  if (valid.length === 0 || events.length === 0) return [];
+  const times = valid.map(d => d.getTime());
+  const min = new Date(Math.min(...times));
+  const max = new Date(Math.max(...times));
+  const rangeStart = new Date(min.getFullYear(), min.getMonth(), min.getDate() - 1);
+  const rangeEnd = new Date(max.getFullYear(), max.getMonth(), max.getDate() + 2);
+  return expandRecurringEvents(events, rangeStart, rangeEnd);
+}

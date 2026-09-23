@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Event, UserRole, EventCategory } from '../types';
 import { isSameDay } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -145,26 +145,38 @@ const WeekView: React.FC<WeekViewProps> = ({
     setSelectedMobileDayIndex(idx !== -1 ? idx : 0);
   }, [currentDate, weekDays, today]);
 
-  // Mobile swipe gestures
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  // Mobile swipe gestures: switch day (the container is marked data-own-swipe so the
+  // calendar doesn't also switch week). Mostly-vertical gestures are scrolling, not swipes.
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchEndRef = useRef<{ x: number; y: number } | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    touchEndRef.current = null;
+    touchStartRef.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY };
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    touchEndRef.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY };
   };
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
+    const start = touchStartRef.current;
+    const end = touchEndRef.current;
+    touchStartRef.current = null;
+    if (!start || !end) return;
+    const distance = start.x - end.x;
+    if (Math.abs(distance) < Math.abs(start.y - end.y) * 1.5) return;
     if (distance > 50 && selectedMobileDayIndex < 6) {
       setSelectedMobileDayIndex(prev => prev + 1);
     } else if (distance < -50 && selectedMobileDayIndex > 0) {
       setSelectedMobileDayIndex(prev => prev - 1);
+    }
+  };
+
+  const cardKeyDown = (event: Event) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onEventClick(event);
     }
   };
 
@@ -214,6 +226,7 @@ const WeekView: React.FC<WeekViewProps> = ({
         {/* Mobile: Active day card column */}
         <div
           className="mt-3"
+          data-own-swipe
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -281,7 +294,10 @@ const WeekView: React.FC<WeekViewProps> = ({
                 return (
                   <div
                     key={event.instanceKey ?? event.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onEventClick(event)}
+                    onKeyDown={cardKeyDown(event)}
                     className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px]"
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -384,7 +400,10 @@ const WeekView: React.FC<WeekViewProps> = ({
                     return (
                       <div
                         key={event.instanceKey ?? event.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => onEventClick(event)}
+                        onKeyDown={cardKeyDown(event)}
                         className={`p-2 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:border-brand-400 dark:hover:border-brand-500 shadow-xs hover:shadow transition-all cursor-pointer space-y-1 touch-manipulation group ${statusClass}`}
                       >
                         {/* Category & Time */}

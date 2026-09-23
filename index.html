@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#8b5cf6" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#d91b1b" />
     <meta name="description" content="CCP Event Calendar - Manage and view community events" />
     
     <!-- Resource Hints for Performance -->
@@ -11,10 +11,26 @@
     <link rel="preconnect" href="https://supabase.co" crossorigin />
     
     <title>CCP Event Calendar</title>
+
+    <!-- Apply the saved (or system) theme before first paint to avoid a light flash in dark mode -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
     
     <!-- Inline Critical CSS for Above-the-Fold Content -->
     <style>
       /* Critical CSS - prevents FOUC (Flash of Unstyled Content) */
+      .dark body {
+        background-color: #0F172A;
+        color: #F1F5F9;
+      }
+
       body {
         margin: 0;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

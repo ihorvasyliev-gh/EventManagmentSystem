@@ -11,18 +11,11 @@ import { validateEvent } from '../utils/validation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
-import DatePickerCalendar from './DatePickerCalendar';
-import TimePickerInput from './TimePickerInput';
+import MultiDatePicker from './MultiDatePicker';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
-import { detectConflicts, formatConflictMessage } from '../utils/conflictDetection';
+import { detectMultiDateConflicts } from '../utils/conflictDetection';
 
-// Convert "HH:mm" to minutes
-const timeToMinutes = (t: string): number => {
-  if (!t) return 0;
-  const [h, m] = t.split(':').map(Number);
-  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
-};
 
 // Convert minutes to "HH:mm"
 const minutesToTime = (totalMinutes: number): string => {
@@ -77,9 +70,19 @@ const EventModal: React.FC<EventModalProps> = ({
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startDateStr, setStartDateStr] = useState('');
+  const [selectedDates, setSelectedDates] = useState<Date[]>(() => {
+    if (event?.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
+      return event.recurrence.customDates.map(d => new Date(d));
+    }
+    if (event?.date) {
+      return [new Date(event.date)];
+    }
+    if (initialDate) {
+      return [new Date(initialDate)];
+    }
+    return [new Date()];
+  });
   const [startTimeStr, setStartTimeStr] = useState('10:00');
-  const [endDateStr, setEndDateStr] = useState('');
   const [endTimeStr, setEndTimeStr] = useState('11:30');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState<EventCategory | ''>('');
@@ -126,7 +129,6 @@ const EventModal: React.FC<EventModalProps> = ({
   const [recurrenceType, setRecurrenceType] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>('none');
   const [recurrenceInterval, setRecurrenceInterval] = useState<number>(1);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
-  const [customDates, setCustomDates] = useState<Date[]>([]);
 
   // Inline validation errors (field id -> message)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -136,38 +138,6 @@ const EventModal: React.FC<EventModalProps> = ({
       delete next[field];
       return next;
     });
-  };
-
-  // Auto-synchronize dates & times
-  const handleStartDateChange = (newDate: string) => {
-    setStartDateStr(newDate);
-    setEndDateStr(newDate);
-    clearFieldError('date');
-  };
-
-  const handleStartTimeChange = (newTime: string) => {
-    const prevStartM = timeToMinutes(startTimeStr);
-    const prevEndM = timeToMinutes(endTimeStr);
-    let duration = prevEndM - prevStartM;
-    if (duration <= 0) duration = 90; // default 1.5 hours
-
-    setStartTimeStr(newTime);
-    clearFieldError('date');
-
-    if (startDateStr === endDateStr) {
-      const newStartM = timeToMinutes(newTime);
-      setEndTimeStr(minutesToTime(newStartM + duration));
-    }
-  };
-
-  const handleEndDateChange = (newDate: string) => {
-    setEndDateStr(newDate);
-    clearFieldError('endDate');
-  };
-
-  const handleEndTimeChange = (newTime: string) => {
-    setEndTimeStr(newTime);
-    clearFieldError('endDate');
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,21 +151,11 @@ const EventModal: React.FC<EventModalProps> = ({
   const showForm = isCreating || isEditing;
 
   const conflictInfo = useMemo(() => {
-    if (!startDateStr || !startTimeStr || !isOpen || !showForm) {
-      return { hasConflict: false, conflictingEvents: [] };
+    if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0 || !startTimeStr || !endTimeStr) {
+      return { hasConflict: false, conflicts: [], summaryMessage: '' };
     }
-    const start = new Date(`${startDateStr}T${startTimeStr}:00`);
-    if (isNaN(start.getTime())) {
-      return { hasConflict: false, conflictingEvents: [] };
-    }
-    const end = endDateStr && endTimeStr ? new Date(`${endDateStr}T${endTimeStr}:00`) : undefined;
-    const partialEvent: Partial<Event> = {
-      date: start,
-      endDate: end && !isNaN(end.getTime()) ? end : undefined,
-      location: location.trim() || undefined
-    };
-    return detectConflicts(partialEvent, events || [], event?.id);
-  }, [startDateStr, startTimeStr, endDateStr, endTimeStr, location, isOpen, showForm, events, event?.id]);
+    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, events || [], event?.id);
+  }, [selectedDates, startTimeStr, endTimeStr, events, event?.id, isOpen, showForm]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
@@ -236,12 +196,16 @@ const EventModal: React.FC<EventModalProps> = ({
           setUserHasRsvped(event.attendees?.includes(currentUserId) || false);
         }
 
-        // Format Start Date for Input (YYYY-MM-DD)
-        const yyyy = event.date.getFullYear();
-        const mm = String(event.date.getMonth() + 1).padStart(2, '0');
-        const dd = String(event.date.getDate()).padStart(2, '0');
-        const sDate = `${yyyy}-${mm}-${dd}`;
-        setStartDateStr(sDate);
+        // Initialize selectedDates from recurrence customDates or event.date
+        if (event.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
+          setSelectedDates(event.recurrence.customDates.map(d => new Date(d)));
+        } else if (event.date) {
+          setSelectedDates([new Date(event.date)]);
+        } else if (initialDate) {
+          setSelectedDates([new Date(initialDate)]);
+        } else {
+          setSelectedDates([new Date()]);
+        }
 
         // Format Start Time for Input (HH:MM)
         const hh = String(event.date.getHours()).padStart(2, '0');
@@ -250,16 +214,10 @@ const EventModal: React.FC<EventModalProps> = ({
 
         // Format End Date & Time
         if (event.endDate) {
-          const endYyyy = event.endDate.getFullYear();
-          const endMm = String(event.endDate.getMonth() + 1).padStart(2, '0');
-          const endDd = String(event.endDate.getDate()).padStart(2, '0');
-          setEndDateStr(`${endYyyy}-${endMm}-${endDd}`);
-
           const endHh = String(event.endDate.getHours()).padStart(2, '0');
           const endMin = String(event.endDate.getMinutes()).padStart(2, '0');
           setEndTimeStr(`${endHh}:${endMin}`);
         } else {
-          setEndDateStr(sDate);
           const startM = event.date.getHours() * 60 + event.date.getMinutes();
           setEndTimeStr(minutesToTime(startM + 90));
         }
@@ -271,13 +229,17 @@ const EventModal: React.FC<EventModalProps> = ({
         if (event.recurrence) {
           setRecurrenceType(event.recurrence.type as any);
           setRecurrenceInterval(event.recurrence.interval || 1);
-          setRecurrenceEndDate(event.recurrence.endDate ? event.recurrence.endDate.toISOString().split('T')[0] : '');
-          setCustomDates(event.recurrence.customDates ? event.recurrence.customDates.map(d => new Date(d)) : []);
+          setRecurrenceEndDate(
+            event.recurrence.endDate
+              ? (event.recurrence.endDate instanceof Date
+                  ? event.recurrence.endDate.toISOString().split('T')[0]
+                  : String(event.recurrence.endDate).split('T')[0])
+              : ''
+          );
         } else {
           setRecurrenceType('none');
           setRecurrenceInterval(1);
           setRecurrenceEndDate('');
-          setCustomDates([]);
         }
 
         setIsEditing(initialMode === 'edit');
@@ -326,14 +288,11 @@ const EventModal: React.FC<EventModalProps> = ({
         setPosterFile(null);
 
         // Auto-select date & time
-        const baseDate = initialDate ? new Date(initialDate) : new Date();
-        const yyyy = baseDate.getFullYear();
-        const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(baseDate.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
-
-        setStartDateStr(dateStr);
-        setEndDateStr(dateStr);
+        if (initialDate) {
+          setSelectedDates([new Date(initialDate)]);
+        } else {
+          setSelectedDates([new Date()]);
+        }
 
         let sTime = '10:00';
         let eTime = '11:30';
@@ -360,7 +319,6 @@ const EventModal: React.FC<EventModalProps> = ({
         setRecurrenceType('none');
         setRecurrenceInterval(1);
         setRecurrenceEndDate('');
-        setCustomDates([]);
         setFieldErrors({});
       }
     }
@@ -426,28 +384,40 @@ const EventModal: React.FC<EventModalProps> = ({
       setFieldErrors(prev => ({ ...prev, title: 'Please enter an event title.' }));
       return;
     }
-    if (!startDateStr || !startTimeStr) {
-      setFieldErrors(prev => ({ ...prev, date: 'Please select a start date and time.' }));
+    if (!selectedDates || selectedDates.length === 0) {
+      setFieldErrors(prev => ({ ...prev, date: 'Please select at least one date' }));
+      return;
+    }
+    if (!startTimeStr) {
+      setFieldErrors(prev => ({ ...prev, date: 'Please select a start time.' }));
       return;
     }
 
-    const startDateTime = new Date(`${startDateStr}T${startTimeStr}`);
+    const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
+
+    const [startH, startM = 0] = startTimeStr.split(':').map(Number);
+    const startDateTime = new Date(sortedDates[0]);
+    startDateTime.setHours(startH, startM, 0, 0);
+
     if (isNaN(startDateTime.getTime())) {
       setFieldErrors(prev => ({ ...prev, date: 'Invalid start date or time.' }));
       return;
     }
 
     let endDateTime: Date | undefined = undefined;
-    if (endDateStr && endTimeStr) {
-      endDateTime = new Date(`${endDateStr}T${endTimeStr}`);
-      if (isNaN(endDateTime.getTime())) {
-        setFieldErrors(prev => ({ ...prev, endDate: 'Invalid end date or time.' }));
+    if (endTimeStr) {
+      const [endH, endM = 0] = endTimeStr.split(':').map(Number);
+      const end = new Date(sortedDates[0]);
+      end.setHours(endH, endM, 0, 0);
+      if (isNaN(end.getTime())) {
+        setFieldErrors(prev => ({ ...prev, date: 'Invalid end date or time.' }));
         return;
       }
-      if (endDateTime < startDateTime) {
-        setFieldErrors(prev => ({ ...prev, endDate: 'End Date & Time cannot be earlier than Start Date & Time.' }));
+      if (end < startDateTime) {
+        setFieldErrors(prev => ({ ...prev, date: 'End Date & Time cannot be earlier than Start Date & Time.' }));
         return;
       }
+      endDateTime = end;
     }
 
     if (!location.trim()) {
@@ -461,6 +431,20 @@ const EventModal: React.FC<EventModalProps> = ({
 
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
+    let recurrence: Event['recurrence'] = undefined;
+    if (sortedDates.length > 1) {
+      recurrence = {
+        type: 'custom',
+        customDates: sortedDates,
+      };
+    } else if (['daily', 'weekly', 'monthly', 'yearly'].includes(recurrenceType)) {
+      recurrence = {
+        type: recurrenceType as 'daily' | 'weekly' | 'monthly' | 'yearly',
+        interval: recurrenceInterval || 1,
+        endDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
+      };
+    }
+
     const eventDataToValidate = {
       title: title.trim(),
       description: description.trim(),
@@ -472,12 +456,7 @@ const EventModal: React.FC<EventModalProps> = ({
       tags: tagsArray.length > 0 ? tagsArray : undefined,
       rsvpEnabled,
       maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
-      recurrence: recurrenceType !== 'none' ? {
-        type: recurrenceType,
-        interval: recurrenceType !== 'custom' ? recurrenceInterval : undefined,
-        endDate: recurrenceType !== 'custom' && recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
-        customDates: recurrenceType === 'custom' ? customDates : undefined,
-      } : undefined
+      recurrence
     };
 
     const validationErrors = validateEvent(eventDataToValidate);
@@ -550,12 +529,7 @@ const EventModal: React.FC<EventModalProps> = ({
         maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
         attachments: [...attachments, ...uploadedAttachments],
         creatorId: event?.creatorId || currentUserId,
-        recurrence: recurrenceType !== 'none' ? {
-          type: recurrenceType,
-          interval: recurrenceType !== 'custom' ? recurrenceInterval : undefined,
-          endDate: recurrenceType !== 'custom' && recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
-          customDates: recurrenceType === 'custom' ? customDates : undefined,
-        } : undefined
+        recurrence
       };
 
       if (isCreating && onSave) {
@@ -1135,84 +1109,29 @@ const EventModal: React.FC<EventModalProps> = ({
                   )}
                 </div>
 
-                {/* 3. Start & End Date / Time */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                      Start Date & Time <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        required
-                        type="date"
-                        value={startDateStr}
-                        onChange={(e) => handleStartDateChange(e.target.value)}
-                        className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] ${fieldErrors.date ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
-                      />
-                      <TimePickerInput
-                        required
-                        value={startTimeStr}
-                        onChange={handleStartTimeChange}
-                        className="!rounded-lg !pl-3 !pr-9 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm border-slate-200 dark:border-slate-700 dark:!bg-slate-800 focus:border-brand-500"
-                        placeholder="10:00"
-                      />
-                    </div>
-                    {fieldErrors.date && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.date}</p>}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
-                        End Date & Time <span className="text-slate-400 font-normal lowercase">(optional)</span>
-                      </label>
-                      {startDateStr && endDateStr && startDateStr === endDateStr && (
-                        <span className="text-[10px] text-brand-600 dark:text-brand-400 font-bold bg-brand-50 dark:bg-brand-900/30 px-1.5 py-0.5 rounded">
-                          Same day
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        type="date"
-                        min={startDateStr}
-                        value={endDateStr}
-                        onChange={(e) => handleEndDateChange(e.target.value)}
-                        className="block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 [color-scheme:light] dark:[color-scheme:dark] border-slate-200 dark:border-slate-700 focus:border-brand-500"
-                      />
-                      <TimePickerInput
-                        value={endTimeStr}
-                        onChange={handleEndTimeChange}
-                        referenceStartTime={startDateStr === endDateStr ? startTimeStr : undefined}
-                        className="!rounded-lg !pl-3 !pr-9 !py-2.5 sm:!py-2 min-h-[44px] sm:min-h-0 text-sm border-slate-200 dark:border-slate-700 dark:!bg-slate-800 focus:border-brand-500"
-                        placeholder="11:30"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mr-1">Duration:</span>
-                      {[
-                        { label: '30m', mins: 30 },
-                        { label: '1h', mins: 60 },
-                        { label: '1.5h', mins: 90 },
-                        { label: '2h', mins: 120 },
-                        { label: '3h', mins: 180 }
-                      ].map(({ label, mins }) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => {
-                            const startM = timeToMinutes(startTimeStr);
-                            setEndDateStr(startDateStr);
-                            setEndTimeStr(minutesToTime(startM + mins));
-                            clearFieldError('endDate');
-                          }}
-                          className="px-2.5 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md transition-colors"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {fieldErrors.endDate && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.endDate}</p>}
-                  </div>
+                {/* 3. Event Date(s) & Time */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Event Date(s) & Time <span className="text-red-500">*</span>
+                  </label>
+                  <MultiDatePicker
+                    selectedDates={selectedDates}
+                    onChangeDates={(dates) => {
+                      setSelectedDates(dates);
+                      if (dates.length > 0) clearFieldError('date');
+                    }}
+                    startTime={startTimeStr}
+                    onChangeStartTime={(t) => {
+                      setStartTimeStr(t);
+                      clearFieldError('date');
+                    }}
+                    endTime={endTimeStr}
+                    onChangeEndTime={(t) => {
+                      setEndTimeStr(t);
+                      clearFieldError('date');
+                    }}
+                    error={fieldErrors.date}
+                  />
                 </div>
 
                 {conflictInfo.hasConflict && (
@@ -1220,7 +1139,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">Schedule Notice</span>
-                      <span>{formatConflictMessage(conflictInfo.conflictingEvents)}</span>
+                      <span>{conflictInfo.summaryMessage}</span>
                     </div>
                   </div>
                 )}
@@ -1357,13 +1276,14 @@ const EventModal: React.FC<EventModalProps> = ({
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">RECURRENCE</h4>
                   <div className="space-y-4">
-                    <div className={recurrenceType !== 'custom' ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : ''}>
+                    <div className={selectedDates.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : ''}>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Repeat</label>
                         <select
-                          value={recurrenceType}
+                          value={selectedDates.length > 1 ? 'custom' : recurrenceType}
                           onChange={(e) => setRecurrenceType(e.target.value as any)}
-                          className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
+                          disabled={selectedDates.length > 1}
+                          className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="none">None</option>
                           <option value="daily">Daily</option>
@@ -1374,7 +1294,7 @@ const EventModal: React.FC<EventModalProps> = ({
                         </select>
                       </div>
 
-                      {recurrenceType !== 'none' && recurrenceType !== 'custom' && (
+                      {selectedDates.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' && (
                         <>
                           <div>
                             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Interval (Every X)</label>
@@ -1399,15 +1319,15 @@ const EventModal: React.FC<EventModalProps> = ({
                       )}
                     </div>
 
-                    {recurrenceType === 'custom' && (
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase">Select Event Dates</label>
-                        <DatePickerCalendar
-                          selectedDates={customDates}
-                          onChange={setCustomDates}
-                          referenceTime={startTimeStr ? { hours: parseInt(startTimeStr.split(':')[0]), minutes: parseInt(startTimeStr.split(':')[1]) } : undefined}
-                        />
-                      </div>
+                    {selectedDates.length > 1 && (
+                      <p className="text-xs text-brand-600 dark:text-brand-400 font-medium">
+                        Multi-day custom schedule active ({selectedDates.length} dates selected above).
+                      </p>
+                    )}
+                    {selectedDates.length <= 1 && recurrenceType === 'custom' && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Select additional dates on the calendar above to set custom recurring dates.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1584,6 +1504,7 @@ export default React.memo(EventModal, (prevProps, nextProps) => {
   if (prevProps.event?.submitterName !== nextProps.event?.submitterName) return false;
   if (prevProps.event?.submitterEmail !== nextProps.event?.submitterEmail) return false;
   if (prevProps.event?.status !== nextProps.event?.status) return false;
+  if (prevProps.event?.recurrence?.type !== nextProps.event?.recurrence?.type) return false;
   if (prevProps.initialDate?.getTime() !== nextProps.initialDate?.getTime()) return false;
 
   // Compare callbacks

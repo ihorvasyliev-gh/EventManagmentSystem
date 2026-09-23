@@ -51,3 +51,92 @@ export const formatConflictMessage = (conflicts: ConflictEvent[]): string => {
 
   return `This event conflicts with ${conflicts.length} other events`;
 };
+
+export interface MultiDateConflictItem {
+  date: Date;
+  conflictingEvents: ConflictEvent[];
+  message: string;
+}
+
+export interface MultiDateConflictResult {
+  hasConflict: boolean;
+  conflicts: MultiDateConflictItem[];
+  summaryMessage: string;
+}
+
+export function detectMultiDateConflicts(
+  dates: Date[],
+  startTimeStr: string,
+  endTimeStr: string,
+  existingEvents: ConflictEvent[],
+  excludeEventId?: string
+): MultiDateConflictResult {
+  if (!dates || dates.length === 0 || !startTimeStr || !endTimeStr) {
+    return {
+      hasConflict: false,
+      conflicts: [],
+      summaryMessage: ''
+    };
+  }
+
+  const [startH, startM = 0, startS = 0] = startTimeStr.split(':').map(Number);
+  const [endH, endM = 0, endS = 0] = endTimeStr.split(':').map(Number);
+
+  if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) {
+    return {
+      hasConflict: false,
+      conflicts: [],
+      summaryMessage: ''
+    };
+  }
+
+  const conflicts: MultiDateConflictItem[] = [];
+
+  for (const date of dates) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      continue;
+    }
+
+    const startDateTime = new Date(date);
+    startDateTime.setHours(startH, startM, startS, 0);
+
+    const endDateTime = new Date(date);
+    endDateTime.setHours(endH, endM, endS, 0);
+
+    if (endDateTime.getTime() <= startDateTime.getTime()) {
+      endDateTime.setDate(endDateTime.getDate() + 1);
+    }
+
+    const conflictInfo = detectConflicts(
+      { date: startDateTime, endDate: endDateTime },
+      existingEvents,
+      excludeEventId
+    );
+
+    if (conflictInfo.hasConflict && conflictInfo.conflictingEvents.length > 0) {
+      const count = conflictInfo.conflictingEvents.length;
+      const message = count === 1
+        ? `At this time: "${conflictInfo.conflictingEvents[0].title}"`
+        : `At this time: ${count} events (e.g. "${conflictInfo.conflictingEvents[0].title}")`;
+
+      conflicts.push({
+        date,
+        conflictingEvents: conflictInfo.conflictingEvents,
+        message
+      });
+    }
+  }
+
+  const summaryMessage = conflicts.length === 0
+    ? ''
+    : conflicts
+        .map(item => `Conflict on ${item.date.toLocaleDateString()}: ${item.message}`)
+        .join('; ');
+
+  return {
+    hasConflict: conflicts.length > 0,
+    conflicts,
+    summaryMessage
+  };
+}
+

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Event } from '../types';
-import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, ClipboardList } from 'lucide-react';
+import { LogOut, Calendar, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -161,17 +161,6 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {user.role === UserRole.ADMIN && onOpenSubmitEvent && (
-                  <button
-                    onClick={onOpenSubmitEvent}
-                    className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-all btn-hover-effect rounded-lg"
-                    title="Open the staff submission form"
-                    aria-label="Open the staff submission form"
-                  >
-                    <ClipboardList className="h-4 w-4" />
-                  </button>
-                )}
-
                 {user.role === UserRole.ADMIN ? (
                   <button
                     onClick={onAddEventClick}
@@ -290,7 +279,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {onOpenSubmitEvent && (
+                {user.role !== UserRole.ADMIN && onOpenSubmitEvent && (
                   <button
                     onClick={() => {
                       onOpenSubmitEvent();

@@ -66,12 +66,12 @@ export const formatOccurrenceLabel = (occurrence: Date | string, first?: Date | 
 };
 
 /** "Also on" line for a group, or '' when the event occurs only once in the period */
-export const formatAlsoOnDates = (group: DigestEventGroup): string =>
+export const formatAlsoOnDates = (group: DigestEventGroup, separator = '  ·  '): string =>
   group.occurrences
     .slice(1)
     .map((occ) => formatOccurrenceLabel(occ.date, group.event.date))
     .filter(Boolean)
-    .join('  ·  ');
+    .join(separator);
 
 export const monthShort = (d: Date): string => MONTHS_SHORT[d.getMonth()];
 export const monthShortUpper = (d: Date): string => MONTHS_SHORT[d.getMonth()].toUpperCase();

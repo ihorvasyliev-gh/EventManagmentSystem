@@ -24,9 +24,11 @@ interface SubmitEventPageProps {
   onBackToLogin?: () => void;
   currentUser?: AuthUser | null;
   events?: Event[];
+  /** Pre-selected date (admin adding an event from a calendar day) */
+  initialDate?: Date | null;
 }
 
-const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [] }) => {
+const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   // Form State
   const [title, setTitle] = useState('');
@@ -55,11 +57,16 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [events]);
 
   const defaultDate = useMemo(() => {
+    if (initialDate && !isNaN(initialDate.getTime())) {
+      const d = new Date(initialDate);
+      d.setHours(10, 0, 0, 0);
+      return d;
+    }
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setHours(10, 0, 0, 0);
     return d;
-  }, []);
+  }, [initialDate]);
 
   const [selectedDates, setSelectedDates] = useState<Date[]>([defaultDate]);
   const [startTimeStr, setStartTimeStr] = useState('10:00');
@@ -334,22 +341,26 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </div>
             <div className="text-center sm:text-left">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                Upcoming Events Submission
+                {isAdmin ? 'Create New Event' : 'Upcoming Events Submission'}
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Submissions for the Upcoming Events Digest (circulated every Friday to the Board & staff).
+                {isAdmin
+                  ? 'Published straight to the calendar and the Upcoming Events Digest — no review needed.'
+                  : 'Submissions for the Upcoming Events Digest (circulated every Friday to the Board & staff).'}
               </p>
             </div>
           </div>
 
-          <div className="bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900/50 rounded-xl p-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-            <p className="font-semibold text-brand-700 dark:text-brand-300 mb-1">
-              📌 Wednesday Event Roundup:
-            </p>
-            <p>
-              Please submit details of any upcoming meetings, courses, family fun days, Lord Mayor visits, or info sessions happening over the next two weeks. Elizabeth will review and prepare the official bulletin.
-            </p>
-          </div>
+          {!isAdmin && (
+            <div className="bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900/50 rounded-xl p-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+              <p className="font-semibold text-brand-700 dark:text-brand-300 mb-1">
+                📌 Wednesday Event Roundup:
+              </p>
+              <p>
+                Please submit details of any upcoming meetings, courses, family fun days, Lord Mayor visits, or info sessions happening over the next two weeks. Elizabeth will review and prepare the official bulletin.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Error Alert */}
@@ -519,7 +530,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
           <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">
-              Submitter Details
+              {isAdmin ? 'Contact Details' : 'Submitter Details'}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -568,16 +579,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Submitting Event...</span>
+                  <span>{isAdmin ? 'Publishing Event...' : 'Submitting Event...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Submit Event for Review</span>
+                  <span>{isAdmin ? 'Publish Event' : 'Submit Event for Review'}</span>
                 </>
               )}
             </button>
             <p className="text-center text-[11px] text-slate-400 mt-2">
-              This event will be added to the pending queue for Elizabeth's review before publication.
+              {isAdmin
+                ? 'As an admin, your event is published to the calendar immediately.'
+                : "This event will be added to the pending queue for Elizabeth's review before publication."}
             </p>
           </div>
         </form>

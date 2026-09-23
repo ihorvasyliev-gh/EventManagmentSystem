@@ -59,3 +59,12 @@ test('formatAlsoOnDates lists the remaining dates, empty for a single occurrence
   assert.equal(formatAlsoOnDates(multi), 'Sat 26 Sep  ·  Thu 1 Oct');
   assert.equal(formatAlsoOnDates(single), '');
 });
+
+test('formatAlsoOnDates accepts a custom separator', () => {
+  const [group] = groupDigestOccurrences([
+    makeEvent('a', new Date(2026, 8, 24, 10, 0)),
+    makeEvent('a', new Date(2026, 8, 26, 14, 0)),
+    makeEvent('a', new Date(2026, 9, 1, 10, 0)),
+  ]);
+  assert.equal(formatAlsoOnDates(group, '; '), 'Sat 26 Sep, 14:00; Thu 1 Oct');
+});

@@ -1196,8 +1196,9 @@ export const generateWhatsAppSummary = (
 
   const startMs = (toDate(startDate) || new Date()).getTime();
   const endMs = (toDate(endDate) || new Date()).getTime();
-  const filteredEvents = events
-    .filter((e) => {
+  // Repeated occurrences of one event are listed once, on their first date, with "Also on" dates
+  const groups = groupDigestOccurrences(
+    events.filter((e) => {
       // Exclude drafts and pending submissions
       if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
       const d = toDate(e.date);
@@ -1205,11 +1206,7 @@ export const generateWhatsAppSummary = (
       const t = d.getTime();
       return t >= startMs && t <= endMs;
     })
-    .sort((a, b) => {
-      const ta = toDate(a.date)?.getTime() || 0;
-      const tb = toDate(b.date)?.getTime() || 0;
-      return ta - tb;
-    });
+  );
 
   const dateRangeStr = cleanWa(formatDateRange(startDate, endDate));
 
@@ -1217,7 +1214,7 @@ export const generateWhatsAppSummary = (
   text += `Schedule: ${dateRangeStr}\n`;
   text += `────────────────────────────\n\n`;
 
-  if (filteredEvents.length === 0) {
+  if (groups.length === 0) {
     text += `No upcoming events scheduled for this period.\n\n`;
     return text;
   }
@@ -1225,7 +1222,8 @@ export const generateWhatsAppSummary = (
   // Group by date
   let currentDateGroup = '';
 
-  filteredEvents.forEach((ev) => {
+  groups.forEach((group) => {
+    const ev = group.event;
     const evDate = toDate(ev.date) || new Date();
     const isMulti = isMultiDayEvent(ev.date, ev.endDate);
     const evDateStr = evDate.toLocaleDateString('en-IE', {
@@ -1248,6 +1246,10 @@ export const generateWhatsAppSummary = (
     const timeStr = cleanWa(formatEventTime(ev.date, ev.endDate));
     const titleStr = cleanWa(ev.title);
     text += `⏰ ${timeStr} | ${titleStr}\n`;
+    const alsoOn = formatAlsoOnDates(group, '; ');
+    if (alsoOn) {
+      text += `🔁 Also on: ${alsoOn}\n`;
+    }
     if (ev.location) {
       const cleanLoc = cleanWa(ev.location);
       if (cleanLoc) {

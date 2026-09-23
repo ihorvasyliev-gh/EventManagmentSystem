@@ -63,7 +63,6 @@ const AppContent: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [createWithDate, setCreateWithDate] = useState<Date | null>(null);
   const [modalInitialMode, setModalInitialMode] = useState<'view' | 'edit'>('view');
   const [modalAutoApprove, setModalAutoApprove] = useState(false);
   // Unsaved form data to restore after a failed save
@@ -87,6 +86,8 @@ const AppContent: React.FC = () => {
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
   const [pendingSubmissions, setPendingSubmissions] = useState<Event[]>([]);
   const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => typeof window !== 'undefined' && isSubmitUrl());
+  // Date pre-filled when an admin adds an event from a calendar day
+  const [submitInitialDate, setSubmitInitialDate] = useState<Date | null>(null);
 
   // Session restoration - мгновенное восстановление из кэша
   const userIdRef = React.useRef<string | null>(null);
@@ -602,23 +603,32 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     setIsModalOpen(true);
   }, []);
 
-  const handleCreateClick = useCallback(() => {
-    setEventDraft(null);
-    setSelectedEvent(null);
-    setCreateWithDate(null);
-    setModalInitialMode('edit');
-    setModalAutoApprove(false);
-    setIsModalOpen(true);
+  // Submit page navigation: keep the URL in sync so the browser Back button works.
+  // Admins create events through the same full-screen form (published straight away).
+  const openSubmitPageWithDate = useCallback((initialDate: Date | null) => {
+    setSubmitInitialDate(initialDate);
+    setIsSubmitPageOpen(true);
+    if (!isSubmitUrl()) {
+      window.history.pushState({}, '', '/?mode=submit');
+    }
+    window.scrollTo({ top: 0 });
   }, []);
 
-  const handleAddEventForDate = useCallback((date: Date) => {
-    setEventDraft(null);
-    setCreateWithDate(date);
-    setSelectedEvent(null);
-    setModalInitialMode('edit');
-    setModalAutoApprove(false);
-    setIsModalOpen(true);
+  const openSubmitPage = useCallback(() => openSubmitPageWithDate(null), [openSubmitPageWithDate]);
+
+  const closeSubmitPage = useCallback(() => {
+    setIsSubmitPageOpen(false);
+    setSubmitInitialDate(null);
+    if (isSubmitUrl()) {
+      window.history.pushState({}, '', '/');
+    }
   }, []);
+
+  const handleCreateClick = openSubmitPage;
+
+  const handleAddEventForDate = useCallback((date: Date) => {
+    openSubmitPageWithDate(date);
+  }, [openSubmitPageWithDate]);
 
   const handleSaveEvent = useCallback(async (eventData: Omit<Event, 'id' | 'createdAt'>) => {
     if (!user) return;
@@ -764,7 +774,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
-    setCreateWithDate(null);
     resetModalStateLater();
   }, [resetModalStateLater]);
 
@@ -1014,21 +1023,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     return Array.from(emails).sort((a, b) => a.localeCompare(b));
   }, [events]);
 
-  // Submit page navigation: keep the URL in sync so the browser Back button works
-  const openSubmitPage = useCallback(() => {
-    setIsSubmitPageOpen(true);
-    if (!isSubmitUrl()) {
-      window.history.pushState({}, '', '/?mode=submit');
-    }
-    window.scrollTo({ top: 0 });
-  }, []);
-
-  const closeSubmitPage = useCallback(() => {
-    setIsSubmitPageOpen(false);
-    if (isSubmitUrl()) {
-      window.history.pushState({}, '', '/');
-    }
-  }, []);
 
   useEffect(() => {
     const handlePopState = () => setIsSubmitPageOpen(isSubmitUrl());
@@ -1054,6 +1048,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         <SubmitEventPage
           currentUser={user}
           events={events}
+          initialDate={submitInitialDate}
           onBackToLogin={closeSubmitPage}
         />
       </Suspense>
@@ -1186,7 +1181,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onClose={handleCloseModal}
             event={selectedEvent}
             events={events}
-            initialDate={createWithDate}
             role={user.role}
             currentUserId={user.id}
             currentUserName={user.fullName}

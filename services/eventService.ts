@@ -769,6 +769,7 @@ export const submitEvent = async (eventData: {
   submitterEmail: string;
   posterFile?: File;
   status?: 'draft' | 'published';
+  recurrence?: RecurrenceRule;
 }): Promise<Event> => {
   let posterUrl: string | undefined;
 
@@ -824,7 +825,11 @@ export const submitEvent = async (eventData: {
     tags,
     submitter_name: eventData.submitterName.trim(),
     submitter_email: eventData.submitterEmail.trim(),
-    end_date: eventData.endDate ? eventData.endDate.toISOString() : null
+    end_date: eventData.endDate ? eventData.endDate.toISOString() : null,
+    recurrence_type: eventData.recurrence?.type || 'none',
+    recurrence_custom_dates: eventData.recurrence?.customDates
+      ? eventData.recurrence.customDates.map(d => (d instanceof Date ? d.toISOString() : new Date(d).toISOString()))
+      : null
   };
 
   // Check if current user is logged in
@@ -845,11 +850,13 @@ export const submitEvent = async (eventData: {
     if (error) {
       console.error('Error submitting event:', error);
       // If error was due to unknown columns (in case DB migration isn't run yet), fallback without them:
-      if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date'))) {
+      if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date') || error?.message?.includes('recurrence_'))) {
         const minimalPayload = { ...insertPayload };
         delete minimalPayload.submitter_name;
         delete minimalPayload.submitter_email;
         delete minimalPayload.end_date;
+        delete minimalPayload.recurrence_type;
+        delete minimalPayload.recurrence_custom_dates;
         const { error: retryError } = await supabase
           .from('events')
           .insert([minimalPayload]);
@@ -874,6 +881,7 @@ export const submitEvent = async (eventData: {
       tags: insertPayload.tags,
       submitterName: insertPayload.submitter_name,
       submitterEmail: insertPayload.submitter_email,
+      recurrence: eventData.recurrence,
       createdAt: new Date(),
       updatedAt: new Date()
     } as Event;

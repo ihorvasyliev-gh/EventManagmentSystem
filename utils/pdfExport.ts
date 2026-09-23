@@ -1,6 +1,14 @@
 import type jsPDF from 'jspdf';
 import { Event } from '../types';
 import { formatLocalDate } from './date';
+import {
+  groupDigestOccurrences,
+  formatAlsoOnDates,
+  formatOccurrenceLabel,
+  monthShort,
+  monthShortUpper,
+  weekdayShortUpper
+} from './digestGrouping';
 
 export interface BulletinOptions {
   startDate: Date;
@@ -426,16 +434,11 @@ export const isMultiDayEvent = (start: Date | string, end?: Date | string | null
 const formatDateRange = (start: Date | string, end: Date | string) => {
   const s = toDate(start);
   const e = toDate(end);
-  const opt: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-  const sStr = s ? s.toLocaleDateString('en-IE', opt) : '';
-  const eStr = e ? e.toLocaleDateString('en-IE', opt) : '';
+  // Fixed English abbreviations ("Sep", not the en-IE "Sept")
+  const fmt = (d: Date) => `${d.getDate()} ${monthShort(d)} ${d.getFullYear()}`;
+  const sStr = s ? fmt(s) : '';
+  const eStr = e ? fmt(e) : '';
   return sStr && eStr ? `${sStr} – ${eStr}` : sStr || eStr;
-};
-
-const formatEventDate = (d: Date | string) => {
-  const date = toDate(d);
-  if (!date) return '';
-  return date.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
 const formatEventDateDisplay = (start: Date | string, end?: Date | string | null): string => {
@@ -443,11 +446,11 @@ const formatEventDateDisplay = (start: Date | string, end?: Date | string | null
   const e = toDate(end);
   if (!s) return '';
   if (!e || !isMultiDayEvent(s, e)) {
-    return s.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
+    return formatOccurrenceLabel(s);
   }
-  const sStr = s.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
-  const eStr = e.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
-  return `${sStr} – ${eStr}`;
+  return s.getMonth() === e.getMonth()
+    ? `${s.getDate()}–${e.getDate()} ${monthShort(e)}`
+    : `${s.getDate()} ${monthShort(s)} – ${e.getDate()} ${monthShort(e)}`;
 };
 
 const formatEventTime = (start: Date | string, end?: Date | string) => {
@@ -526,8 +529,31 @@ const drawPinIcon = (doc: jsPDF, x: number, y: number): void => {
   doc.circle(centerX, centerY, 0.4, 'F');
 };
 
+/** Accent colour per category (falls back to slate) */
+const CATEGORY_COLORS: Record<string, number[]> = {
+  'Enterprise & Employment': [37, 99, 235],
+  'Community & Family': [234, 88, 12],
+  'Education & Training': [124, 58, 237],
+  'Special Visits & Celebrations': [219, 39, 119],
+  'Public Information Session': [13, 148, 136],
+  'Health & Wellbeing': [22, 163, 74],
+};
+const getCategoryColor = (category?: string): number[] =>
+  (category && CATEGORY_COLORS[category]) || SLATE_MUTED;
+
+const RED_TINT_BG = [254, 242, 242];   // #FEF2F2
+const RED_TINT_BORDER = [254, 202, 202]; // #FECACA
+const SUBMITTER_GREY = [148, 163, 184]; // #94A3B8
+
+const startOfLocalDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const dayCountInclusive = (start: Date, end: Date): number =>
+  Math.round((startOfLocalDay(end).getTime() - startOfLocalDay(start).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
 /**
- * Generate Upcoming Events Digest PDF using jsPDF
+ * Generate Upcoming Events Digest PDF using jsPDF.
+ * Occurrences of the same event (recurring / multi-date) are merged into one entry
+ * shown on its first date, with the remaining dates listed as "Also on".
  */
 export const generateEventsDigestPDF = async (
   events: Event[],
@@ -544,123 +570,178 @@ export const generateEventsDigestPDF = async (
   const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
   const margin = 14;
   const contentWidth = pageWidth - margin * 2; // 182mm
+  const contentTop = 36;
+  const contentBottom = pageHeight - 16;
 
   // Pre-load CCP logo
   const logoData = await loadImageAsBase64('/assets/ccp-logo.png');
 
-  // Filter events within selected date range and sort chronologically (only published events, strictly excluding drafts/submissions)
-  const startMs = (toDate(options.startDate) || new Date()).getTime();
-  const endMs = (toDate(options.endDate) || new Date()).getTime();
-  const filteredEvents = events
-    .filter((e) => {
-      // Exclude drafts and pending submissions
-      if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
-      const d = toDate(e.date);
-      if (!d) return false;
-      const t = d.getTime();
-      return t >= startMs && t <= endMs;
-    })
-    .sort((a, b) => {
-      const ta = toDate(a.date)?.getTime() || 0;
-      const tb = toDate(b.date)?.getTime() || 0;
-      return ta - tb;
-    });
+  // Filter events within selected date range (only published events, strictly excluding drafts/submissions)
+  const periodStart = toDate(options.startDate) || new Date();
+  const periodEnd = toDate(options.endDate) || new Date();
+  const startMs = periodStart.getTime();
+  const endMs = periodEnd.getTime();
+  const filteredEvents = events.filter((e) => {
+    if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
+    const d = toDate(e.date);
+    if (!d) return false;
+    const t = d.getTime();
+    return t >= startMs && t <= endMs;
+  });
+  const groups = groupDigestOccurrences(filteredEvents);
 
-  let currentPage = 1;
+  /** Wraps text to at most `maxLines`, ending the last line with an ellipsis if it was cut */
+  const fitLines = (text: string, width: number, maxLines: number): string[] => {
+    if (!text) return [];
+    const lines: string[] = doc.splitTextToSize(text, width);
+    if (lines.length <= maxLines) return lines;
+    const kept = lines.slice(0, maxLines);
+    let last = kept[maxLines - 1];
+    while (last.length > 1 && doc.getTextWidth(`${last}…`) > width) last = last.slice(0, -1);
+    kept[maxLines - 1] = `${last.trimEnd()}…`;
+    return kept;
+  };
+
+  const setColor = (rgb: number[]) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+  const setFill = (rgb: number[]) => doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+  const setDraw = (rgb: number[]) => doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
 
   // Header helper
   const drawHeader = () => {
-    // Top decorative brand bar
-    doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-    doc.rect(margin, margin, contentWidth, 2, 'F');
-    doc.setFillColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
-    doc.rect(margin + contentWidth * 0.7, margin, contentWidth * 0.3, 2, 'F');
+    // Full-bleed brand band
+    setFill(CCP_RED);
+    doc.rect(0, 0, pageWidth, 3, 'F');
+    setFill(CCP_GREEN);
+    doc.rect(pageWidth * 0.72, 0, pageWidth * 0.28, 3, 'F');
 
-    // Draw logo if available
-    let headerTextX = margin;
+    // Logo (or wordmark fallback) on the left
+    let hasLogo = false;
     if (logoData) {
       try {
         const imgProps = doc.getImageProperties(logoData);
         const ratio = imgProps && imgProps.width && imgProps.height
           ? imgProps.width / imgProps.height
           : (1024 / 240);
-        const logoHeight = 10.5;
-        const logoWidth = logoHeight * ratio;
-        doc.addImage(logoData, 'PNG', margin, margin + 4, logoWidth, logoHeight);
-        headerTextX = margin + logoWidth + 4;
+        const logoHeight = 12;
+        doc.addImage(logoData, 'PNG', margin, 10, logoHeight * ratio, logoHeight);
+        hasLogo = true;
       } catch {
-        headerTextX = margin;
+        hasLogo = false;
       }
     }
+    if (!hasLogo) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      setColor(CCP_RED);
+      doc.text('CORK CITY PARTNERSHIP', margin, 18);
+    }
 
-    // Header Titles
+    // Title block on the right
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-    doc.text('CORK CITY PARTNERSHIP', headerTextX, margin + 8);
+    doc.setFontSize(17);
+    setColor(SLATE_DARK);
+    doc.text('Upcoming Events', pageWidth - margin, 16, { align: 'right' });
 
+    const countLabel = `${groups.length} ${groups.length === 1 ? 'event' : 'events'}`;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-    doc.text('UPCOMING EVENTS DIGEST', headerTextX, margin + 13);
-
-    // Period Badge on right (Clean Executive Chip)
-    const periodText = `Period: ${formatDateRange(options.startDate, options.endDate)}`;
-    doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+    setColor(SLATE_MUTED);
     doc.text(
-      periodText,
+      cleanPdfText(`${formatDateRange(options.startDate, options.endDate)}  ·  ${countLabel}`),
       pageWidth - margin,
-      margin + 10.5,
+      22,
       { align: 'right' }
     );
 
-    // Divider line
-    doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-    doc.setLineWidth(0.4);
-    doc.line(margin, margin + 18, pageWidth - margin, margin + 18);
+    // Divider
+    setDraw(BORDER_LIGHT);
+    doc.setLineWidth(0.3);
+    doc.line(margin, 28, pageWidth - margin, 28);
   };
 
-  // Footer helper
-  const drawFooter = (pageNum: number) => {
-    const footerY = pageHeight - 8;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+  // Footers are drawn once all pages exist so we can print "Page X of Y"
+  const drawFooters = () => {
+    const total = doc.getNumberOfPages();
+    for (let p = 1; p <= total; p++) {
+      doc.setPage(p);
+      const footerY = pageHeight - 8;
+      setDraw(BORDER_LIGHT);
+      doc.setLineWidth(0.3);
+      doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
 
-    doc.text(
-      'Cork City Partnership Clg • Education | Employment | Empowerment • Confidential / Internal',
-      margin,
-      footerY
-    );
-    doc.text(`Page ${pageNum}`, pageWidth - margin, footerY, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      setColor(SLATE_MUTED);
+      doc.text('Cork City Partnership Clg  ·  Education | Employment | Empowerment', margin, footerY);
+      doc.text(`Page ${p} of ${total}`, pageWidth - margin, footerY, { align: 'right' });
+    }
+  };
+
+  const newPage = () => {
+    doc.addPage();
+    drawHeader();
+    return contentTop;
   };
 
   // Draw first page header
   drawHeader();
-  let currentY = margin + 24;
+  let currentY = contentTop;
 
-  if (filteredEvents.length === 0) {
+  if (groups.length === 0) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(10);
-    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+    setColor(SLATE_MUTED);
     doc.text(
       'No upcoming events scheduled for this period.',
       pageWidth / 2,
       currentY + 20,
       { align: 'center' }
     );
-    drawFooter(currentPage);
-    doc.save(`CCP-Events-Digest-${formatLocalDate(toDate(options.startDate) || new Date())}.pdf`);
+    drawFooters();
+    doc.save(`CCP-Events-Digest-${formatLocalDate(periodStart)}.pdf`);
     return;
   }
+
+  // Week sections are only useful when the period spans more than one week
+  const periodDayStart = startOfLocalDay(periodStart);
+  const showWeekBanners = dayCountInclusive(periodStart, periodEnd) > 7;
+  const getWeekIndex = (d: Date) =>
+    Math.floor((startOfLocalDay(d).getTime() - periodDayStart.getTime()) / (1000 * 60 * 60 * 24 * 7));
+  const WEEK_BANNER_H = 9;
+
+  const drawWeekBanner = (weekIndex: number, y: number) => {
+    const weekStart = new Date(periodDayStart);
+    weekStart.setDate(weekStart.getDate() + weekIndex * 7);
+    const weekEndRaw = new Date(weekStart);
+    weekEndRaw.setDate(weekEndRaw.getDate() + 6);
+    const weekEnd = weekEndRaw.getTime() > periodEnd.getTime() ? periodEnd : weekEndRaw;
+
+    const label = `WEEK ${weekIndex + 1}`;
+    const range = weekStart.getMonth() === weekEnd.getMonth()
+      ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${monthShort(weekEnd)}`
+      : `${weekStart.getDate()} ${monthShort(weekStart)} – ${weekEnd.getDate()} ${monthShort(weekEnd)}`;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    setColor(CCP_RED);
+    doc.text(label, margin, y + 4.5);
+    const labelW = doc.getTextWidth(label);
+
+    doc.setFont('helvetica', 'normal');
+    setColor(SLATE_MUTED);
+    doc.text(range, margin + labelW + 2.5, y + 4.5);
+    const rangeW = doc.getTextWidth(range);
+
+    setDraw(BORDER_LIGHT);
+    doc.setLineWidth(0.3);
+    doc.line(margin + labelW + rangeW + 6, y + 3.4, pageWidth - margin, y + 3.4);
+  };
 
   // Pre-load flyers if in executive format
   const flyerMap = new Map<string, LoadedPdfFlyer>();
   if (options.format === 'executive') {
     await Promise.all(
-      filteredEvents.map(async (ev) => {
+      groups.map(async ({ event: ev }) => {
         const imgUrl = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (imgUrl) {
           const flyerObj = await loadImageForPdf(imgUrl);
@@ -670,447 +751,436 @@ export const generateEventsDigestPDF = async (
     );
   }
 
+  const showCalendarButtons = options.includeCalendarButtons !== false;
+  let lastWeekIndex = -1;
+
   // FORMAT 1: EXECUTIVE CARDS
   if (options.format === 'executive') {
-    let lastWeekNum = 0;
+    const panelW = 30;
+    const pad = 5;
+    const btnHeight = 5;
+    const flyerMaxW = 26;
 
-    for (let i = 0; i < filteredEvents.length; i++) {
-      const ev = filteredEvents[i];
+    for (const group of groups) {
+      const ev = group.event;
       const flyer = flyerMap.get(ev.id);
-      const hasFlyer = !!flyer;
       const evDate = toDate(ev.date) || new Date();
       const endEvDate = toDate(ev.endDate);
-      const isMultiDay = isMultiDayEvent(ev.date, ev.endDate);
+      const isMultiDay = !!endEvDate && isMultiDayEvent(evDate, endEvDate);
+      const occurrenceCount = group.occurrences.length;
+      const alsoOn = formatAlsoOnDates(group);
+      const catColor = getCategoryColor(ev.category);
 
-      // Event URLs
-      const outlookUrl = createOutlookWebUrl(ev);
-      const googleUrl = createGoogleCalendarUrl(ev);
-      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
+      // Column geometry
+      const cardX = margin;
+      const textX = cardX + panelW + pad;
+      const rightEdge = cardX + contentWidth - pad - (flyer ? flyerMaxW + 4 : 0);
+      const textW = rightEdge - textX;
 
-      // Text column layout
-      const textStartX = margin + 33;
-      // Reserve 30mm on right for flyer when present (24mm flyer + 3mm right margin + 3mm gap)
-      const textWidth = hasFlyer ? contentWidth - 33 - 30 : contentWidth - 35;
+      // --- Measure ---
+      const headRowH = 5.5; // category + date-count chip
 
-      // 1. Category Pill Height
-      const catHeight = ev.category ? 6.2 : 0;
-
-      // 2. Title Lines (all lines preserved)
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.5);
-      const cleanTitle = cleanPdfText(ev.title);
-      const titleLines = doc.splitTextToSize(cleanTitle, textWidth);
-      const titleHeight = titleLines.length * 4.0;
+      doc.setFontSize(11.5);
+      const titleLines: string[] = doc.splitTextToSize(cleanPdfText(ev.title) || 'Untitled event', textW);
+      const titleLineH = 4.8;
+      const titleH = titleLines.length * titleLineH;
 
-      // 3. Venue Lines
       let venueLines: string[] = [];
-      let venueHeight = 0;
-      if (ev.location) {
-        const cleanLoc = cleanPdfText(ev.location);
-        if (cleanLoc) {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          venueLines = doc.splitTextToSize(cleanLoc, textWidth - 3);
-          venueHeight = venueLines.length * 3.5 + 1.5;
-        }
+      const cleanLoc = cleanPdfText(ev.location);
+      if (cleanLoc) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        venueLines = doc.splitTextToSize(cleanLoc, textW - 3.5);
       }
+      const venueLineH = 3.4;
+      const venueH = venueLines.length > 0 ? venueLines.length * venueLineH + 1.8 : 0;
 
-      // 4. Description Lines (all lines preserved, support newlines!)
+      let alsoOnLines: string[] = [];
+      const alsoOnLabel = 'ALSO ON';
+      let alsoOnLabelW = 0;
+      if (alsoOn) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        alsoOnLabelW = doc.getTextWidth(alsoOnLabel) + 2.5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        alsoOnLines = doc.splitTextToSize(alsoOn, textW - 4 - alsoOnLabelW);
+      }
+      const alsoOnLineH = 3.3;
+      const alsoOnBoxH = alsoOnLines.length > 0 ? alsoOnLines.length * alsoOnLineH + 2.6 : 0;
+      const alsoOnH = alsoOnBoxH > 0 ? alsoOnBoxH + 2.2 : 0;
+
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
+      doc.setFontSize(7.5);
       const cleanDesc = cleanPdfText(ev.description || '', true);
-      const descLines = cleanDesc ? doc.splitTextToSize(cleanDesc, textWidth) : [];
-      const descHeight = descLines.length > 0 ? (descLines.length * 2.9) : 0;
+      const descLines: string[] = cleanDesc ? doc.splitTextToSize(cleanDesc, textW) : [];
+      const descLineH = 3.3;
+      const descH = descLines.length > 0 ? descLines.length * descLineH + 1 : 0;
 
-      // 5. Action Buttons & Submitter footer row
-      const btnHeight = 4.6;
-      const bottomFooterHeight = btnHeight + 3.0 + 2.5;
+      const hasFooterRow = showCalendarButtons || !!ev.submitterName;
+      const footerH = hasFooterRow ? btnHeight + 4 : 0;
 
-      // Calculate dynamic card height to ensure all content always fits
-      const contentHeight = 4.5 + catHeight + titleHeight + venueHeight + descHeight + bottomFooterHeight;
-      const minCardHeight = hasFlyer ? 41 : 35;
-      const cardHeight = Math.max(minCardHeight, contentHeight);
+      const contentH = pad + headRowH + titleH + 1 + venueH + alsoOnH + descH + footerH + pad - 1;
+      const minH = flyer ? 42 : 36;
+      const cardH = Math.max(minH, contentH);
 
-      // Check if we need to print a week header
-      const diffDays = Math.floor((evDate.getTime() - startMs) / (1000 * 60 * 60 * 24));
-      const weekNum = diffDays < 7 ? 1 : 2;
-      const isNewWeek = weekNum !== lastWeekNum;
-      const weekBannerH = isNewWeek ? 10 : 0;
+      // Week section
+      const weekIndex = showWeekBanners ? getWeekIndex(evDate) : 0;
+      const needsBanner = showWeekBanners && weekIndex !== lastWeekIndex;
+      const bannerH = needsBanner ? WEEK_BANNER_H : 0;
 
-      // Page break check (ensures week header + dynamic card fit on current page)
-      if (currentY + weekBannerH + cardHeight > pageHeight - 16) {
-        drawFooter(currentPage);
-        doc.addPage();
-        currentPage++;
-        drawHeader();
-        currentY = margin + 24;
+      if (currentY + bannerH + cardH > contentBottom && currentY > contentTop) {
+        currentY = newPage();
       }
 
-      // Week Section Banner
-      if (isNewWeek) {
-        lastWeekNum = weekNum;
-        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-        doc.roundedRect(margin, currentY, contentWidth, 7, 1.5, 1.5, 'F');
-        doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-        doc.roundedRect(margin, currentY, contentWidth, 7, 1.5, 1.5, 'S');
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-        const weekLabel =
-          weekNum === 1
-            ? 'WEEK 1 — Upcoming 7 Days'
-            : 'WEEK 2 — Following Week';
-        doc.text(weekLabel, margin + 4, currentY + 4.8);
-        currentY += 10;
+      if (needsBanner) {
+        lastWeekIndex = weekIndex;
+        drawWeekBanner(weekIndex, currentY);
+        currentY += WEEK_BANNER_H;
       }
 
-      // Draw Event Card Background
+      const cardY = currentY;
+      const cardR = 2.2;
+
+      // --- Card body: tinted date panel on the left, white content on the right ---
+      setFill(BG_LIGHT);
+      doc.roundedRect(cardX, cardY, contentWidth, cardH, cardR, cardR, 'F');
       doc.setFillColor(255, 255, 255);
-      doc.roundedRect(margin, currentY, contentWidth, cardHeight, 2, 2, 'F');
-      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.roundedRect(margin, currentY, contentWidth, cardHeight, 2, 2, 'S');
+      doc.roundedRect(cardX + panelW, cardY, contentWidth - panelW, cardH, cardR, cardR, 'F');
+      doc.rect(cardX + panelW, cardY, cardR + 0.5, cardH, 'F');
 
-      // Left Accent Color Bar
-      doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      doc.roundedRect(margin, currentY, 2.5, cardHeight, 1, 1, 'F');
+      // Panel divider + outer border
+      setDraw(BORDER_LIGHT);
+      doc.setLineWidth(0.3);
+      doc.line(cardX + panelW, cardY, cardX + panelW, cardY + cardH);
+      doc.roundedRect(cardX, cardY, contentWidth, cardH, cardR, cardR, 'S');
 
-      // Modern Calendar Date Badge (Left)
-      const badgeW = 23;
-      const badgeH = 20;
-      const badgeX = margin + 5.5;
-      const badgeY = currentY + 3.5;
+      // Category accent strip along the top of the date panel
+      setFill(CCP_RED);
+      doc.roundedRect(cardX, cardY, panelW, 2.4, cardR, cardR, 'F');
+      doc.rect(cardX, cardY + 1.2, panelW, 1.2, 'F');
+      doc.rect(cardX + panelW - cardR, cardY, cardR, 1.2, 'F');
 
-      // Badge Container
-      doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-      doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.8, 1.8, 'F');
-      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.8, 1.8, 'S');
+      // --- Date panel ---
+      const panelCX = cardX + panelW / 2;
+      const endInOtherMonth = isMultiDay && endEvDate && endEvDate.getMonth() !== evDate.getMonth();
+      const monthLabel = endInOtherMonth && endEvDate
+        ? `${monthShortUpper(evDate)} – ${monthShortUpper(endEvDate)}`
+        : monthShortUpper(evDate);
 
-      // Badge Top Ribbon (Month)
-      doc.setFillColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      doc.roundedRect(badgeX, badgeY, badgeW, 5.5, 1.8, 1.8, 'F');
-      doc.rect(badgeX, badgeY + 3, badgeW, 2.5, 'F');
-
-      const monthName = evDate.toLocaleDateString('en-IE', { month: 'short' }).toUpperCase();
       doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      setColor(CCP_RED);
+      doc.text(monthLabel, panelCX, cardY + 8.5, { align: 'center' });
+
+      const dayLabel = isMultiDay && endEvDate ? `${evDate.getDate()}–${endEvDate.getDate()}` : String(evDate.getDate());
+      doc.setFontSize(isMultiDay ? 15 : 21);
+      setColor(SLATE_DARK);
+      doc.text(dayLabel, panelCX, cardY + (isMultiDay ? 16.5 : 17.5), { align: 'center' });
+
       doc.setFontSize(6.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text(monthName, badgeX + badgeW / 2, badgeY + 3.8, { align: 'center' });
+      setColor(SLATE_MUTED);
+      const subLabel = isMultiDay && endEvDate
+        ? `${dayCountInclusive(evDate, endEvDate)} DAYS`
+        : weekdayShortUpper(evDate);
+      doc.text(subLabel, panelCX, cardY + 22.5, { align: 'center' });
 
-      // Badge Body (Day & Weekday or Multi-day)
-      if (!isMultiDay || !endEvDate) {
+      // Time chip
+      const timeStr = cleanPdfText(formatEventTime(ev.date, ev.endDate));
+      if (timeStr) {
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-        doc.text(String(evDate.getDate()), badgeX + badgeW / 2, badgeY + 12.2, { align: 'center' });
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5.8);
-        doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-        const dayName = evDate.toLocaleDateString('en-IE', { weekday: 'short' }).toUpperCase();
-        doc.text(dayName, badgeX + badgeW / 2, badgeY + 17, { align: 'center' });
-      } else {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-        doc.text(`${evDate.getDate()}–${endEvDate.getDate()}`, badgeX + badgeW / 2, badgeY + 11.5, { align: 'center' });
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5.2);
-        doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-        doc.text('MULTI-DAY', badgeX + badgeW / 2, badgeY + 16.8, { align: 'center' });
+        doc.setFontSize(7);
+        const timeW = Math.min(panelW - 3, doc.getTextWidth(timeStr) + 4);
+        doc.setFillColor(236, 253, 243); // soft green
+        doc.roundedRect(panelCX - timeW / 2, cardY + 25.2, timeW, 5, 2.5, 2.5, 'F');
+        setColor(CCP_GREEN);
+        doc.text(timeStr, panelCX, cardY + 28.6, { align: 'center' });
       }
 
-      // Time Display below Badge
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.8);
-      doc.setTextColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
-      const timeStr = formatEventTime(ev.date, ev.endDate);
-      const timeLines = doc.splitTextToSize(timeStr, badgeW + 4);
-      doc.text(timeLines[0], badgeX + badgeW / 2, badgeY + badgeH + 4.2, { align: 'center' });
+      // --- Content column ---
+      let y = cardY + pad;
 
-      // Middle Column: Category, Title, Venue (Clickable Maps), Description
-      let infoY = currentY + 4.5;
-
-      // Category Pill & optional Multi-day indicator
+      // Category label with colour dot
+      let chipX = textX;
       if (ev.category) {
+        const catText = cleanPdfText(ev.category).toUpperCase();
+        setFill(catColor);
+        doc.circle(textX + 1, y + 1.7, 1, 'F');
         doc.setFont('helvetica', 'bold');
-        const cleanCat = cleanPdfText(ev.category);
-        const catFontSize = cleanCat.length > 25 ? 5.5 : 6;
-        doc.setFontSize(catFontSize);
-        const textW = doc.getTextWidth(cleanCat);
-        const pillWidth = Math.max(14, textW + 3.5);
-        const pillHeight = 4.2;
-
-        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-        doc.roundedRect(textStartX, infoY, pillWidth, pillHeight, 1, 1, 'F');
-        doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-        doc.roundedRect(textStartX, infoY, pillWidth, pillHeight, 1, 1, 'S');
-
-        doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-        doc.text(cleanCat, textStartX + pillWidth / 2, infoY + 3, { align: 'center' });
-
-        if (isMultiDay && endEvDate) {
-          const multiText = `${formatDateRange(ev.date, ev.endDate)}`;
-          const multiTextW = doc.getTextWidth(multiText);
-          const multiPillW = multiTextW + 4;
-          const multiX = textStartX + pillWidth + 2;
-
-          doc.setFillColor(254, 242, 242); // soft red tint
-          doc.roundedRect(multiX, infoY, multiPillW, pillHeight, 1, 1, 'F');
-          doc.setDrawColor(254, 202, 202);
-          doc.roundedRect(multiX, infoY, multiPillW, pillHeight, 1, 1, 'S');
-
-          doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-          doc.text(multiText, multiX + multiPillW / 2, infoY + 3, { align: 'center' });
-        }
-
-        infoY += pillHeight + 2;
+        doc.setFontSize(6.5);
+        setColor(catColor);
+        doc.text(catText, textX + 3, y + 2.6);
+        chipX = textX + 3 + doc.getTextWidth(catText) + 3;
       }
 
-      // Event Title (ALL lines rendered)
+      // "N DATES" chip for repeated events
+      if (occurrenceCount > 1) {
+        const chipText = `${occurrenceCount} DATES`;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6);
+        const chipW = doc.getTextWidth(chipText) + 4;
+        setFill(RED_TINT_BG);
+        doc.roundedRect(chipX, y - 0.2, chipW, 3.8, 1.9, 1.9, 'F');
+        setColor(CCP_RED);
+        doc.text(chipText, chipX + chipW / 2, y + 2.5, { align: 'center' });
+      }
+      y += headRowH;
+
+      // Title
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      doc.text(titleLines, textStartX, infoY + 1);
-      infoY += titleHeight + 1.5;
+      doc.setFontSize(11.5);
+      setColor(SLATE_DARK);
+      doc.text(titleLines, textX, y + 3.2, { lineHeightFactor: 1.18 });
+      y += titleH + 1;
 
-      // Venue / Location (Clickable to Google Maps)
+      // Venue (clickable to Google Maps)
       if (venueLines.length > 0) {
+        y += 1.8;
+        drawPinIcon(doc, textX, y + 0.2);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(2, 132, 199); // Maps Link Blue
-        drawPinIcon(doc, textStartX, infoY);
-        doc.text(venueLines, textStartX + 2.8, infoY);
-
-        if (mapsUrl) {
-          const venueW = Math.min(textWidth, doc.getTextWidth(venueLines[0]) + 4);
-          doc.link(textStartX, infoY - 3, venueW, venueHeight, { url: mapsUrl });
+        doc.setFontSize(7.5);
+        doc.setTextColor(2, 132, 199);
+        doc.text(venueLines, textX + 3.2, y, { lineHeightFactor: 1.3 });
+        if (ev.location) {
+          const venueW = Math.min(textW, doc.getTextWidth(venueLines[0]) + 4);
+          doc.link(textX, y - 3, venueW, venueLines.length * venueLineH + 0.5, { url: createGoogleMapsUrl(ev.location) });
         }
-        infoY += venueHeight;
+        y += venueLines.length * venueLineH;
       }
 
-      // Description (ALL lines printed, never truncated!)
-      if (descLines.length > 0) {
+      // "Also on" box listing the remaining dates of this event
+      if (alsoOnLines.length > 0) {
+        y += 2.2;
+        setFill(RED_TINT_BG);
+        setDraw(RED_TINT_BORDER);
+        doc.setLineWidth(0.2);
+        doc.roundedRect(textX, y, textW, alsoOnBoxH, 1.2, 1.2, 'FD');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        setColor(CCP_RED);
+        doc.text(alsoOnLabel, textX + 2, y + 3.4);
+
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-        doc.text(descLines, textStartX, infoY);
+        setColor(SLATE_DARK);
+        doc.text(alsoOnLines, textX + 2 + alsoOnLabelW, y + 3.4, { lineHeightFactor: 1.35 });
+        y += alsoOnBoxH;
       }
 
-      // Right Column: Flyer Thumbnail (True Aspect Ratio & EXIF Orientation Preserved)
-      let flyerW = 0;
-      let flyerH = 0;
-      let flyerX = pageWidth - margin;
-      if (hasFlyer && flyer) {
+      // Description (all lines printed, never truncated)
+      if (descLines.length > 0) {
+        y += 3.8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        setColor(SLATE_MUTED);
+        doc.text(descLines, textX, y, { lineHeightFactor: 1.25 });
+      }
+
+      // Flyer thumbnail (true aspect ratio & EXIF orientation preserved)
+      if (flyer) {
         try {
-          const maxW = 24;
-          const maxH = Math.min(cardHeight - 6, 38);
-          const fRatio = flyer.aspectRatio; // True visual aspect ratio (width / height)
-
-          if (fRatio > maxW / maxH) {
-            flyerW = maxW;
-            flyerH = maxW / fRatio;
-          } else {
+          const maxH = Math.min(cardH - 8, 40);
+          let flyerW = flyerMaxW;
+          let flyerH = flyerMaxW / flyer.aspectRatio;
+          if (flyerH > maxH) {
             flyerH = maxH;
-            flyerW = maxH * fRatio;
+            flyerW = maxH * flyer.aspectRatio;
           }
-
-          flyerX = pageWidth - margin - flyerW - 3;
-          const flyerY = currentY + 3 + (maxH - flyerH) / 2;
-
-          // Draw subtle image border frame
-          doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-          doc.roundedRect(flyerX - 0.5, flyerY - 0.5, flyerW + 1, flyerH + 1, 1, 1, 'S');
-
+          const flyerX = cardX + contentWidth - pad - flyerMaxW + (flyerMaxW - flyerW) / 2;
+          const flyerY = cardY + 4;
+          setDraw(BORDER_LIGHT);
+          doc.setLineWidth(0.3);
+          doc.roundedRect(flyerX - 0.6, flyerY - 0.6, flyerW + 1.2, flyerH + 1.2, 1, 1, 'S');
           doc.addImage(flyer.dataUrl, flyer.format, flyerX, flyerY, flyerW, flyerH, undefined, 'FAST');
         } catch (imgErr) {
           console.warn('Could not embed flyer thumbnail in PDF:', imgErr);
         }
       }
 
-      // Action Buttons (Outlook 365 Web & Google Calendar)
-      const showCalendarButtons = options.includeCalendarButtons !== false;
-      const actionRight = hasFlyer && flyer ? (flyerX - 3) : (pageWidth - margin - 4);
-      const btnY = currentY + cardHeight - btnHeight - 2.5;
-
-      const googleBtnW = 18;
-      const outlookBtnW = 20;
-      const btnGap = 2;
-
-      const googleBtnX = actionRight - googleBtnW;
-      const outlookBtnX = googleBtnX - btnGap - outlookBtnW;
+      // Footer row: submitter on the left, calendar buttons on the right
+      const btnY = cardY + cardH - pad - btnHeight + 1;
+      const googleBtnW = 17;
+      const outlookBtnW = 19;
+      const googleBtnX = rightEdge - googleBtnW;
+      const outlookBtnX = googleBtnX - 2 - outlookBtnW;
 
       if (showCalendarButtons) {
-        // 1. Outlook Web Button
-        doc.setFillColor(OUTLOOK_BG[0], OUTLOOK_BG[1], OUTLOOK_BG[2]);
-        doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1.2, 1.2, 'F');
-        doc.setDrawColor(OUTLOOK_BORDER[0], OUTLOOK_BORDER[1], OUTLOOK_BORDER[2]);
-        doc.roundedRect(outlookBtnX, btnY, outlookBtnW, btnHeight, 1.2, 1.2, 'S');
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.5);
-        doc.setTextColor(OUTLOOK_BLUE[0], OUTLOOK_BLUE[1], OUTLOOK_BLUE[2]);
-        doc.text('+ Outlook', outlookBtnX + outlookBtnW / 2, btnY + 3.2, { align: 'center' });
-        doc.link(outlookBtnX, btnY, outlookBtnW, btnHeight, { url: outlookUrl });
-
-        // 2. Google Calendar Button
-        doc.setFillColor(GOOGLE_BG[0], GOOGLE_BG[1], GOOGLE_BG[2]);
-        doc.roundedRect(googleBtnX, btnY, googleBtnW, btnHeight, 1.2, 1.2, 'F');
-        doc.setDrawColor(GOOGLE_BORDER[0], GOOGLE_BORDER[1], GOOGLE_BORDER[2]);
-        doc.roundedRect(googleBtnX, btnY, googleBtnW, btnHeight, 1.2, 1.2, 'S');
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.5);
-        doc.setTextColor(GOOGLE_BLUE[0], GOOGLE_BLUE[1], GOOGLE_BLUE[2]);
-        doc.text('+ Google', googleBtnX + googleBtnW / 2, btnY + 3.2, { align: 'center' });
-        doc.link(googleBtnX, btnY, googleBtnW, btnHeight, { url: googleUrl });
+        const drawButton = (x: number, w: number, label: string, url: string, bg: number[], border: number[], fg: number[]) => {
+          setFill(bg);
+          setDraw(border);
+          doc.setLineWidth(0.25);
+          doc.roundedRect(x, btnY, w, btnHeight, 2.5, 2.5, 'FD');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(6.5);
+          setColor(fg);
+          doc.text(label, x + w / 2, btnY + 3.4, { align: 'center' });
+          doc.link(x, btnY, w, btnHeight, { url });
+        };
+        drawButton(outlookBtnX, outlookBtnW, '+ Outlook', createOutlookWebUrl(ev), OUTLOOK_BG, OUTLOOK_BORDER, OUTLOOK_BLUE);
+        drawButton(googleBtnX, googleBtnW, '+ Google', createGoogleCalendarUrl(ev), GOOGLE_BG, GOOGLE_BORDER, GOOGLE_BLUE);
       }
 
-      // Submitter info footer line inside card (to the left of action buttons if present)
       if (ev.submitterName) {
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(6.5);
-        doc.setTextColor(148, 163, 184);
-        const maxSubWidth = showCalendarButtons ? (outlookBtnX - textStartX - 3) : textWidth;
+        setColor(SUBMITTER_GREY);
+        const maxSubWidth = showCalendarButtons ? outlookBtnX - textX - 3 : textW;
         const subText = cleanPdfText(`Submitted by ${ev.submitterName}${ev.submitterEmail ? ` (${ev.submitterEmail})` : ''}`);
         const subLines = doc.splitTextToSize(subText, Math.max(20, maxSubWidth));
-        doc.text(subLines[0], textStartX, currentY + cardHeight - 3.5);
+        doc.text(subLines[0], textX, btnY + 3.4);
       }
 
-      currentY += cardHeight + 3.5;
+      currentY += cardH + 4;
     }
   } else {
     // FORMAT 2: COMPACT TABLE
-    // Table Header
     const colX = {
-      date: margin + 2,
+      date: margin + 3,
       time: margin + 30,
-      title: margin + 55,
-      venue: margin + 115,
-      category: margin + 155
+      title: margin + 52,
+      venue: margin + 112,
+      category: margin + 147
     };
+    const titleColW = colX.venue - colX.title - 4;
+    const headerH = 7;
 
     const drawTableHeader = (y: number) => {
-      doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
-      doc.rect(margin, y, contentWidth, 7, 'F');
-      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.rect(margin, y, contentWidth, 7, 'S');
+      setFill(SLATE_DARK);
+      doc.roundedRect(margin, y, contentWidth, headerH, 1.2, 1.2, 'F');
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      doc.text('Date', colX.date, y + 4.8);
-      doc.text('Time', colX.time, y + 4.8);
-      doc.text('Event & Description', colX.title, y + 4.8);
-      doc.text('Venue / Location', colX.venue, y + 4.8);
-      doc.text('Category', colX.category, y + 4.8);
+      doc.setFontSize(7);
+      doc.setTextColor(255, 255, 255);
+      doc.text('DATE', colX.date, y + 4.6);
+      doc.text('TIME', colX.time, y + 4.6);
+      doc.text('EVENT', colX.title, y + 4.6);
+      doc.text('VENUE', colX.venue, y + 4.6);
+      doc.text('CATEGORY', colX.category, y + 4.6);
     };
 
     drawTableHeader(currentY);
-    currentY += 7;
+    currentY += headerH;
 
-    for (let i = 0; i < filteredEvents.length; i++) {
-      const ev = filteredEvents[i];
-      const rowHeight = 13;
+    groups.forEach((group, i) => {
+      const ev = group.event;
+      const alsoOn = formatAlsoOnDates(group);
 
-      if (currentY + rowHeight > pageHeight - 16) {
-        drawFooter(currentPage);
-        doc.addPage();
-        currentPage++;
-        drawHeader();
-        currentY = margin + 24;
-        drawTableHeader(currentY);
-        currentY += 7;
-      }
-
-      // Row background
-      if (i % 2 === 1) {
-        doc.setFillColor(252, 252, 253);
-        doc.rect(margin, currentY, contentWidth, rowHeight, 'F');
-      }
-      doc.setDrawColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-      doc.line(margin, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
-
-      // Date & Time (Multi-day aware)
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      const dateDisplay = formatEventDateDisplay(ev.date, ev.endDate);
-      doc.text(dateDisplay, colX.date, currentY + 5);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(CCP_GREEN[0], CCP_GREEN[1], CCP_GREEN[2]);
-      doc.text(formatEventTime(ev.date, ev.endDate), colX.time, currentY + 5);
-
-      // URLs for calendar integration
-      const outlookUrl = createOutlookWebUrl(ev);
-      const googleUrl = createGoogleCalendarUrl(ev);
-      const mapsUrl = ev.location ? createGoogleMapsUrl(ev.location) : '';
-
-      // Event Title (Clean text, NOT clickable as requested)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-      const cleanTitle = cleanPdfText(ev.title);
-      const title = cleanTitle.length > 34 ? cleanTitle.slice(0, 32) + '…' : cleanTitle;
-      doc.text(title, colX.title, currentY + 4.5);
-
+      const titleLines = fitLines(cleanPdfText(ev.title), titleColW, 2);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
-      doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-      const cleanDesc = cleanPdfText(ev.description || '').replace(/\n/g, ' ');
-      const desc = cleanDesc.slice(0, 50) + (cleanDesc.length > 50 ? '…' : '');
-      doc.text(desc, colX.title, currentY + 8.5);
+      const descLine = fitLines(cleanPdfText(ev.description || ''), titleColW, 1)[0] || '';
+      doc.setFont('helvetica', 'bold');
+      const alsoOnLines: string[] = alsoOn ? doc.splitTextToSize(`Also on: ${alsoOn}`, titleColW) : [];
+      const titleBlockH = titleLines.length * 3.6;
+      const rowHeight = Math.max(13, 4.8 + titleBlockH + (descLine ? 3.2 : 0) + alsoOnLines.length * 3 + 2.4);
 
-      // Venue (Clickable to Google Maps)
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(2, 132, 199); // Maps Link Blue
-      const cleanLoc = cleanPdfText(ev.location || '');
-      const venue = cleanLoc.length > 25 ? cleanLoc.slice(0, 23) + '…' : cleanLoc;
-      doc.text(venue, colX.venue, currentY + 5);
-      if (mapsUrl && venue) {
-        doc.link(colX.venue, currentY + 1, 38, 5, { url: mapsUrl });
+      const weekIndex = showWeekBanners ? getWeekIndex(toDate(ev.date) || periodStart) : 0;
+      const needsBanner = showWeekBanners && weekIndex !== lastWeekIndex;
+      const bannerH = needsBanner ? WEEK_BANNER_H : 0;
+
+      if (currentY + bannerH + rowHeight > contentBottom) {
+        currentY = newPage();
+        drawTableHeader(currentY);
+        currentY += headerH;
       }
 
-      // Category
+      if (needsBanner) {
+        lastWeekIndex = weekIndex;
+        currentY += 1.5;
+        drawWeekBanner(weekIndex, currentY);
+        currentY += WEEK_BANNER_H - 1.5;
+      }
+
+      // Row background & separator
+      if (i % 2 === 1) {
+        setFill(BG_LIGHT);
+        doc.rect(margin, currentY, contentWidth, rowHeight, 'F');
+      }
+      setDraw(BORDER_LIGHT);
+      doc.setLineWidth(0.2);
+      doc.line(margin, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
+
+      // Date (multi-day aware) & time
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      setColor(SLATE_DARK);
+      doc.text(formatEventDateDisplay(ev.date, ev.endDate), colX.date, currentY + 5);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      setColor(CCP_GREEN);
+      doc.text(formatEventTime(ev.date, ev.endDate), colX.time, currentY + 5);
+
+      // Title, description and extra dates
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      setColor(SLATE_DARK);
+      doc.text(titleLines, colX.title, currentY + 4.8, { lineHeightFactor: 1.27 });
+      let lineY = currentY + 4.8 + titleBlockH;
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
-      doc.setTextColor(CCP_RED[0], CCP_RED[1], CCP_RED[2]);
-      const cleanCat = cleanPdfText(ev.category || 'Event');
-      const catLines = doc.splitTextToSize(cleanCat, 24);
-      doc.text(catLines[0], colX.category, currentY + 5);
+      setColor(SLATE_MUTED);
+      if (descLine) {
+        doc.text(descLine, colX.title, lineY);
+        lineY += 3.2;
+      }
 
-      // Calendar quick links in Compact format
-      if (options.includeCalendarButtons !== false) {
+      if (alsoOnLines.length > 0) {
+        doc.setFont('helvetica', 'bold');
+        setColor(CCP_RED);
+        doc.text(alsoOnLines, colX.title, lineY, { lineHeightFactor: 1.3 });
+      }
+
+      // Venue (clickable to Google Maps)
+      const cleanLoc = cleanPdfText(ev.location || '');
+      if (cleanLoc) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(2, 132, 199);
+        const venueLines: string[] = doc.splitTextToSize(cleanLoc, colX.category - colX.venue - 3).slice(0, 2);
+        doc.text(venueLines, colX.venue, currentY + 5, { lineHeightFactor: 1.3 });
+        doc.link(colX.venue, currentY + 1.5, colX.category - colX.venue - 3, venueLines.length * 3.2 + 1, { url: createGoogleMapsUrl(ev.location) });
+      }
+
+      // Category with colour dot
+      const catColor = getCategoryColor(ev.category);
+      setFill(catColor);
+      doc.circle(colX.category + 0.8, currentY + 4.1, 0.8, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      setColor(catColor);
+      const catLine = doc.splitTextToSize(cleanPdfText(ev.category || 'Event'), margin + contentWidth - colX.category - 4)[0] || '';
+      doc.text(catLine, colX.category + 2.4, currentY + 5);
+
+      // Calendar quick links
+      if (showCalendarButtons) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6);
-        doc.setTextColor(OUTLOOK_BLUE[0], OUTLOOK_BLUE[1], OUTLOOK_BLUE[2]);
-        doc.text('+Outlook', colX.category, currentY + 9.5);
-        doc.link(colX.category, currentY + 7, 9, 4, { url: outlookUrl });
+        setColor(OUTLOOK_BLUE);
+        doc.text('+ Outlook', colX.category, currentY + 9.5);
+        doc.link(colX.category, currentY + 7, 10, 4, { url: createOutlookWebUrl(ev) });
 
-        doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-        doc.text('•', colX.category + 9.8, currentY + 9.5);
+        setColor(SLATE_MUTED);
+        doc.text('·', colX.category + 10.6, currentY + 9.5);
 
-        doc.setTextColor(GOOGLE_BLUE[0], GOOGLE_BLUE[1], GOOGLE_BLUE[2]);
-        doc.text('+Google', colX.category + 12.2, currentY + 9.5);
-        doc.link(colX.category + 12.2, currentY + 7, 9, 4, { url: googleUrl });
+        setColor(GOOGLE_BLUE);
+        doc.text('+ Google', colX.category + 12.4, currentY + 9.5);
+        doc.link(colX.category + 12.4, currentY + 7, 10, 4, { url: createGoogleCalendarUrl(ev) });
       }
 
       currentY += rowHeight;
-    }
+    });
   }
 
-  // Draw footer on last page
-  drawFooter(currentPage);
+  drawFooters();
 
   // Save the PDF
-  const validStart = toDate(options.startDate) || new Date();
-  const filename = `CCP-Events-Digest-${formatLocalDate(validStart)}.pdf`;
-  doc.save(filename);
+  doc.save(`CCP-Events-Digest-${formatLocalDate(periodStart)}.pdf`);
 };
 export const generateFortnightlyPDF = generateEventsDigestPDF;
 

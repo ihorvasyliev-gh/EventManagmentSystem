@@ -2,11 +2,21 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Event, ViewMode, EventCategory, UserRole } from '../types';
 import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { ChevronLeft, ChevronRight, Grid, List as ListIcon, MapPin, Clock, Plus, ChevronDown } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Grid,
+  Calendar as CalendarIcon,
+  List as ListIcon,
+  MapPin,
+  Clock,
+  Plus,
+  ChevronDown,
+  X
+} from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMedia } from '../hooks/useMedia';
-
-const LIST_VIEW_BATCH_SIZE = 50;
+import WeekView, { getCategoryColor, getCategoryDotColor } from './WeekView';
 
 const isMultiDayEvent = (event: Event): boolean => {
   if (!event.endDate) return false;
@@ -35,6 +45,21 @@ const formatEventRangeText = (event: Event): string => {
   return `${sStr} – ${eStr}`;
 };
 
+const formatWeekRange = (start: Date, end: Date): string => {
+  const startMonth = start.toLocaleDateString('default', { month: 'short' });
+  const endMonth = end.toLocaleDateString('default', { month: 'short' });
+  const startYear = start.getFullYear();
+  const endYear = end.getFullYear();
+
+  if (startYear !== endYear) {
+    return `${startMonth} ${start.getDate()}, ${startYear} – ${endMonth} ${end.getDate()}, ${endYear}`;
+  }
+  if (startMonth !== endMonth) {
+    return `${startMonth} ${start.getDate()} – ${endMonth} ${end.getDate()}, ${startYear}`;
+  }
+  return `${startMonth} ${start.getDate()} – ${end.getDate()}, ${startYear}`;
+};
+
 interface CalendarViewProps {
   events: Event[];
   onEventClick: (event: Event) => void;
@@ -44,9 +69,19 @@ interface CalendarViewProps {
   userRole?: UserRole;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPrefetchMonth, onAddEventForDate, recurrenceExceptions, userRole }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({
+  events,
+  onEventClick,
+  onPrefetchMonth,
+  onAddEventForDate,
+  recurrenceExceptions,
+  userRole
+}) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [showPastEvents, setShowPastEvents] = useState(false);
+  const [popoverDay, setPopoverDay] = useState<Date | null>(null);
+  const [selectedMobileDay, setSelectedMobileDay] = useState<Date | null>(null);
   const { theme } = useTheme();
 
   // Mobile detection
@@ -60,6 +95,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
       setViewMode('grid');
     }
   }, [isMobile]);
+
+  // Reset day details popover/drawer when currentDate changes
+  useEffect(() => {
+    setPopoverDay(null);
+    setSelectedMobileDay(null);
+  }, [currentDate]);
 
   // Swipe Gestures
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -76,32 +117,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
     setTouchEnd(e.targetTouches[0].clientX);
   };
 
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe) {
-      setSwipeHint('left');
-      nextMonth();
-      setTimeout(() => setSwipeHint(null), 180);
-    }
-    if (isRightSwipe) {
-      setSwipeHint('right');
-      prevMonth();
-      setTimeout(() => setSwipeHint(null), 180);
-    }
-  };
-
   const daysInMonth = getDaysInMonth(currentDate);
   const firstDay = getFirstDayOfMonth(currentDate);
 
-  // Month navigation - memoized callbacks
+  // Week computation
+  const weekStart = useMemo(() => {
+    const d = new Date(currentDate);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff, 0, 0, 0, 0);
+  }, [currentDate]);
+
+  const weekEnd = useMemo(() => {
+    const end = new Date(weekStart);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }, [weekStart]);
+
+  // Period navigation
   const nextMonth = useCallback(() => {
     setCurrentDate(prev => {
       const next = addMonths(prev, 1);
-      // Prefetch next month on navigation
       if (onPrefetchMonth) {
         onPrefetchMonth(addMonths(next, 1));
       }
@@ -111,16 +148,57 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
 
   const prevMonth = useCallback(() => {
     setCurrentDate(prev => {
-      const prevMonth = addMonths(prev, -1);
-      // Prefetch previous month on navigation
+      const prevM = addMonths(prev, -1);
       if (onPrefetchMonth) {
-        onPrefetchMonth(addMonths(prevMonth, -1));
+        onPrefetchMonth(addMonths(prevM, -1));
       }
-      return prevMonth;
+      return prevM;
     });
   }, [onPrefetchMonth]);
 
+  const prevPeriod = useCallback(() => {
+    if (viewMode === 'week') {
+      setCurrentDate(prev => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() - 7);
+        return next;
+      });
+    } else {
+      prevMonth();
+    }
+  }, [viewMode, prevMonth]);
+
+  const nextPeriod = useCallback(() => {
+    if (viewMode === 'week') {
+      setCurrentDate(prev => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + 7);
+        return next;
+      });
+    } else {
+      nextMonth();
+    }
+  }, [viewMode, nextMonth]);
+
   const goToday = useCallback(() => setCurrentDate(new Date()), []);
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      setSwipeHint('left');
+      nextPeriod();
+      setTimeout(() => setSwipeHint(null), 180);
+    }
+    if (isRightSwipe) {
+      setSwipeHint('right');
+      prevPeriod();
+      setTimeout(() => setSwipeHint(null), 180);
+    }
+  };
 
   useEffect(() => {
     const handleCalendarKeyDown = (e: KeyboardEvent) => {
@@ -129,9 +207,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
         return;
       }
       if (e.key === 'ArrowLeft') {
-        prevMonth();
+        prevPeriod();
       } else if (e.key === 'ArrowRight') {
-        nextMonth();
+        nextPeriod();
       } else if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey) {
         goToday();
       }
@@ -139,34 +217,30 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
 
     window.addEventListener('keydown', handleCalendarKeyDown);
     return () => window.removeEventListener('keydown', handleCalendarKeyDown);
-  }, [prevMonth, nextMonth, goToday]);
+  }, [prevPeriod, nextPeriod, goToday]);
 
-  // Prefetch next/previous month on hover over navigation buttons
-  const handleNextMonthHover = useCallback(() => {
-    if (onPrefetchMonth) {
-      const nextMonthDate = addMonths(currentDate, 1);
-      onPrefetchMonth(nextMonthDate);
-    }
-  }, [currentDate, onPrefetchMonth]);
-
-  const handlePrevMonthHover = useCallback(() => {
-    if (onPrefetchMonth) {
+  const handlePrevPeriodHover = useCallback(() => {
+    if (onPrefetchMonth && viewMode !== 'week') {
       const prevMonthDate = addMonths(currentDate, -1);
       onPrefetchMonth(prevMonthDate);
     }
-  }, [currentDate, onPrefetchMonth]);
+  }, [currentDate, onPrefetchMonth, viewMode]);
+
+  const handleNextPeriodHover = useCallback(() => {
+    if (onPrefetchMonth && viewMode !== 'week') {
+      const nextMonthDate = addMonths(currentDate, 1);
+      onPrefetchMonth(nextMonthDate);
+    }
+  }, [currentDate, onPrefetchMonth, viewMode]);
 
   // Grid Data Generation
   const calendarDays = useMemo(() => {
     const days = [];
-    // Adjust firstDay to make Monday 0, Sunday 6
     const adjustedFirstDay = firstDay === 0 ? 6 : firstDay - 1;
 
-    // Padding for empty start days
     for (let i = 0; i < adjustedFirstDay; i++) {
       days.push(null);
     }
-    // Actual days
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(new Date(currentDate.getFullYear(), currentDate.getMonth(), i));
     }
@@ -175,22 +249,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
 
   const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-  // Get start and end of current month view
-  const monthStart = useMemo(() => {
-    return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-  }, [currentDate]);
+  const headerTitle = useMemo(() => {
+    if (viewMode === 'week') {
+      return formatWeekRange(weekStart, weekEnd);
+    }
+    return monthName;
+  }, [viewMode, weekStart, weekEnd, monthName]);
 
-  const monthEnd = useMemo(() => {
-    return new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
-  }, [currentDate]);
+  // Date range for expanding recurring events (covers month and week boundaries)
+  const rangeStart = useMemo(() => {
+    const mStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    return weekStart < mStart ? weekStart : mStart;
+  }, [currentDate, weekStart]);
 
-  // Expand recurring events for the current month view
+  const rangeEnd = useMemo(() => {
+    const mEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
+    return weekEnd > mEnd ? weekEnd : mEnd;
+  }, [currentDate, weekEnd]);
+
+  // Expand recurring events
   const displayEvents = useMemo(() => {
-    // Expand recurring events with exceptions
-    const expanded = expandRecurringEvents(events, monthStart, monthEnd, recurrenceExceptions);
-    // Sort by date
+    const expanded = expandRecurringEvents(events, rangeStart, rangeEnd, recurrenceExceptions);
     return expanded.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [events, monthStart, monthEnd, recurrenceExceptions]);
+  }, [events, rangeStart, rangeEnd, recurrenceExceptions]);
 
   const toDayKey = (d: Date): string => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -217,50 +298,161 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
     return map;
   }, [displayEvents]);
 
-  // For List View: Filter out past events (strictly before now) AND limit to current month
+  // For Agenda / List View: Filter to current month
   const listViewEvents = useMemo(() => {
     return displayEvents.filter(e => {
-      // Return events that belong to the currently selected month
       return e.date.getMonth() === currentDate.getMonth() && e.date.getFullYear() === currentDate.getFullYear();
     });
   }, [displayEvents, currentDate]);
 
-  // List view virtualization: show first N items, then "Show more"
-  const [visibleListCount, setVisibleListCount] = useState(LIST_VIEW_BATCH_SIZE);
-  useEffect(() => {
-    setVisibleListCount(LIST_VIEW_BATCH_SIZE);
-  }, [currentDate, listViewEvents.length]);
-  const visibleListEvents = useMemo(
-    () => listViewEvents.slice(0, visibleListCount),
-    [listViewEvents, visibleListCount]
-  );
-  const hasMoreListEvents = listViewEvents.length > visibleListCount;
-  const showMoreListEvents = useCallback(() => {
-    setVisibleListCount(prev => Math.min(prev + LIST_VIEW_BATCH_SIZE, listViewEvents.length));
-  }, [listViewEvents.length]);
+  // Split month's events into upcoming (>= today midnight or ending today) and past (concluded strictly before today)
+  const startOfToday = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  }, []);
 
+  const { upcomingEvents, pastEvents } = useMemo(() => {
+    const upcoming: Event[] = [];
+    const past: Event[] = [];
 
-  const getCategoryColor = (category?: EventCategory) => {
-    if (!category) return 'bg-brand-50 text-brand-800 dark:bg-brand-900 dark:text-brand-100';
+    for (const ev of listViewEvents) {
+      const s = new Date(ev.date);
+      const isMulti = isMultiDayEvent(ev);
+      const e = ev.endDate && isMulti ? new Date(ev.endDate) : (ev.endDate ? new Date(ev.endDate) : s);
 
-    const colors: Record<string, string> = {
-      'Enterprise & Employment': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
-      'Community & Family': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100',
-      'Education & Training': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
-      'Special Visits & Celebrations': 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
-      'Public Information Session': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-100',
-      'Health & Wellbeing': 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-100',
-      'Other': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100',
-      // Legacy categories for backward compatibility
-      meeting: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
-      workshop: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
-      social: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-100',
-      training: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100',
-      community: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100',
-      celebration: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
-      other: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
-    };
-    return colors[category] || colors.Other || colors.other;
+      if (e < startOfToday) {
+        past.push(ev);
+      } else {
+        upcoming.push(ev);
+      }
+    }
+
+    upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    past.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    return { upcomingEvents: upcoming, pastEvents: past };
+  }, [listViewEvents, startOfToday]);
+
+  const selectedMobileDayEvents = useMemo(() => {
+    if (!selectedMobileDay) return [];
+    return eventsByDayKey.get(toDayKey(selectedMobileDay)) || [];
+  }, [selectedMobileDay, eventsByDayKey]);
+
+  const popoverDayEvents = useMemo(() => {
+    if (!popoverDay) return [];
+    return eventsByDayKey.get(toDayKey(popoverDay)) || [];
+  }, [popoverDay, eventsByDayKey]);
+
+  // Helper to render agenda day groups
+  const renderAgendaDayGroups = (eventList: Event[], isMuted = false) => {
+    const groups = new Map<string, Event[]>();
+    for (const event of eventList) {
+      const dateKey = event.date.toDateString();
+      if (!groups.has(dateKey)) {
+        groups.set(dateKey, []);
+      }
+      groups.get(dateKey)!.push(event);
+    }
+
+    return Array.from(groups.entries()).map(([dateKey, dayEvents]) => {
+      const date = new Date(dateKey);
+      const isToday = isSameDay(date, new Date());
+      const dayOfWeek = date.toLocaleDateString('default', { weekday: 'short' });
+      const month = date.toLocaleDateString('default', { month: 'short' });
+
+      return (
+        <div key={dateKey} className={isMuted ? 'opacity-75' : ''}>
+          {/* Day Header */}
+          <div className={`sticky top-0 z-10 px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/30' : 'bg-slate-50 dark:bg-slate-800/50'} backdrop-blur-sm`}>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-2xl sm:text-3xl font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-900 dark:text-white'}`}>
+                {date.getDate()}
+              </span>
+              <div className="flex flex-col">
+                <span className={`text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {dayOfWeek}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                  {month}
+                </span>
+              </div>
+            </div>
+            {isToday && (
+              <span className="ml-auto px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 dark:bg-brand-400 text-white dark:text-slate-900 rounded-full">
+                Today
+              </span>
+            )}
+          </div>
+
+          {/* Events for this day */}
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {dayEvents.map(event => {
+              const colorClass = getCategoryColor(event.category);
+              const isMulti = isMultiDayEvent(event);
+
+              return (
+                <div
+                  key={event.instanceKey ?? event.id}
+                  onClick={() => onEventClick(event)}
+                  className="p-3 sm:p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group touch-manipulation min-h-[44px]"
+                >
+                  <div className="flex gap-3 items-start">
+                    {/* Time */}
+                    <div className="flex-shrink-0 w-16 sm:w-20 text-right">
+                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
+                        {event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      {isMulti && event.endDate ? (
+                        <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold whitespace-nowrap">
+                          until {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                        </div>
+                      ) : event.endDate ? (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                          to {event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {/* Event Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        <div className={`w-1 h-full min-h-[2.5rem] rounded-full ${colorClass}`}></div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
+                              {event.category || 'Event'}
+                            </span>
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                              {event.title}
+                            </h3>
+                          </div>
+                          {isMulti && event.endDate && (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                              <span>🗓 {event.date.toLocaleDateString([], { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                            </div>
+                          )}
+                          {event.description && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
+                              {event.description}
+                            </p>
+                          )}
+                          {event.location && (
+                            <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 mt-1">
+                              <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                              <span className="truncate">{event.location}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    });
   };
 
   return (
@@ -270,31 +462,35 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-
-      {/* Calendar Header */}
+      {/* Calendar Header with 3-Way Switcher */}
       <div className="p-3 sm:p-6 flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 dark:border-slate-800 gap-2 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-start">
-          <h2 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:w-48 truncate">{monthName}</h2>
+          <h2 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:min-w-48 truncate">
+            {headerTitle}
+          </h2>
           <div className="flex items-center gap-1.5 sm:gap-4">
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
               <button
-                onClick={prevMonth}
-                onMouseEnter={handlePrevMonthHover}
+                type="button"
+                onClick={prevPeriod}
+                onMouseEnter={handlePrevPeriodHover}
                 className="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-500 dark:text-slate-400 transition-all shadow-sm"
-                aria-label="Previous month"
+                aria-label={viewMode === 'week' ? 'Previous week' : 'Previous month'}
               >
                 <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
               </button>
               <button
-                onClick={nextMonth}
-                onMouseEnter={handleNextMonthHover}
+                type="button"
+                onClick={nextPeriod}
+                onMouseEnter={handleNextPeriodHover}
                 className="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-500 dark:text-slate-400 transition-all shadow-sm"
-                aria-label="Next month"
+                aria-label={viewMode === 'week' ? 'Next week' : 'Next month'}
               >
                 <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
               </button>
             </div>
             <button
+              type="button"
               onClick={goToday}
               className="px-2.5 py-2 sm:px-3 sm:py-0 min-h-[44px] sm:min-h-0 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
             >
@@ -303,17 +499,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
           </div>
         </div>
 
+        {/* 3-Way Segmented Switcher (Month, Week, Agenda) */}
         <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg w-full sm:w-auto">
           <button
+            type="button"
             onClick={() => setViewMode('grid')}
-            className={`flex-1 sm:flex-none px-4 py-2 sm:px-3 sm:py-1.5 min-h-[44px] sm:min-h-0 rounded-md flex items-center justify-center gap-2 text-xs sm:text-sm font-medium transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 rounded-md flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
           >
             <Grid className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            <span>Grid</span>
+            <span>Month</span>
           </button>
           <button
+            type="button"
+            onClick={() => setViewMode('week')}
+            className={`flex-1 sm:flex-none px-3 sm:px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 rounded-md flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium transition-all ${viewMode === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+          >
+            <CalendarIcon className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span>Week</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setViewMode('agenda')}
-            className={`flex-1 sm:flex-none px-4 py-2 sm:px-3 sm:py-1.5 min-h-[44px] sm:min-h-0 rounded-md flex items-center justify-center gap-2 text-xs sm:text-sm font-medium transition-all ${viewMode === 'agenda' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 rounded-md flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium transition-all ${viewMode === 'agenda' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
           >
             <ListIcon className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span>Agenda</span>
@@ -321,7 +528,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
         </div>
       </div>
 
-      {/* Grid View */}
+      {/* Week View */}
+      {viewMode === 'week' && (
+        <div className={`transition-transform duration-150 ${swipeHint === 'left' ? '-translate-x-1' : swipeHint === 'right' ? 'translate-x-1' : ''}`}>
+          <div key={`week-${weekStart.toISOString()}`} className="animate-fade-in">
+            <WeekView
+              currentDate={currentDate}
+              events={displayEvents}
+              onEventClick={onEventClick}
+              onAddEventForDate={onAddEventForDate}
+              userRole={userRole}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Month Grid View */}
       {viewMode === 'grid' && (
         <div className={`p-2 sm:p-6 transition-transform duration-150 ${swipeHint === 'left' ? '-translate-x-1' : swipeHint === 'right' ? 'translate-x-1' : ''}`}>
           <div key={`month-${currentDate.getFullYear()}-${currentDate.getMonth()}`} className="animate-fade-in">
@@ -334,18 +556,35 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
             </div>
             <div className="grid grid-cols-7 border-t border-l border-slate-100 dark:border-slate-800">
               {calendarDays.map((day, idx) => {
-                if (!day) return <div key={`empty-${idx}`} className="min-h-[5rem] sm:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
+                if (!day) return <div key={`empty-${idx}`} className="min-h-[4.5rem] sm:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
 
                 const dayEvents = day ? (eventsByDayKey.get(toDayKey(day)) || []) : [];
                 const isToday = isSameDay(day, new Date());
+                const isSelectedMobile = isMobile && selectedMobileDay && isSameDay(day, selectedMobileDay);
                 const hasEvents = dayEvents.length > 0;
 
                 return (
-                  <div key={day.toISOString()} className={`min-h-[5rem] sm:min-h-[8rem] group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-2 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50 ${isToday ? 'bg-brand-50 dark:bg-brand-900/50 ring-2 ring-brand-500 dark:ring-brand-400 ring-inset shadow-sm dark:shadow-brand-900/20' : 'bg-white dark:bg-slate-900/0'}`}>
+                  <div
+                    key={day.toISOString()}
+                    onClick={() => {
+                      if (isMobile) {
+                        setSelectedMobileDay(prev => (prev && isSameDay(prev, day) ? null : day));
+                      }
+                    }}
+                    className={`min-h-[4.5rem] sm:min-h-[8rem] group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-2 transition-colors ${
+                      isMobile ? 'cursor-pointer active:bg-slate-100 dark:active:bg-slate-800/60' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/50'
+                    } ${
+                      isSelectedMobile
+                        ? 'bg-brand-50/70 dark:bg-brand-900/30 ring-2 ring-brand-500 ring-inset'
+                        : isToday
+                        ? 'bg-brand-50/50 dark:bg-brand-900/40 ring-2 ring-brand-500/80 dark:ring-brand-400/80 ring-inset'
+                        : 'bg-white dark:bg-slate-900/0'
+                    }`}
+                  >
                     <div className={`flex items-center ${isMobile ? 'justify-center' : 'justify-between'} gap-1 mb-1 sm:mb-2 ${isToday ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500'}`}>
                       <span className="text-xs sm:text-sm font-semibold">
                         {isToday ? (
-                          <span className="bg-brand-500 dark:bg-brand-400 text-white dark:text-slate-900 px-2 py-1 rounded-full font-bold text-sm shadow-sm">{day.getDate()}</span>
+                          <span className="bg-brand-500 dark:bg-brand-400 text-white dark:text-slate-900 px-2 py-0.5 sm:py-1 rounded-full font-bold text-xs sm:text-sm shadow-sm">{day.getDate()}</span>
                         ) : (
                           day.getDate()
                         )}
@@ -363,45 +602,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                       )}
                     </div>
 
-                    {/* Mobile: Show colored chips with text, Desktop: Show event names */}
+                    {/* Mobile: Category dots + count pill (No 3-letter truncations) */}
                     {isMobile ? (
-                      <div className="flex flex-col items-center justify-center gap-1">
+                      <div className="flex flex-col items-center justify-center gap-1 mt-1">
                         {hasEvents && (
-                          <div className="flex flex-col gap-0.5 w-full px-0.5">
-                            {dayEvents.slice(0, 3).map(ev => {
-                              const colorClass = getCategoryColor(ev.category);
-                              // Get first 2-3 letters of title, max 3 chars
-                              const shortTitle = ev.title.slice(0, 3).toUpperCase();
-                              const rangeStr = formatEventRangeText(ev);
-                              const itemTitle = rangeStr ? `${ev.title} (${rangeStr})` : ev.title;
-                              return (
-                                <div
-                                  key={ev.instanceKey ?? ev.id}
-                                  onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
-                                  className={`w-full px-1.5 py-0.5 rounded-md ${colorClass} cursor-pointer transition-all active:scale-95 active:shadow-sm text-center touch-manipulation`}
-                                  title={itemTitle}
-                                >
-                                  <span className="text-[9px] font-bold tracking-tight">
-                                    {shortTitle}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                          <div className="flex items-center justify-center gap-1 flex-wrap max-w-full px-0.5">
+                            {dayEvents.slice(0, 3).map((ev, i) => (
+                              <span
+                                key={ev.instanceKey ?? `${ev.id}-${i}`}
+                                className={`w-2 h-2 rounded-full ${getCategoryDotColor(ev.category)}`}
+                              />
+                            ))}
                           </div>
                         )}
                         {dayEvents.length > 3 && (
-                          <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400">
                             +{dayEvents.length - 3}
-                          </div>
+                          </span>
                         )}
                       </div>
                     ) : (
+                      /* Desktop: Event pills with time, full title, and +N more popover trigger */
                       <div className="space-y-0.5 sm:space-y-1">
-                        {dayEvents.map(ev => {
+                        {dayEvents.slice(0, 3).map(ev => {
                           const colorClass = getCategoryColor(ev.category);
                           const statusClass = ev.status === 'draft' ? 'opacity-70 dashed-border' : '';
                           const rangeStr = formatEventRangeText(ev);
                           const itemTitle = rangeStr ? `${ev.title} (${rangeStr})` : ev.title;
+                          const timeStr = ev.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                           return (
                             <div
@@ -410,22 +638,117 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
                               className={`w-full text-left ${colorClass} text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-[4px] truncate font-medium transition-all hover:opacity-80 cursor-pointer touch-manipulation ${statusClass}`}
                               title={itemTitle}
                             >
+                              <span className="font-bold mr-1 opacity-80">{timeStr}</span>
                               {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                               {ev.title}
                             </div>
                           );
                         })}
+                        {dayEvents.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPopoverDay(day);
+                            }}
+                            className="w-full text-left text-[9px] sm:text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 py-0.5 px-1 rounded hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
+                          >
+                            +{dayEvents.length - 3} more
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
+
+            {/* Mobile: Tapping a day displays clean card section below the grid */}
+            {isMobile && selectedMobileDay && (
+              <div className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 animate-fade-in">
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">
+                      {selectedMobileDay.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      ({selectedMobileDayEvents.length} {selectedMobileDayEvents.length === 1 ? 'event' : 'events'})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {onAddEventForDate && userRole === UserRole.ADMIN && (
+                      <button
+                        type="button"
+                        onClick={() => onAddEventForDate(selectedMobileDay)}
+                        className="px-2 py-1 rounded-lg text-xs font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 transition-colors"
+                      >
+                        + Add
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMobileDay(null)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md"
+                      aria-label="Close day events"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {selectedMobileDayEvents.length === 0 ? (
+                    <div className="py-4 text-center text-xs italic text-slate-400">
+                      No events scheduled for this day
+                    </div>
+                  ) : (
+                    selectedMobileDayEvents.map(event => {
+                      const colorClass = getCategoryColor(event.category);
+                      const isMulti = isMultiDayEvent(event);
+                      const timeStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const endStr = event.endDate
+                        ? isMulti
+                          ? `until ${event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
+                          : event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '';
+
+                      return (
+                        <div
+                          key={event.instanceKey ?? event.id}
+                          onClick={() => onEventClick(event)}
+                          className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm active:scale-[0.99] transition-all cursor-pointer space-y-1.5 touch-manipulation min-h-[44px]"
+                        >
+                          <div className="flex items-center justify-between gap-1 flex-wrap">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+                              {event.category || 'Event'}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {timeStr} {endStr && `– ${endStr}`}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                            {isMulti && <span className="mr-1 text-brand-600 dark:text-brand-400 font-bold">↔</span>}
+                            {event.title}
+                          </h4>
+                          {event.location && (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                              <span className="truncate">{event.location}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Agenda View - Optimized for Mobile */}
+      {/* Agenda View */}
       {viewMode === 'agenda' && (
         <div className={`transition-transform duration-150 ${swipeHint === 'left' ? '-translate-x-1' : swipeHint === 'right' ? 'translate-x-1' : ''}`}>
           <div key={`agenda-${currentDate.getFullYear()}-${currentDate.getMonth()}`} className="animate-fade-in">
@@ -433,122 +756,133 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onEventClick, onPre
               <div className="p-8 sm:p-12 text-center text-slate-400 text-sm">No events this month.</div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {/* Group events by day */}
-                {Array.from(
-                  visibleListEvents.reduce((groups, event) => {
-                    const dateKey = event.date.toDateString();
-                    if (!groups.has(dateKey)) {
-                      groups.set(dateKey, []);
-                    }
-                    groups.get(dateKey)!.push(event);
-                    return groups;
-                  }, new Map<string, Event[]>())
-                ).map(([dateKey, dayEvents]) => {
-                  const date = new Date(dateKey);
-                  const isToday = isSameDay(date, new Date());
-                  const isPast = date < new Date() && !isToday;
-                  const dayOfWeek = date.toLocaleDateString('default', { weekday: 'short' });
-                  const month = date.toLocaleDateString('default', { month: 'short' });
+                {upcomingEvents.length === 0 && pastEvents.length > 0 && (
+                  <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-sm italic">
+                    No upcoming events this month.
+                  </div>
+                )}
 
-                  return (
-                    <div key={dateKey} className={`${isPast ? 'opacity-60' : ''}`}>
-                      {/* Day Header */}
-                      <div className={`sticky top-0 z-10 px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/30' : 'bg-slate-50 dark:bg-slate-800/50'} backdrop-blur-sm`}>
-                        <div className="flex items-baseline gap-2">
-                          <span className={`text-2xl sm:text-3xl font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-900 dark:text-white'}`}>
-                            {date.getDate()}
-                          </span>
-                          <div className="flex flex-col">
-                            <span className={`text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                              {dayOfWeek}
-                            </span>
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                              {month}
-                            </span>
-                          </div>
-                        </div>
-                        {isToday && (
-                          <span className="ml-auto px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 dark:bg-brand-400 text-white dark:text-slate-900 rounded-full">
-                            Today
-                          </span>
-                        )}
-                      </div>
+                {/* Upcoming Events in chronological order */}
+                {upcomingEvents.length > 0 && renderAgendaDayGroups(upcomingEvents, false)}
 
-                      {/* Events for this day */}
-                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {dayEvents.map(event => {
-                          const colorClass = getCategoryColor(event.category);
-                          const isMulti = isMultiDayEvent(event);
-                          return (
-                            <div
-                              key={event.instanceKey ?? event.id}
-                              onClick={() => onEventClick(event)}
-                              className="p-3 sm:p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group touch-manipulation"
-                            >
-                              <div className="flex gap-3 items-start">
-                                {/* Time */}
-                                <div className="flex-shrink-0 w-16 sm:w-20 text-right">
-                                  <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                                    {event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </div>
-                                  {isMulti && event.endDate ? (
-                                    <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold whitespace-nowrap">
-                                      until {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}
-                                    </div>
-                                  ) : event.endDate ? (
-                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                                      to {event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </div>
-                                  ) : null}
-                                </div>
-
-                                {/* Event Details */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start gap-2">
-                                    <div className={`w-1 h-full min-h-[2.5rem] rounded-full ${colorClass}`}></div>
-                                    <div className="flex-1 min-w-0">
-                                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                                        {event.title}
-                                      </h3>
-                                      {isMulti && event.endDate && (
-                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                                          <span>🗓 {event.date.toLocaleDateString([], { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
-                                        </div>
-                                      )}
-                                      {event.description && (
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
-                                          {event.description}
-                                        </p>
-                                      )}
-                                      {event.location && (
-                                        <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                          <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                                          <span className="truncate">{event.location}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                {/* Past Events Collapsible Section at the bottom */}
+                {pastEvents.length > 0 && (
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-3 pb-4">
+                    <div className="px-3 sm:px-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowPastEvents(prev => !prev)}
+                        className="w-full flex items-center justify-between px-4 py-3 min-h-[44px] bg-slate-100/70 hover:bg-slate-100 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold transition-all touch-manipulation shadow-xs"
+                        aria-expanded={showPastEvents}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-slate-400" />
+                          <span>{showPastEvents ? 'Hide' : 'Show'} Past Events ({pastEvents.length})</span>
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showPastEvents ? 'rotate-180' : ''}`} />
+                      </button>
                     </div>
-                  );
-                })}
-                {hasMoreListEvents && (
-                  <div className="p-4 text-center">
-                    <button
-                      onClick={showMoreListEvents}
-                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      Show more events ({listViewEvents.length - visibleListCount} remaining)
-                    </button>
+
+                    {showPastEvents && (
+                      <div className="mt-3 opacity-80 divide-y divide-slate-100 dark:divide-slate-800">
+                        {renderAgendaDayGroups(pastEvents, true)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Month Grid: Day Event Popover Modal */}
+      {popoverDay && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in"
+          onClick={() => setPopoverDay(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {popoverDay.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {popoverDayEvents.length} {popoverDayEvents.length === 1 ? 'event' : 'events'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                {onAddEventForDate && userRole === UserRole.ADMIN && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAddEventForDate(popoverDay);
+                      setPopoverDay(null);
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 hover:bg-brand-100 flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPopoverDay(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 flex-1">
+              {popoverDayEvents.map(ev => {
+                const colorClass = getCategoryColor(ev.category);
+                const isMulti = isMultiDayEvent(ev);
+                const timeStr = ev.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const endStr = ev.endDate
+                  ? isMulti
+                    ? `until ${ev.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
+                    : ev.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : '';
+
+                return (
+                  <div
+                    key={ev.instanceKey ?? ev.id}
+                    onClick={() => {
+                      onEventClick(ev);
+                      setPopoverDay(null);
+                    }}
+                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 shadow-xs hover:shadow hover:border-brand-400 dark:hover:border-brand-500 transition-all cursor-pointer space-y-1.5 min-h-[44px]"
+                  >
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+                        {ev.category || 'Event'}
+                      </span>
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        {timeStr} {endStr && `– ${endStr}`}
+                      </span>
+                    </div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {isMulti && <span className="mr-1 text-brand-600 dark:text-brand-400 font-bold">↔</span>}
+                      {ev.title}
+                    </h4>
+                    {ev.location && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                        <span className="truncate">{ev.location}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

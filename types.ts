@@ -90,7 +90,7 @@ export interface Event {
   updatedAt?: Date;
 }
 
-export type ViewMode = 'grid' | 'list' | 'agenda';
+export type ViewMode = 'grid' | 'week' | 'agenda';
 
 export interface EventFilters {
   search?: string;

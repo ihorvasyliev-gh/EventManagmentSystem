@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { Event } from '../types';
-import { exportToICal, exportToExcel, downloadFile, downloadBlob } from '../utils/export';
+import { exportToICal, exportToExcel, downloadFile, downloadBlob, isPublished } from '../utils/export';
 import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import ModalShell from './ModalShell';
@@ -75,7 +75,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
       const expanded = expandRecurringEvents(eventsWithRelated, rangeStart, rangeEnd, exceptionsMap);
 
       if (exportFormat === 'ical') {
-        const icalContent = exportToICal(expanded);
+        const icalContent = exportToICal(expanded.filter(isPublished));
         downloadFile(icalContent, 'ccp-events.ics', 'text/calendar');
       } else {
         const blob = await exportToExcel(expanded);

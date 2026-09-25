@@ -20,6 +20,14 @@ export const isSameDay = (d1: Date, d2: Date): boolean => {
   );
 };
 
+/** True when an event ends on a later calendar day than it starts */
+export const isMultiDayEvent = (start: Date | string, end?: Date | string | null): boolean => {
+  if (!end) return false;
+  const s = new Date(start);
+  const e = new Date(end);
+  return !isNaN(s.getTime()) && !isNaN(e.getTime()) && !isSameDay(s, e);
+};
+
 export const formatDate = (date: Date): string => {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'long',

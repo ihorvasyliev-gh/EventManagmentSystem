@@ -48,14 +48,3 @@ export function registerServiceWorker(): void {
     }
 }
 
-export function unregisterServiceWorker(): Promise<boolean> {
-    if ('serviceWorker' in navigator) {
-        return navigator.serviceWorker.ready
-            .then((registration) => registration.unregister())
-            .catch((error) => {
-                if (import.meta.env.DEV) console.error('Error unregistering service worker:', error);
-                return false;
-            });
-    }
-    return Promise.resolve(false);
-}

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, UserRole, Event } from '../types';
+import { User, UserRole } from '../types';
 import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw } from 'lucide-react';
-import NotificationCenter from './NotificationCenter';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -12,13 +11,10 @@ interface NavbarProps {
   onRefresh?: () => void;
   loadingEvents?: boolean;
   isRefreshing?: boolean;
-  events?: Event[];
-  userRsvpEventIds?: Set<string>;
   pendingSubmissionsCount?: number;
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
   onOpenSubmitEvent?: () => void;
-  onEventClick?: (event: Event) => void;
 }
 
 const initialsOf = (name: string): string =>
@@ -40,13 +36,10 @@ const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   loadingEvents = false,
   isRefreshing = false,
-  events = [],
-  userRsvpEventIds = new Set(),
   pendingSubmissionsCount = 0,
   onOpenSubmissions,
   onOpenFortnightlyBulletin,
-  onOpenSubmitEvent,
-  onEventClick
+  onOpenSubmitEvent
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -136,14 +129,6 @@ const Navbar: React.FC<NavbarProps> = ({
                   )}
                 </button>
               )}
-
-              <NotificationCenter
-                userId={user.id}
-                events={events}
-                userRsvpEventIds={userRsvpEventIds}
-                onEventClick={onEventClick}
-                className={iconButton}
-              />
 
               <button
                 type="button"

@@ -1,322 +1,176 @@
+<div align="center">
+
+<img src="public/assets/ccp-logo.png" alt="Cork City Partnership" height="72" />
+
 # CCP Event Calendar
 
-A full-featured corporate event calendar for **Cork City Partnership** — built with React, TypeScript, Supabase, and deployed on Cloudflare Pages.
+**Cork City Partnership's shared event calendar: staff submit events, admins approve them, and the Board gets a branded digest.**
 
-## ✨ Feature Highlights
+React 19 · TypeScript · Supabase · Cloudflare Pages
 
-| Feature | Description |
-|---------|-------------|
-| 📝 **Staff Submissions Form** | Public direct link (`/submit`) for all CCP staff to submit upcoming events without passwords |
-| 📥 **Admin Submissions Inbox** | Moderation queue for Elizabeth/Admins with 1-click Approve, Edit, and Decline |
-| 📑 **Upcoming Events Digest** | Generates branded A4 PDF for the Board & staff (Executive Cards & Compact Table formats) |
-| 📲 **WhatsApp Digest** | 1-click formatted emoji text generator for company WhatsApp announcements |
-| 🔐 **Auth & Roles** | Email/password sign-in via Supabase Auth. Staff and Admin roles |
-| 📅 **Calendar Views** | Month grid and agenda views with responsive mobile layout |
-| 🔁 **Recurring Events** | Daily, weekly, monthly, yearly, or custom date picks; delete single occurrences |
-| ✅ **RSVP** | Join/cancel per occurrence; |
-| 💬 **Comments** | Per-occurrence comment threads on events |
-| 🔍 **Search & Filters** | By title, description, location, tags, category, creator, date range, status |
-| 📎 **Attachments** | Posters, PDFs, documents, images — stored on Cloudflare R2 |
-| 📤 **Export** | Download events as iCal (`.ics`) or Excel (`.xlsx`) with recurring expansion |
-| 🔗 **Subscribe (ICS Feed)** | Live calendar feed URL — auto-syncs with Outlook, Google Calendar, Apple Calendar |
-| 🗓️ **Add to Calendar** | Per-event: Google Calendar, Outlook.com, Office 365, or `.ics` download |
-| 🔔 **Notifications** | Bell icon with upcoming RSVP'd events; |
-| 🌙 **Dark Mode** | Light/dark theme toggle, persisted |
-| ⚡ **PWA & Offline** | Service Worker for fast loads and offline support |
+[Live calendar](https://ccp-event-calendar.pages.dev/) · [Submit an event](https://ccp-event-calendar.pages.dev/submit) · [Coordinator guide](docs/GUIDE_FOR_ELIZABETH.md) · [Staff guide](docs/GUIDE_FOR_STAFF.md)
+
+</div>
 
 ---
 
-## Tech Stack
+## What it does
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 3 |
-| Backend | Supabase (PostgreSQL, Auth, Row-Level Security) |
-| Storage | Cloudflare R2 (posters, attachments) |
-| Hosting | Cloudflare Pages (with Pages Functions) |
-| Icons | Lucide React |
-| Export | ExcelJS (`.xlsx`), ICS generation |
+| | |
+|---|---|
+| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer. |
+| 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. Updates arrive in real time. |
+| 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
+| 📲 **WhatsApp summary** | One click copies a formatted, emoji-friendly text version of the digest. |
+| 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
+| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates. You can delete a single occurrence. |
+| ✅ **RSVPs & comments** | Both are tracked per occurrence. The browser reminds you the day before an event you've joined. |
+| 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
+| 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar. |
+| 🌙 **Comfort features** | Dark mode, keyboard shortcuts (`/` `←` `→` `T` `C` `E` `Esc`), pull-to-refresh and offline caching. |
 
----
+## The fortnightly routine
 
-## 🗓️ Wednesday Submission & Upcoming Events Digest Workflow
-
-This calendar includes a dedicated, streamlined workflow tailored to Cork City Partnership's bi-weekly event circulation schedule:
-
-> 📘 **Detailed Guides:**
-> - [**Guide for Elizabeth (Coordinator & Admin Manual)**](docs/GUIDE_FOR_ELIZABETH.md) — Includes weekly routine, admin moderation, digest generation, and copy-paste email templates.
-> - [**Staff Event Submission Guide**](docs/GUIDE_FOR_STAFF.md) — Shareable guide for all CCP team members explaining how to submit upcoming events.
-
-### 1. Wednesday Afternoon: Staff Submissions
-- **Live Calendar URL:** [https://ccp-event-calendar.pages.dev/](https://ccp-event-calendar.pages.dev/)
-- **Direct Submission URL:** [https://ccp-event-calendar.pages.dev/submit](https://ccp-event-calendar.pages.dev/submit) (also accessible directly below the Sign In button on the login page)
-- **No Password Required:** All CCP staff can open the link directly on desktop or mobile.
-- **Fields:** Event Name, Category, Date & Time, Venue/Location, Short Description, Poster/Flyer upload, Submitter Name & Email.
-- Submitted events are automatically queued in the database with status `draft` (Pending Review).
-
-### 2. Thursday: Admin Review & Moderation
-- Admins (Elizabeth, Igor, etc.) log into the calendar.
-- The **Navbar** shows an active notification badge: `[📥 Submissions (3)]`.
-- Click **Submissions** to open the review panel:
-  - Inspect submitter info, date/time, venue, description, and full poster preview.
-  - **Approve & Publish:** Sets status to `published` in 1 click; event immediately appears on the calendar.
-  - **Edit:** Adjust details or formatting before approving.
-  - **Approve All:** Batch approve all verified submissions.
-
-### 3. Friday Morning: Upcoming Events Digest (PDF & WhatsApp)
-- Click the **"Events Digest"** button in the Navbar or in the **Export** dialog.
-- Select the 14-day date range (defaults to next 2 weeks).
-- Choose layout style:
-  - **Executive cards:** branded cover with event/day/venue totals, an "At a glance" mini calendar (click a day to jump to it), then events grouped by day with category colours, full descriptions, contact details and flyer thumbnails. Ideal for the Board of Directors.
-  - **Compact table:** dense day-by-day agenda that fits the most events per page.
-- Click **Preview** to open the PDF in a new tab, or **Download PDF** to save it. The digest uses the bundled Inter font (`public/fonts/`) and falls back to Helvetica if the font can't be loaded.
-- Pending submissions in the chosen period are flagged in the dialog (with a shortcut to the inbox) — only approved events are included.
-- Click **WhatsApp text** to copy a preformatted summary with emojis ready to paste into company WhatsApp groups.
-
-### Database Setup
-To enable anonymous draft submissions in Supabase, execute `submission-migration.sql` in your Supabase SQL Editor.
-To enable real-time instant updates for submissions without refreshing the page (F5), execute `realtime-events-migration.sql` in Supabase SQL Editor.
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- npm
-- [Supabase](https://supabase.com) project (Auth + Database)
-- [Cloudflare Pages](https://pages.cloudflare.com) project (optional for local dev)
-
-### 1. Clone & Install
-
-```bash
-git clone https://github.com/ihorvasyliev-gh/CCPFlowCalendar.git
-cd CCPFlowCalendar
-npm install
+```
+ Wednesday              Thursday                   Friday
+ ─────────              ────────                   ──────
+ Staff submit events →  Admins review the inbox →  Generate the digest
+ via /submit            approve · edit · decline   PDF + WhatsApp text
 ```
 
-### 2. Environment Variables
+1. **Submit.** Staff open [`/submit`](https://ccp-event-calendar.pages.dev/submit) on any device. Each new event is saved as a *pending* draft.
+2. **Review.** Admins see a badge on **Submissions**. From there they check the details and poster, then approve, edit or decline. An approved event appears on the calendar straight away.
+3. **Circulate.** Open **Events Digest**, pick the period (the next 14 days by default) and choose a layout:
+   - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title and an *At a glance* month grid. After that, each day gets its own cards with category colours, descriptions, contact details, flyers and add-to-calendar buttons.
+   - **Compact table.** A dense day-by-day agenda that fits the most events per page.
+
+   **Preview** opens the PDF in a new tab and **Download PDF** saves it. Only approved events are included, and the dialog flags any submissions still pending for that period.
+
+Step-by-step instructions, including email templates, are in the [coordinator guide](docs/GUIDE_FOR_ELIZABETH.md).
+
+## Quick start
+
+**You need:** Node.js 24+ and a [Supabase](https://supabase.com) project. [Cloudflare Pages](https://pages.cloudflare.com) is only needed for deployment.
+
+```bash
+git clone https://github.com/ihorvasyliev-gh/EventManagmentSystem.git
+cd EventManagmentSystem
+npm install
+```
 
 Create `.env.local` in the project root:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_CLOUDFLARE_R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
+# Optional: set to false to turn off live updates (the app falls back to polling)
+# VITE_SUPABASE_REALTIME=false
 ```
 
-### 3. Database Setup
+Set up the database in the Supabase SQL Editor. Run `supabase-setup.sql` first, then these migrations:
 
-Run `supabase-setup.sql` in Supabase SQL Editor. Then apply migrations if needed:
+| File | Adds |
+|---|---|
+| `recurrence-exceptions-migration.sql` | Deleting single occurrences |
+| `custom-dates-migration.sql` | Hand-picked recurrence dates |
+| `rsvp-occurrence-migration.sql` | RSVPs per occurrence |
+| `event-comments-occurrence-migration.sql` | Comments per occurrence |
+| `submission-migration.sql` | Anonymous `/submit` drafts |
+| `realtime-events-migration.sql` | Live updates without refreshing |
+| `fix-category-constraint.sql`, `update-categories-to-standard.sql` | The standard CCP category list |
 
-- `event-comments-occurrence-migration.sql`
-- `rsvp-occurrence-migration.sql`
-- `recurrence-exceptions-migration.sql`
-- `custom-dates-migration.sql`
-- `fix-category-constraint.sql`
-
-### 4. Run Locally
+Start the dev server:
 
 ```bash
 npm run dev
 ```
 
-App runs at `http://localhost:3000`.
+The app runs at <http://localhost:3000>.
 
----
+### Scripts
 
-## Deployment (Cloudflare Pages)
+| Command | What it does |
+|---|---|
+| `npm run dev` | Starts the Vite dev server on port 3000 |
+| `npm run build` | Builds for production into `dist/` |
+| `npm run preview` | Serves the production build |
+| `npm test` | Runs the unit tests (Node's built-in test runner, no extra dependencies) |
 
-### Build Settings
+## Roles
 
-| Setting | Value |
-|---------|-------|
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Root directory | `/` |
-
-### Environment Variables (Cloudflare Pages Dashboard)
-
-Set in **Pages → Settings → Environment Variables**:
-
-| Variable | Description |
-|----------|-------------|
-| `VITE_SUPABASE_URL` | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
-| `VITE_CLOUDFLARE_R2_PUBLIC_URL` | R2 public URL for file serving |
-| `SUPABASE_URL` | Same as `VITE_SUPABASE_URL` — used by Pages Functions |
-| `SUPABASE_ANON_KEY` | Same as `VITE_SUPABASE_ANON_KEY` — used by Pages Functions |
-
-> **Note:** `VITE_*` variables are injected at build time by Vite. `SUPABASE_URL` and `SUPABASE_ANON_KEY` (without `VITE_` prefix) are required at runtime by Cloudflare Pages Functions (e.g. the ICS calendar feed).
-
-### R2 Bucket
-
-Bind an R2 bucket named `BUCKET` in **Pages → Settings → Functions → R2 Bucket Bindings** for file uploads.
-
-See `DEPLOY.md` and `CLOUDFLARE_SETUP.md` for detailed instructions.
-
----
-
-## Cloudflare Pages Functions
-
-Server-side endpoints powered by [Pages Functions](https://developers.cloudflare.com/pages/functions/):
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/upload` | `PUT` | Upload files to R2 (posters, attachments) |
-| `/api/file/:key` | `GET` | Serve files from R2 |
-| `/api/calendar` | `GET` | Live ICS calendar feed for subscription |
-
-### Calendar Subscription (ICS Feed)
-
-The `/api/calendar` endpoint returns a live RFC 5545 ICS feed of all published events (with recurring expansion). Calendar apps auto-refresh every ~6 hours.
-
-**How to subscribe:**
-
-- **Outlook:** Add Calendar → From Internet → paste `https://your-site.pages.dev/api/calendar`
-- **Google Calendar:** Other calendars (+) → From URL → paste URL
-- **Apple Calendar:** File → New Calendar Subscription → paste URL
-- **In-app:** Open Export & Subscribe modal → Subscribe tab → Copy URL or click "Open in Calendar App"
-
----
-
-## Database Schema
-
-| Table | Description |
-|-------|-------------|
-| `users` | User profiles and roles (staff / admin) |
-| `events` | Events with recurrence, RSVP settings, status |
-| `event_attachments` | File attachments linked to events |
-| `event_comments` | Comments per event occurrence |
-| `event_history` | Audit trail of event changes |
-| `event_categories` | Reusable event categories |
-| `rsvps` | RSVP records per event occurrence |
-| `recurrence_exceptions` | Deleted occurrences of recurring events |
-
-Row-Level Security (RLS) enforces that staff see only published events; admins have full access.
-
----
-
-## User Roles
-
-### Staff (default)
-
-- View published events in calendar/list/agenda
-- Search and filter events
-- RSVP to events (per occurrence)
-- Add/delete own comments
-- Add events to personal calendar (Google, Outlook, Apple)
-- Export events (iCal, Excel)
-- Subscribe to live ICS feed
-- Receive notifications for upcoming RSVP'd events
-
-### Admin
-
-Everything staff can do, plus:
-
-- Create, edit, and delete events
-- Set event status (Draft / Published)
-- Create event categories
-- View draft events and filter by status
-- Delete single occurrences or entire recurring series
-
----
-
-## Project Structure
-
-```
-├── App.tsx                     # Main application component
-├── index.html                  # Entry HTML
-├── index.tsx                   # React entry point
-├── index.css                   # Global styles (Tailwind)
-├── types.ts                    # TypeScript type definitions
-├── pages/
-│   ├── LoginPage.tsx           # Staff & Admin login
-│   └── SubmitEventPage.tsx     # Public event submission form (/submit)
-├── components/
-│   ├── CalendarView.tsx        # Month grid and list views
-│   ├── EventModal.tsx          # Event detail/edit modal
-│   ├── EventFilters.tsx        # Search and filter panel
-│   ├── ExportModal.tsx         # Export & Subscribe modal
-│   ├── FortnightlyBulletinModal.tsx # Upcoming Events Digest generator (PDF & WhatsApp)
-│   ├── SubmissionsModal.tsx    # Admin inbox for staff event submissions
-│   ├── Navbar.tsx              # Top navigation bar with status badges
-│   ├── NotificationCenter.tsx  # Notification bell dropdown
-│   ├── EventComments.tsx       # Comment thread component
-│   ├── EventHistory.tsx        # Change history display
-│   ├── DatePickerCalendar.tsx  # Custom date picker for recurrence
-│   ├── TimePickerInput.tsx     # Smart time picker with 15-min increments
-│   ├── SearchBar.tsx           # Search input
-│   ├── BottomNavigation.tsx    # Mobile bottom nav
-│   ├── ErrorBoundary.tsx       # Error boundary wrapper
-│   ├── LazyImage.tsx           # Lazy-loaded image component
-│   └── SkeletonLoader.tsx      # Loading skeleton
-├── services/
-│   ├── authService.ts          # Authentication (Supabase Auth)
-│   ├── eventService.ts         # Event CRUD, submissions, file upload
-│   ├── categoryService.ts      # Category management
-│   ├── rsvpService.ts          # RSVP operations
-│   └── notificationService.ts  # Notification logic
-├── utils/
-│   ├── pdfExport.ts            # Branded PDF digest & WhatsApp generator
-│   ├── recurrence.ts           # Recurring event expansion
-│   ├── export.ts               # ICS and Excel export
-│   ├── eventsCache.ts          # Client-side event caching
-│   ├── sessionCache.ts         # Session storage cache
-│   ├── filterEvents.ts         # Event filtering logic
-│   ├── conflictDetection.ts    # Event conflict checks
-│   ├── date.ts                 # Date utilities
-│   └── validation.ts           # Form validation
-├── docs/
-│   ├── GUIDE_FOR_ELIZABETH.md  # Coordinator & Admin operational guide
-│   └── GUIDE_FOR_STAFF.md      # Staff event submission guide
-├── hooks/                      # React custom hooks
-├── contexts/                   # React context providers
-├── lib/
-│   └── supabase.ts             # Supabase client initialization
-├── functions/
-│   ├── api/
-│   │   ├── upload.ts           # R2 file upload (Pages Function)
-│   │   ├── calendar.ts         # ICS feed (Pages Function)
-│   │   └── file/[[key]].ts     # R2 file serving (Pages Function)
-│   └── tsconfig.json           # Functions TypeScript config
-├── public/
-│   ├── assets/                 # Brand logo & static assets
-│   └── manifest.json           # PWA manifest
-├── vite.config.ts              # Vite build configuration
-├── tailwind.config.js          # Tailwind CSS configuration
-└── package.json
-```
-
----
-
-## Creating an Admin User
-
-New sign-ups default to **staff**. To promote a user to admin, update the `role` column in the `public.users` table:
+New accounts start as **staff**. To promote someone to **admin**, run this in Supabase:
 
 ```sql
 UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 ```
 
-See `CREATE_ADMIN_USER.md` for detailed instructions.
+| | Staff | Admin |
+|---|:---:|:---:|
+| View, search and filter published events | ✅ | ✅ |
+| RSVP, comment, add to a personal calendar, export, subscribe | ✅ | ✅ |
+| Submit events for review | ✅ | ✅ |
+| Create, edit and delete events and occurrences | | ✅ |
+| Review submissions and see drafts | | ✅ |
+| Manage categories | | ✅ |
+
+Row-level security enforces these rules in the database. Staff can only ever read published events.
+
+## Deployment (Cloudflare Pages)
+
+| Setting | Value |
+|---|---|
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Environment variables | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+| R2 binding | Bind a bucket as **`BUCKET`** under *Settings → Functions → R2 bucket bindings* |
+
+The Pages Functions read the same Supabase variables at runtime. If the server side needs different values, set `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+
+### API (Pages Functions)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/upload` | `PUT` | Uploads a poster or attachment to R2 |
+| `/api/file/:key` | `GET` | Serves a file from R2 |
+| `/api/calendar` | `GET` | Live ICS feed of published events, with recurrences expanded (Europe/Dublin) |
+
+**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab.
+
+## Project layout
+
+```
+├── App.tsx                  App shell: session, data sync, modals
+├── pages/                   Login and the public /submit form
+├── components/              Calendar and week views, event modal, digest and export dialogs, inbox
+├── services/                Supabase access: auth, events, RSVPs, categories
+├── utils/
+│   ├── pdfExport.ts         Events Digest PDF and WhatsApp text
+│   ├── digestGrouping.ts    Merges repeated occurrences into one digest entry
+│   ├── recurrence.ts        Expands recurring events
+│   └── export.ts            ICS and Excel export
+├── functions/api/           Cloudflare Pages Functions (upload, files, ICS feed)
+├── public/                  Logo, Inter fonts for the PDF, PWA manifest, service worker
+├── tests/                   Unit tests (node --test)
+├── *.sql                    Database setup and migrations
+└── docs/                    Coordinator and staff guides
+```
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 3, Lucide icons |
+| Backend | Supabase (PostgreSQL, Auth, Realtime, row-level security) |
+| Files | Cloudflare R2 |
+| Hosting | Cloudflare Pages and Pages Functions |
+| Documents | jsPDF (digest), ExcelJS (`.xlsx`) |
+
+## More docs
+
+- [Coordinator guide](docs/GUIDE_FOR_ELIZABETH.md): the fortnightly routine, moderation and digest emails
+- [Staff guide](docs/GUIDE_FOR_STAFF.md): how to submit an event
+- [`DEPLOY.md`](DEPLOY.md), [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md), [`CLOUDFLARE_SETUP.md`](CLOUDFLARE_SETUP.md): detailed setup (in Russian, except the Cloudflare guide)
 
 ---
 
-## Additional Documentation
-
-| File | Description |
-|------|-------------|
-| [**docs/GUIDE_FOR_ELIZABETH.md**](docs/GUIDE_FOR_ELIZABETH.md) | **Elizabeth's Guide** — Bi-weekly timeline, call-out email template, moderation inbox, digest generation |
-| [**docs/GUIDE_FOR_STAFF.md**](docs/GUIDE_FOR_STAFF.md) | **Staff Submission Guide** — Shareable guide for staff on submitting events via `/submit` |
-| `DEPLOY.md` | Full deployment guide |
-| `CLOUDFLARE_SETUP.md` | Cloudflare Pages & R2 setup |
-| `SUPABASE_SETUP.md` | Supabase database & auth setup |
-| `CREATE_ADMIN_USER.md` | How to create an admin user |
-| `QUICKSTART.md` | Quick setup reference |
-| `PERFORMANCE_SETUP.md` | Performance optimization notes |
-| `DOCUMENTATION.md` | Comprehensive internal technical documentation |
-
----
-
-© Cork City Partnership. Internal use only.
+<div align="center"><sub>© Cork City Partnership CLG · Education | Employment | Empowerment · Internal use only</sub></div>

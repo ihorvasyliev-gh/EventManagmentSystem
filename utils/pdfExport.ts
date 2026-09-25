@@ -1,6 +1,6 @@
 import type jsPDF from 'jspdf';
 import { Event } from '../types';
-import { formatLocalDate } from './date';
+import { formatLocalDate, isMultiDayEvent } from './date';
 import { getCategoryRgb, Rgb } from '../constants/categoryColors';
 import {
   groupDigestOccurrences,
@@ -15,7 +15,6 @@ export interface BulletinOptions {
   startDate: Date;
   endDate: Date;
   format: 'executive' | 'compact';
-  title?: string;
   baseUrl?: string;
   includeCalendarButtons?: boolean;
   /** 'save' downloads the file (default); 'blob' returns it, e.g. for an in-browser preview */
@@ -89,48 +88,6 @@ export const createOutlookWebUrl = (event: {
   return `https://outlook.office.com/calendar/deeplink/compose?${params.toString()}`;
 };
 
-/**
- * Generate link for single-event .ics download (Desktop Outlook / Apple / Mobile)
- */
-export const createIcsDownloadUrl = (
-  event: {
-    id: string;
-    date: Date | string;
-    title?: string;
-    endDate?: Date | string;
-    location?: string;
-    description?: string;
-    category?: string;
-  },
-  baseUrl?: string
-): string => {
-  let base = baseUrl;
-  if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
-    if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
-      base = window.location.origin;
-    } else {
-      base = 'https://ccp-event-calendar.pages.dev';
-    }
-  }
-
-  const d = toDate(event.date);
-  const endD = toDate(event.endDate);
-
-  const params = new URLSearchParams();
-  params.set('event_id', event.id);
-  if (d) params.set('date', d.toISOString());
-  if (event.title) params.set('title', event.title);
-  if (endD) params.set('end_date', endD.toISOString());
-  if (event.location) params.set('location', event.location);
-  if (event.category) params.set('category', event.category);
-  if (event.description) {
-    const descShort = event.description.length > 400 ? event.description.slice(0, 400) : event.description;
-    params.set('description', descShort);
-  }
-
-  return `${base}/api/calendar?${params.toString()}`;
-};
-
 export const createGoogleMapsUrl = (location: string): string => {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
 };
@@ -148,124 +105,8 @@ export interface LoadedPdfFlyer {
 }
 
 /**
- * Reads EXIF orientation (1-8) from JPEG ArrayBuffer. Returns 1 if not JPEG or no tag.
- */
-const getExifOrientation = (buffer: ArrayBuffer): number => {
-  try {
-    const view = new DataView(buffer);
-    if (view.byteLength < 4 || view.getUint16(0, false) !== 0xFFD8) {
-      return 1;
-    }
-    let offset = 2;
-    const maxOffset = view.byteLength;
-    while (offset < maxOffset) {
-      if (view.getUint8(offset) !== 0xFF) return 1;
-      const marker = view.getUint8(offset + 1);
-      if (marker === 0xE1) {
-        // APP1
-        const length = view.getUint16(offset + 2, false);
-        const exifStart = offset + 4;
-        if (
-          view.getUint32(exifStart, false) === 0x45786966 && // "Exif"
-          view.getUint16(exifStart + 4, false) === 0x0000
-        ) {
-          const tiffStart = exifStart + 6;
-          const isLittleEndian = view.getUint16(tiffStart, false) === 0x4949;
-          if (view.getUint16(tiffStart + 2, isLittleEndian) !== 0x002A) return 1;
-          const firstIfdOffset = view.getUint32(tiffStart + 4, isLittleEndian);
-          if (firstIfdOffset < 8) return 1;
-          const ifdStart = tiffStart + firstIfdOffset;
-          const tagCount = view.getUint16(ifdStart, isLittleEndian);
-          for (let i = 0; i < tagCount; i++) {
-            const entryOffset = ifdStart + 2 + i * 12;
-            if (entryOffset + 12 > maxOffset) break;
-            const tag = view.getUint16(entryOffset, isLittleEndian);
-            if (tag === 0x0112) { // Orientation tag
-              return view.getUint16(entryOffset + 8, isLittleEndian);
-            }
-          }
-        }
-        offset += 2 + length;
-      } else if ((marker & 0xFF00) !== 0xFF00 && marker !== 0xD9 && marker !== 0xDA) {
-        const segLen = view.getUint16(offset + 2, false);
-        offset += 2 + segLen;
-      } else {
-        break;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return 1;
-};
-
-/**
- * Draws an image source onto a canvas no larger than `maxDim`, turning it upright when the
- * browser did not already apply the EXIF orientation. Returns null when no 2D context exists.
- */
-const renderUpright = (
-  source: CanvasImageSource,
-  naturalW: number,
-  naturalH: number,
-  exifOrientation: number,
-  isPng: boolean,
-  maxDim = 1200
-): LoadedPdfFlyer | null => {
-  let w = naturalW;
-  let h = naturalH;
-  let rotateDeg = 0;
-  if ((exifOrientation === 6 || exifOrientation === 8) && w > h) {
-    rotateDeg = exifOrientation === 6 ? 90 : 270;
-  } else if (exifOrientation === 3) {
-    rotateDeg = 180;
-  }
-
-  if (w > maxDim || h > maxDim) {
-    if (w > h) {
-      h = Math.round((h * maxDim) / w);
-      w = maxDim;
-    } else {
-      w = Math.round((w * maxDim) / h);
-      h = maxDim;
-    }
-  }
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  const quarterTurn = rotateDeg === 90 || rotateDeg === 270;
-  canvas.width = quarterTurn ? h : w;
-  canvas.height = quarterTurn ? w : h;
-  if (!isPng) {
-    // JPEG has no alpha: keep transparent areas white rather than black
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-  if (rotateDeg === 90) {
-    ctx.translate(h, 0);
-    ctx.rotate(Math.PI / 2);
-  } else if (rotateDeg === 270) {
-    ctx.translate(0, w);
-    ctx.rotate(-Math.PI / 2);
-  } else if (rotateDeg === 180) {
-    ctx.translate(w, h);
-    ctx.rotate(Math.PI);
-  }
-  ctx.drawImage(source, 0, 0, w, h);
-
-  return {
-    dataUrl: canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88),
-    width: canvas.width,
-    height: canvas.height,
-    aspectRatio: canvas.width / canvas.height,
-    format: isPng ? 'PNG' : 'JPEG'
-  };
-};
-
-/**
- * Loads an image from URL, resolves EXIF orientation (so phone photos are upright),
- * preserves the original aspect ratio, and returns optimized base64 for jsPDF.
+ * Loads an image as a JPEG/PNG data URL for jsPDF, at most 1200px on its long side.
+ * createImageBitmap applies the EXIF orientation, so phone photos come out upright.
  */
 export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | null> => {
   try {
@@ -273,49 +114,27 @@ export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | nul
     if (!res.ok) return null;
     const blob = await res.blob();
     const isPng = blob.type === 'image/png' || url.toLowerCase().includes('.png');
-    const buffer = await blob.arrayBuffer();
-    const exifOrientation = getExifOrientation(buffer);
-
-    // 1. ImageBitmap with 'from-image' orientation
-    if (typeof createImageBitmap !== 'undefined' && typeof document !== 'undefined') {
-      try {
-        const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-        const loaded = renderUpright(bitmap, bitmap.width, bitmap.height, exifOrientation, isPng);
-        bitmap.close();
-        if (loaded) return loaded;
-      } catch (bitmapErr) {
-        console.warn('createImageBitmap failed, trying Image element:', bitmapErr);
-      }
+    const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    if (!isPng) {
+      // JPEG has no alpha: keep transparent areas white rather than black
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-
-    // 2. Fallback: HTMLImageElement
-    if (typeof document !== 'undefined') {
-      const blobUrl = URL.createObjectURL(blob);
-      try {
-        const img = new Image();
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = reject;
-          img.src = blobUrl;
-        });
-        const loaded = renderUpright(img, img.naturalWidth || img.width, img.naturalHeight || img.height, exifOrientation, isPng);
-        if (loaded) return loaded;
-      } catch (imgErr) {
-        console.warn('HTMLImageElement fallback failed:', imgErr);
-      } finally {
-        URL.revokeObjectURL(blobUrl);
-      }
-    }
-
-    // 3. Fallback: raw data URL with unknown size (assume square)
-    const base64 = await new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-    if (!base64) return null;
-    return { dataUrl: base64, width: 100, height: 100, aspectRatio: 1, format: isPng ? 'PNG' : 'JPEG' };
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return {
+      dataUrl: canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88),
+      width: canvas.width,
+      height: canvas.height,
+      aspectRatio: canvas.width / canvas.height,
+      format: isPng ? 'PNG' : 'JPEG'
+    };
   } catch (err) {
     console.warn('loadImageForPdf error:', err);
     return null;
@@ -395,7 +214,7 @@ const stripEmoji = (text: string): string =>
  * Sanitizes strings for jsPDF standard fonts (Helvetica) to prevent switching to 16-bit encoding
  * which injects null bytes and corrupts letter spacing and glyphs.
  */
-export const cleanPdfText = (text: string | null | undefined, preserveNewlines = false): string => {
+const cleanPdfText = (text: string | null | undefined, preserveNewlines = false): string => {
   if (!text) return '';
   let result = '';
   const stripped = stripEmoji(text);
@@ -437,13 +256,6 @@ const toDate = (d: Date | string | number | undefined | null): Date | null => {
   if (!d) return null;
   const date = d instanceof Date ? d : new Date(d);
   return isNaN(date.getTime()) ? null : date;
-};
-
-export const isMultiDayEvent = (start: Date | string, end?: Date | string | null): boolean => {
-  const s = toDate(start);
-  const e = toDate(end);
-  if (!s || !e) return false;
-  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
 };
 
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -709,7 +521,7 @@ export const generateEventsDigestPDF = async (
 
     font('bold', 24);
     color(INK);
-    doc.text(txt(options.title) || 'Upcoming Events', M, 37);
+    doc.text('Upcoming Events', M, 37);
     font('medium', 10.5);
     color(BODY);
     doc.text(txt(formatLongRange(periodStart, periodEnd)), M, 44);
@@ -718,30 +530,37 @@ export const generateEventsDigestPDF = async (
     doc.line(M, 49, W - M, 49);
   };
 
-  const STAT_Y = 53;
+  // Totals sit right-aligned beside the title, in the space the title leaves free
+  const STAT_Y = 31;
   const STAT_H = 13;
+  const STAT_GAP = 5; // either side of the separators
   const drawStats = () => {
     const stats: Array<{ value: string; label: string; accent: Rgb }> = [
       { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: RED },
       { value: String(eventDays.size), label: eventDays.size === 1 ? 'Day with events' : 'Days with events', accent: GREEN },
       { value: String(venues.size), label: venues.size === 1 ? 'Venue' : 'Venues', accent: MUTED }
     ];
-    const w = CW / 3;
+    const widths = stats.map((s) => {
+      font('bold', 15);
+      const vw = doc.getTextWidth(s.value);
+      font('medium', 7.5);
+      return 3.5 + Math.max(vw, doc.getTextWidth(s.label));
+    });
+    let x = W - M - widths.reduce((a, b) => a + b, 0) - STAT_GAP * 2 * (stats.length - 1);
     stats.forEach((s, i) => {
-      const x = M + i * w;
       if (i > 0) {
         stroke(BORDER, 0.3);
-        doc.line(x, STAT_Y + 1, x, STAT_Y + STAT_H - 1);
+        doc.line(x - STAT_GAP, STAT_Y + 1, x - STAT_GAP, STAT_Y + STAT_H - 1);
       }
-      const tx = x + (i > 0 ? 6 : 0);
       fill(s.accent);
-      doc.roundedRect(tx, STAT_Y + 2.2, 0.9, STAT_H - 4.4, 0.45, 0.45, 'F');
+      doc.roundedRect(x, STAT_Y + 2.2, 0.9, STAT_H - 4.4, 0.45, 0.45, 'F');
       font('bold', 15);
       color(INK);
-      doc.text(s.value, tx + 3.5, STAT_Y + 7.4);
+      doc.text(s.value, x + 3.5, STAT_Y + 7.4);
       font('medium', 7.5);
       color(MUTED);
-      doc.text(s.label, tx + 3.5, STAT_Y + 11.4);
+      doc.text(s.label, x + 3.5, STAT_Y + 11.4);
+      x += widths[i] + STAT_GAP * 2;
     });
   };
 
@@ -762,15 +581,10 @@ export const generateEventsDigestPDF = async (
   const GLANCE_CELL_H = 12.5;
   const glanceHeight = showGlance ? 7 + 5 + gridRows * GLANCE_CELL_H : 0;
 
-  const dayAnchors = new Map<string, number>(); // dayKey -> page number of its header
-
   const drawGlance = (top: number) => {
     font('semibold', 7);
     color(MUTED);
     spaced('AT A GLANCE', M, top + 3, 0.5);
-    font('regular', 7);
-    color(FAINT);
-    doc.text('Click a day to jump to its events', W - M, top + 3, { align: 'right' });
 
     const gy = top + 7;
     const cellW = CW / 7;
@@ -833,9 +647,6 @@ export const generateEventsDigestPDF = async (
         color(MUTED);
         const label = dayEvents.length === 1 ? '1 event' : `${dayEvents.length} events`;
         doc.text(label, x + cellW - 2, y + 10.2, { align: 'right' });
-
-        const page = dayAnchors.get(key);
-        if (page) doc.link(x, y, cellW, GLANCE_CELL_H, { pageNumber: page });
       }
     }
 
@@ -873,7 +684,7 @@ export const generateEventsDigestPDF = async (
     logoDraw(M, 8, 7.5);
     font('bold', 9.5);
     color(INK);
-    doc.text(txt(options.title) || 'Upcoming Events', W - M, 11.2, { align: 'right' });
+    doc.text('Upcoming Events', W - M, 11.2, { align: 'right' });
     font('regular', 7.5);
     color(MUTED);
     doc.text(txt(formatDateRange(periodStart, periodEnd)), W - M, 15.2, { align: 'right' });
@@ -950,7 +761,6 @@ export const generateEventsDigestPDF = async (
       isDayHeader: true,
       dayKey: key,
       draw: (y) => {
-        if (!dayAnchors.has(key)) dayAnchors.set(key, doc.getCurrentPageInfo().pageNumber);
         const countLabel = count === 1 ? '1 event' : `${count} events`;
         const rel = relativeDayLabel(day);
         if (isExecutive) {
@@ -1427,11 +1237,10 @@ export const generateEventsDigestPDF = async (
   // --- Render ------------------------------------------------------------
   drawHero();
   drawStats();
-  let y = STAT_Y + STAT_H + 8;
-  const glanceTop = y;
-  y += glanceHeight;
+  let y = 57;
   if (showGlance) {
-    y += 2;
+    drawGlance(y);
+    y += glanceHeight + 2;
     drawLegend(y);
     y += LEGEND_H + 5;
   }
@@ -1485,16 +1294,10 @@ export const generateEventsDigestPDF = async (
     if (isExecutive && blocks[i + 1]?.isDayHeader) y += 2;
   }
 
-  // The glance links need to know which page each day landed on, so it is drawn last
-  if (showGlance) {
-    doc.setPage(1);
-    drawGlance(glanceTop);
-  }
-
   drawFooters();
 
   doc.setProperties({
-    title: `${options.title || 'Upcoming Events'} — ${formatDateRange(periodStart, periodEnd)}`,
+    title: `Upcoming Events — ${formatDateRange(periodStart, periodEnd)}`,
     subject: 'Cork City Partnership events digest',
     author: 'Cork City Partnership',
     creator: 'CCP Event Calendar'
@@ -1505,7 +1308,6 @@ export const generateEventsDigestPDF = async (
   }
   doc.save(digestFileName(periodStart, periodEnd));
 };
-export const generateFortnightlyPDF = generateEventsDigestPDF;
 
 /** File name used for a digest covering the given period */
 export const digestFileName = (startDate: Date, endDate: Date): string =>
@@ -1527,7 +1329,7 @@ export const generateWhatsAppSummary = (
   const groups = groupDigestOccurrences(
     events.filter((e) => {
       // Exclude drafts and pending submissions
-      if (e.status === 'draft' || (e.status && e.status !== 'published')) return false;
+      if (e.status && e.status !== 'published') return false;
       const d = toDate(e.date);
       if (!d) return false;
       const t = d.getTime();

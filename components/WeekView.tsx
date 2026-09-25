@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Event, UserRole, EventCategory } from '../types';
-import { isSameDay } from '../utils/date';
+import { isSameDay, isMultiDayEvent } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -30,17 +30,10 @@ export const getWeekDays = (date: Date): Date[] => {
   return days;
 };
 
-const isMultiDayEvent = (event: Event): boolean => {
-  if (!event.endDate) return false;
-  const s = new Date(event.date);
-  const e = new Date(event.endDate);
-  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
-};
-
 const isEventOnDay = (event: Event, day: Date): boolean => {
   const s = new Date(event.date);
   s.setHours(0, 0, 0, 0);
-  if (!event.endDate || !isMultiDayEvent(event)) {
+  if (!event.endDate || !isMultiDayEvent(event.date, event.endDate)) {
     return isSameDay(event.date, day);
   }
   const e = new Date(event.endDate);
@@ -96,7 +89,7 @@ export const getCategoryDotColor = (category?: EventCategory): string => {
 const formatTimeRange = (event: Event): string => {
   const startStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (event.endDate) {
-    if (isMultiDayEvent(event)) {
+    if (isMultiDayEvent(event.date, event.endDate)) {
       const endDayStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
       return `${startStr} – ${endDayStr}`;
     }
@@ -292,7 +285,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               activeMobileGroup.events.map(event => {
                 const colorClass = getCategoryColor(event.category);
                 const timeText = formatTimeRange(event);
-                const isMulti = isMultiDayEvent(event);
+                const isMulti = isMultiDayEvent(event.date, event.endDate);
 
                 return (
                   <div
@@ -397,7 +390,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                   group.events.map(event => {
                     const colorClass = getCategoryColor(event.category);
                     const timeText = formatTimeRange(event);
-                    const isMulti = isMultiDayEvent(event);
+                    const isMulti = isMultiDayEvent(event.date, event.endDate);
                     const statusClass = event.status === 'draft' ? 'opacity-70 border-dashed' : '';
 
                     return (

@@ -64,17 +64,3 @@ export const createCategory = async (name: string, userId: string): Promise<Even
   };
 };
 
-/**
- * Удалить категорию (только для админов)
- */
-export const deleteCategory = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from('event_categories')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting category:', error);
-    throw new Error(error.message || 'Failed to delete category');
-  }
-};

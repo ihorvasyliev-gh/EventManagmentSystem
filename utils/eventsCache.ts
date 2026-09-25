@@ -101,24 +101,11 @@ export function getCachedEvents(): Event[] | null {
   }
 }
 
-/** Возвращает кеш даже если он устарел (stale-while-revalidate: сразу показываем, потом обновляем). */
-export function getCachedEventsStale(): Event[] | null {
-  try {
-    const json = localStorage.getItem(EVENTS_CACHE_KEY);
-    if (!json) return null;
-    return deserialize(json);
-  } catch {
-    return null;
-  }
-}
-
 export function clearEventsCache(): void {
   try {
     localStorage.removeItem(EVENTS_CACHE_KEY);
     localStorage.removeItem(EVENTS_CACHE_TIMESTAMP_KEY);
     localStorage.removeItem(EXCEPTIONS_CACHE_KEY);
-    localStorage.removeItem(CREATOR_NAMES_CACHE_KEY);
-    localStorage.removeItem(CREATOR_NAMES_CACHE_TIMESTAMP_KEY);
   } catch (err) {
     if (import.meta.env.DEV) console.warn('Failed to clear events cache:', err);
   }
@@ -160,74 +147,6 @@ export function getCachedExceptions(): Map<string, Date[]> | null {
     const json = localStorage.getItem(EXCEPTIONS_CACHE_KEY);
     if (!json) return null;
     return deserializeExceptions(json);
-  } catch {
-    return null;
-  }
-}
-// --- RSVPs Cache ---
-
-const RSVPS_CACHE_KEY = 'ccp_rsvps_cache';
-
-export function cacheRsvps(eventIds: string[]): void {
-  try {
-    localStorage.setItem(RSVPS_CACHE_KEY, JSON.stringify(eventIds));
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to cache RSVPs:', err);
-  }
-}
-
-export function getCachedRsvps(): string[] | null {
-  try {
-    const json = localStorage.getItem(RSVPS_CACHE_KEY);
-    if (!json) return null;
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-export function clearRsvpsCache(): void {
-  try {
-    localStorage.removeItem(RSVPS_CACHE_KEY);
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to clear RSVPs cache:', err);
-  }
-}
-
-// --- Creator names cache ---
-
-const CREATOR_NAMES_CACHE_KEY = 'ccp_creator_names_cache';
-const CREATOR_NAMES_CACHE_TIMESTAMP_KEY = 'ccp_creator_names_cache_timestamp';
-const CREATOR_NAMES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
-
-export function cacheCreatorNames(names: Record<string, string>): void {
-  try {
-    localStorage.setItem(CREATOR_NAMES_CACHE_KEY, JSON.stringify(names));
-    localStorage.setItem(CREATOR_NAMES_CACHE_TIMESTAMP_KEY, Date.now().toString());
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to cache creator names:', err);
-  }
-}
-
-export function getCachedCreatorNames(): Record<string, string> | null {
-  try {
-    const json = localStorage.getItem(CREATOR_NAMES_CACHE_KEY);
-    if (!json) return null;
-    const ts = localStorage.getItem(CREATOR_NAMES_CACHE_TIMESTAMP_KEY);
-    const age = ts ? Date.now() - parseInt(ts, 10) : Infinity;
-    if (age > CREATOR_NAMES_CACHE_TTL_MS) return null;
-    return JSON.parse(json) as Record<string, string>;
-  } catch {
-    return null;
-  }
-}
-
-/** Stale cache for creator names (show immediately, revalidate in background) */
-export function getCachedCreatorNamesStale(): Record<string, string> | null {
-  try {
-    const json = localStorage.getItem(CREATOR_NAMES_CACHE_KEY);
-    if (!json) return null;
-    return JSON.parse(json) as Record<string, string>;
   } catch {
     return null;
   }

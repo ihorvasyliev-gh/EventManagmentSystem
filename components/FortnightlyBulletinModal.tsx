@@ -3,7 +3,7 @@ import {
   FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus
 } from 'lucide-react';
 import { Event } from '../types';
-import { generateFortnightlyPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
+import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { groupDigestOccurrences, formatOccurrenceLabel } from '../utils/digestGrouping';
@@ -145,7 +145,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const handleDownloadPDF = async () => {
     setBusy('download');
     try {
-      await generateFortnightlyPDF(periodEvents, pdfOptions);
+      await generateEventsDigestPDF(periodEvents, pdfOptions);
       showToast('Digest PDF downloaded', 'success');
     } catch (err) {
       console.error('Failed to generate PDF:', err);
@@ -160,7 +160,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     const previewWindow = window.open('', '_blank');
     setBusy('preview');
     try {
-      const blob = await generateFortnightlyPDF(periodEvents, { ...pdfOptions, output: 'blob' });
+      const blob = await generateEventsDigestPDF(periodEvents, { ...pdfOptions, output: 'blob' });
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       if (previewWindow) {

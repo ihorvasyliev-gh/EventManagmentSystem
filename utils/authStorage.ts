@@ -1,12 +1,9 @@
 export const REMEMBER_ME_KEY = 'ccp_remember_me';
 
-const safeGetStorage = (type: 'local' | 'session'): Storage | null => {
+/** localStorage / sessionStorage, or null where access throws (e.g. blocked site data) */
+export const safeGetStorage = (type: 'local' | 'session'): Storage | null => {
   try {
-    if (typeof window !== 'undefined' || typeof globalThis !== 'undefined') {
-      const g = (typeof window !== 'undefined' ? window : globalThis) as any;
-      return type === 'local' ? g.localStorage : g.sessionStorage;
-    }
-    return null;
+    return globalThis[type === 'local' ? 'localStorage' : 'sessionStorage'] ?? null;
   } catch {
     return null;
   }

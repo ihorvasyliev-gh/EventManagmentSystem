@@ -15,7 +15,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
     "exceljs": "^4.4.0",
-    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.562.0",
     "react": "^19.3.0",

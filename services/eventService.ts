@@ -540,23 +540,6 @@ export const uploadAttachment = async (file: File): Promise<{ id: string; name: 
 };
 
 /**
- * Получить список исключений для события (удаленных экземпляров)
- */
-export const getRecurrenceExceptions = async (eventId: string): Promise<Date[]> => {
-  const { data, error } = await supabase
-    .from('recurrence_exceptions')
-    .select('exception_date')
-    .eq('event_id', eventId);
-
-  if (error) {
-    console.error('Error fetching recurrence exceptions:', error);
-    return [];
-  }
-
-  return (data || []).map(item => new Date(item.exception_date));
-};
-
-/**
  * Получить список исключений для группы событий одним пакетным запросом (1 запрос вместо N)
  */
 export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<Map<string, Date[]>> => {

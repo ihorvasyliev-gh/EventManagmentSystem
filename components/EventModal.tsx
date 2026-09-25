@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry, EventCategoryItem } from '../types';
-import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat } from 'lucide-react';
+import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry } from '../types';
+import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat } from 'lucide-react';
 import { formatDate, formatTime, isSameDay, formatLocalDate } from '../utils/date';
-import { uploadPosterToR2, uploadAttachment, addComment, deleteComment, fetchEventDetails, deleteEvent, deleteRecurrenceInstance } from '../services/eventService';
-import { rsvpToEvent, cancelRsvp, hasUserRsvped } from '../services/rsvpService';
-import { getCategories, createCategory } from '../services/categoryService';
+import { uploadPosterToR2, addComment, deleteComment, fetchEventDetails } from '../services/eventService';
+import { rsvpToEvent, cancelRsvp } from '../services/rsvpService';
+import { createCategory } from '../services/categoryService';
 import EventComments from './EventComments';
 import EventHistory from './EventHistory';
 import { validateEvent } from '../utils/validation';
@@ -15,8 +15,8 @@ import MultiDatePicker from './MultiDatePicker';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
-import { expandRecurringEvents } from '../utils/recurrence';
 import { useToast } from '../contexts/ToastContext';
+import { exportToICal, downloadFile } from '../utils/export';
 
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
@@ -47,13 +47,11 @@ const minutesToTime = (totalMinutes: number): string => {
 interface EventModalProps {
   isOpen: boolean;
   onClose: () => void;
-  event: Event | null; // If null, we are in "Create Mode"
+  event: Event | null;
   events?: Event[];
-  initialDate?: Date | null; // Pre-fill date when creating from calendar day plus
   role: UserRole;
   currentUserId?: string;
   currentUserName?: string;
-  onSave?: (eventData: Omit<Event, 'id' | 'createdAt'>) => Promise<void>;
   onUpdate?: (id: string, eventData: Omit<Event, 'id' | 'createdAt'>) => Promise<void>;
   onEventUpdate?: (event: Event) => void; // For RSVP and comment updates
   onDelete?: (id: string) => Promise<void>; // For event deletion
@@ -71,11 +69,9 @@ const EventModal: React.FC<EventModalProps> = ({
   onClose,
   event,
   events = [],
-  initialDate,
   role,
   currentUserId = '1',
   currentUserName = 'User',
-  onSave,
   onUpdate,
   onEventUpdate,
   onDelete,
@@ -92,7 +88,6 @@ const EventModal: React.FC<EventModalProps> = ({
   eventsRef.current = events;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(initialMode === 'edit');
-  const [isRsvping, setIsRsvping] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -103,13 +98,7 @@ const EventModal: React.FC<EventModalProps> = ({
     if (event?.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
       return event.recurrence.customDates.map(d => new Date(d));
     }
-    if (event?.date) {
-      return [new Date(event.date)];
-    }
-    if (initialDate) {
-      return [new Date(initialDate)];
-    }
-    return [new Date()];
+    return [event?.date ? new Date(event.date) : new Date()];
   });
   const [startTimeStr, setStartTimeStr] = useState('10:00');
   const [endTimeStr, setEndTimeStr] = useState('11:30');
@@ -124,7 +113,6 @@ const EventModal: React.FC<EventModalProps> = ({
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [newAttachments, setNewAttachments] = useState<File[]>([]);
   // Lazy loaded states
   const [comments, setComments] = useState<EventComment[]>([]);
   const [history, setHistory] = useState<EventHistoryEntry[]>([]);
@@ -170,7 +158,6 @@ const EventModal: React.FC<EventModalProps> = ({
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const modalPanelRef = useRef<HTMLDivElement>(null);
   // Escape / backdrop / close button go through requestClose (defined below)
   const requestCloseRef = useRef<() => void>(onClose);
@@ -178,10 +165,7 @@ const EventModal: React.FC<EventModalProps> = ({
   // Bumped to re-initialise the form from the event (e.g. "Cancel" back to details)
   const [formResetKey, setFormResetKey] = useState(0);
 
-  // Determine if we are creating a new event from scratch
-  const isCreating = !event;
-  // Show form if we are creating OR editing
-  const showForm = isCreating || isEditing;
+  const showForm = isEditing;
 
   // "E" opens the edit form from the details view (admins)
   useEffect(() => {
@@ -262,8 +246,6 @@ const EventModal: React.FC<EventModalProps> = ({
           setSelectedDates(source.recurrence.customDates.map(d => new Date(d)));
         } else if (source.date) {
           setSelectedDates([new Date(source.date)]);
-        } else if (initialDate) {
-          setSelectedDates([new Date(initialDate)]);
         } else {
           setSelectedDates([new Date()]);
         }
@@ -277,7 +259,6 @@ const EventModal: React.FC<EventModalProps> = ({
         }
 
         setPosterFile(null);
-        setNewAttachments([]);
 
         // Load Recurrence Data
         if (event.recurrence) {
@@ -321,57 +302,9 @@ const EventModal: React.FC<EventModalProps> = ({
         return () => {
           isActive = false;
         };
-      } else {
-        // We are creating a new event
-        setTitle('');
-        setDescription('');
-        setLocation('');
-        setCategory('');
-        setStatus('published');
-        setTags('');
-        setSubmitterName('');
-        setSubmitterEmail('');
-        setRsvpEnabled(false);
-        setMaxAttendees('');
-        setPreviewUrl(null);
-        setPosterFile(null);
-
-        // Auto-select date & time
-        if (initialDate) {
-          setSelectedDates([new Date(initialDate)]);
-        } else {
-          setSelectedDates([new Date()]);
-        }
-
-        let sTime = '10:00';
-        let eTime = '11:30';
-
-        if (!initialDate) {
-          const now = new Date();
-          const nextHour = now.getHours() + 1;
-          const clampedHour = Math.min(Math.max(nextHour, 8), 20);
-          sTime = `${String(clampedHour).padStart(2, '0')}:00`;
-          eTime = `${String(Math.min(clampedHour + 1, 23)).padStart(2, '0')}:30`;
-        }
-
-        setStartTimeStr(sTime);
-        setEndTimeStr(eTime);
-
-        setAttachments([]);
-        setNewAttachments([]);
-        setComments([]);
-        setHistory([]);
-        setAttendees([]);
-        setAttendeeNames([]);
-        setUserHasRsvped(false);
-        setIsEditing(false);
-        setRecurrenceType('none');
-        setRecurrenceInterval(1);
-        setRecurrenceEndDate('');
-        setFieldErrors({});
       }
     }
-  }, [isOpen, event, initialDate, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
+  }, [isOpen, event, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
 
   // Restore unsaved form data (e.g. the save failed and the modal was reopened)
   useEffect(() => {
@@ -629,15 +562,6 @@ const EventModal: React.FC<EventModalProps> = ({
         finalPosterUrl = undefined;
       }
 
-      // Upload new attachments
-      const uploadedAttachments: Attachment[] = [];
-      if (newAttachments.length > 0) {
-        for (const file of newAttachments) {
-          const attachment = await uploadAttachment(file) as Attachment;
-          uploadedAttachments.push(attachment);
-        }
-      }
-
       const fullEventData = {
         title: title.trim(),
         description: description.trim(),
@@ -652,14 +576,12 @@ const EventModal: React.FC<EventModalProps> = ({
         submitterEmail: submitterEmail.trim() || undefined,
         rsvpEnabled,
         maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
-        attachments: [...attachments, ...uploadedAttachments],
+        attachments,
         creatorId: event?.creatorId || currentUserId,
         recurrence
       };
 
-      if (isCreating && onSave) {
-        await onSave(fullEventData);
-      } else if (isEditing && event && onUpdate) {
+      if (event && onUpdate) {
         await onUpdate(event.id, fullEventData);
       }
 
@@ -721,21 +643,6 @@ const EventModal: React.FC<EventModalProps> = ({
       // Show error toast (non-blocking)
       showToast('Failed to update RSVP. Please try again.', 'error');
     }
-  };
-
-  const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setNewAttachments(prev => [...prev, ...files]);
-    }
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const removeNewAttachment = (index: number) => {
-    setNewAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAddComment = async (content: string) => {
@@ -826,45 +733,7 @@ const EventModal: React.FC<EventModalProps> = ({
 
   const handleDownloadIcs = () => {
     if (!event) return;
-
-    const formatDate = (date: Date) => {
-      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
-
-    const escapeICS = (str: string) => {
-      return str
-        .replace(/\\/g, '\\\\')
-        .replace(/;/g, '\\;')
-        .replace(/,/g, '\\,')
-        .replace(/\n/g, '\\n');
-    };
-
-    const startDate = formatDate(event.date);
-    const endDate = formatDate(getEventEnd(event));
-
-    const icsContent = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//CCP Flow/Calendar//EN',
-      'BEGIN:VEVENT',
-      `UID:${event.instanceKey || event.id || Date.now()}@ccpflow.com`,
-      `DTSTAMP:${formatDate(new Date())}`,
-      `DTSTART:${startDate}`,
-      `DTEND:${endDate}`,
-      `SUMMARY:${escapeICS(event.title || '')}`,
-      `DESCRIPTION:${escapeICS(event.description || '')}`,
-      `LOCATION:${escapeICS(event.location || '')}`,
-      'END:VEVENT',
-      'END:VCALENDAR'
-    ].join('\r\n');
-
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(exportToICal([{ ...event, endDate: getEventEnd(event) }]), `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`, 'text/calendar;charset=utf-8');
     setShowCalendarDropdown(false);
   };
 
@@ -926,7 +795,7 @@ const EventModal: React.FC<EventModalProps> = ({
           {/* Header */}
           <div className="px-4 sm:px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
             <h3 className={`text-base sm:text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
-              {isCreating ? 'Create New Event' : (isEditing ? 'Edit Event' : 'Event Details')}
+              {isEditing ? 'Edit Event' : 'Event Details'}
             </h3>
             <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
               <X className="h-5 w-5" />
@@ -1078,13 +947,13 @@ const EventModal: React.FC<EventModalProps> = ({
                       </div>
                       <button
                         onClick={handleRsvp}
-                        disabled={isRsvping || (event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
+                        disabled={!!(event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
                         className={`px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm font-bold rounded-lg transition-all active:scale-95 ${userHasRsvped
                           ? 'bg-white text-red-600 border border-red-100 hover:bg-red-50'
                           : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        {isRsvping ? <Loader2 className="h-4 w-4 animate-spin" /> : userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
+                        {userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
                       </button>
                     </div>
                   </div>
@@ -1649,40 +1518,4 @@ const EventModal: React.FC<EventModalProps> = ({
   );
 };
 
-// Memoize component to prevent unnecessary re-renders
-export default React.memo(EventModal, (prevProps, nextProps) => {
-  // Only re-render if critical props changed
-  if (prevProps.isOpen !== nextProps.isOpen) return false;
-  if (prevProps.role !== nextProps.role) return false;
-  if (prevProps.currentUserId !== nextProps.currentUserId) return false;
-  if (prevProps.currentUserName !== nextProps.currentUserName) return false;
-  if (prevProps.initialMode !== nextProps.initialMode) return false;
-  if (prevProps.autoApproveOnSave !== nextProps.autoApproveOnSave) return false;
-  if (prevProps.draft !== nextProps.draft) return false;
-  // Needed for up-to-date conflict warnings and series lookups
-  if (prevProps.events !== nextProps.events) return false;
-
-  // Compare event objects
-  if (prevProps.event?.id !== nextProps.event?.id) return false;
-  if (prevProps.event?.title !== nextProps.event?.title) return false;
-  if (prevProps.event?.category !== nextProps.event?.category) return false;
-  if (prevProps.event?.location !== nextProps.event?.location) return false;
-  if (prevProps.event?.date?.getTime() !== nextProps.event?.date?.getTime()) return false;
-  if (prevProps.event?.endDate?.getTime() !== nextProps.event?.endDate?.getTime()) return false;
-  if (prevProps.event?.submitterName !== nextProps.event?.submitterName) return false;
-  if (prevProps.event?.submitterEmail !== nextProps.event?.submitterEmail) return false;
-  if (prevProps.event?.status !== nextProps.event?.status) return false;
-  if (prevProps.event?.recurrence?.type !== nextProps.event?.recurrence?.type) return false;
-  if (prevProps.initialDate?.getTime() !== nextProps.initialDate?.getTime()) return false;
-
-  // Compare callbacks
-  if (prevProps.onClose !== nextProps.onClose) return false;
-  if (prevProps.onSave !== nextProps.onSave) return false;
-  if (prevProps.onUpdate !== nextProps.onUpdate) return false;
-  if (prevProps.onEventUpdate !== nextProps.onEventUpdate) return false;
-  if (prevProps.onDelete !== nextProps.onDelete) return false;
-  if (prevProps.onDeleteInstance !== nextProps.onDeleteInstance) return false;
-
-  return true; // Props are equal, skip re-render
-});
-
+export default React.memo(EventModal);

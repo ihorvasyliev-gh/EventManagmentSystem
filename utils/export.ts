@@ -1,4 +1,3 @@
-import type ExcelJS from 'exceljs';
 import { Event } from '../types';
 
 interface LoadedPoster {
@@ -12,11 +11,7 @@ interface LoadedPoster {
  */
 const loadEventPoster = async (url: string): Promise<LoadedPoster | null> => {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout per image
-
-    const res = await fetch(url, { mode: 'cors', signal: controller.signal });
-    clearTimeout(timeoutId);
+    const res = await fetch(url, { mode: 'cors', signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null;
 
     const blob = await res.blob();
@@ -72,10 +67,13 @@ const RECURRENCE_LABELS: Record<string, string> = {
   custom: 'Custom'
 };
 
-// Export to iCal format (published events only)
-export const exportToICal = (events: Event[]): string => {
-  const publishedEvents = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
+/** Drafts and pending submissions never leave the app */
+export const isPublished = (e: Event): boolean => !e.status || e.status === 'published';
 
+const escapeICS = (text = ''): string =>
+  text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+
+export const exportToICal = (events: Event[]): string => {
   const formatDate = (date: Date): string => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   };
@@ -86,22 +84,16 @@ export const exportToICal = (events: Event[]): string => {
   ical += 'CALSCALE:GREGORIAN\r\n';
   ical += 'METHOD:PUBLISH\r\n';
 
-  publishedEvents.forEach(event => {
+  events.forEach(event => {
     ical += 'BEGIN:VEVENT\r\n';
     ical += `UID:${event.instanceKey || event.id}@ccp-events\r\n`;
     ical += `DTSTART:${formatDate(event.date)}\r\n`;
-    let endDate: Date;
-    if (event.endDate) {
-      const eDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
-      endDate = isNaN(eDate.getTime()) ? new Date(event.date.getTime() + 60 * 60 * 1000) : eDate;
-    } else {
-      endDate = new Date(event.date);
-      endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
-    }
+    const end = event.endDate ? new Date(event.endDate) : null;
+    const endDate = end && !isNaN(end.getTime()) ? end : new Date(event.date.getTime() + 60 * 60 * 1000); // Default 1 hour
     ical += `DTEND:${formatDate(endDate)}\r\n`;
-    ical += `SUMMARY:${event.title.replace(/,/g, '\\,').replace(/;/g, '\\;')}\r\n`;
-    ical += `DESCRIPTION:${event.description.replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n')}\r\n`;
-    ical += `LOCATION:${event.location.replace(/,/g, '\\,').replace(/;/g, '\\;')}\r\n`;
+    ical += `SUMMARY:${escapeICS(event.title)}\r\n`;
+    ical += `DESCRIPTION:${escapeICS(event.description)}\r\n`;
+    ical += `LOCATION:${escapeICS(event.location)}\r\n`;
     ical += `DTSTAMP:${formatDate(new Date())}\r\n`;
     ical += 'SEQUENCE:0\r\n';
     ical += 'END:VEVENT\r\n';
@@ -109,100 +101,6 @@ export const exportToICal = (events: Event[]): string => {
 
   ical += 'END:VCALENDAR\r\n';
   return ical;
-};
-
-// Export to CSV format (published events only with detailed columns)
-export const exportToCSV = (events: Event[]): string => {
-  const publishedEvents = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
-
-  const headers = [
-    'Title',
-    'Category',
-    'Start Date',
-    'Start Time',
-    'End Date',
-    'End Time',
-    'Location',
-    'Description',
-    'Status',
-    'Recurrence',
-    'Contact Name',
-    'Contact Email',
-    'Attendees',
-    'Comments',
-    'Attachments'
-  ];
-
-  const rows = publishedEvents.map(event => {
-    const startDate = event.date instanceof Date ? event.date : new Date(event.date);
-    const startDateStr = formatDateStr(startDate);
-    const startTimeStr = formatTimeStr(startDate);
-
-    let endDateStr = startDateStr;
-    let endTimeStr = '';
-    if (event.endDate) {
-      const eDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
-      if (!isNaN(eDate.getTime())) {
-        endDateStr = formatDateStr(eDate);
-        endTimeStr = formatTimeStr(eDate);
-      }
-    }
-
-    const recurrenceLabel = event.recurrence?.type
-      ? RECURRENCE_LABELS[event.recurrence.type] || event.recurrence.type
-      : '';
-
-    const commentsText = (event.comments ?? [])
-      .filter(c => {
-        const cDate = c.occurrenceDate instanceof Date ? c.occurrenceDate : new Date(c.occurrenceDate);
-        return cDate.getTime() === startDate.getTime();
-      })
-      .map(c => {
-        const createdAt = c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt);
-        return `${c.userName} (${formatDateStr(createdAt)} ${formatTimeStr(createdAt)}): ${c.content}`;
-      })
-      .join('; ');
-
-    const attachmentsText = (event.attachments ?? [])
-      .map(a => `${a.name}: ${a.url}`)
-      .join('; ');
-
-    let attendeesText = '';
-    if (event.attendeeNames && event.attendeeNames.length > 0) {
-      attendeesText = `${event.attendeeNames.length} (${event.attendeeNames.map(a => a.userName).join(', ')})`;
-    } else if (event.attendees && event.attendees.length > 0) {
-      attendeesText = `${event.attendees.length} attendee(s)`;
-    } else if (event.rsvpEnabled) {
-      attendeesText = '0 attendees';
-    } else {
-      attendeesText = 'RSVP disabled';
-    }
-
-    return [
-      event.title,
-      event.category || '',
-      startDateStr,
-      startTimeStr,
-      endDateStr,
-      endTimeStr,
-      event.location,
-      event.description.replace(/"/g, '""'),
-      'Published',
-      recurrenceLabel,
-      event.submitterName || '',
-      event.submitterEmail || '',
-      attendeesText,
-      commentsText.replace(/"/g, '""'),
-      attachmentsText.replace(/"/g, '""')
-    ];
-  });
-
-  const csvContent = [
-    headers.join(','),
-    ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-  ].join('\n');
-
-  return csvContent;
 };
 
 // Download file helper (string content)
@@ -235,7 +133,7 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
   const ExcelJSConstructor = (await import('exceljs')).default;
 
   // 1. Strictly filter published events
-  const publishedEvents = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
+  const publishedEvents = events.filter(isPublished);
 
   // 2. Pre-fetch posters concurrently for events that have posterUrl or image attachments
   const posterMap = new Map<string, LoadedPoster>();

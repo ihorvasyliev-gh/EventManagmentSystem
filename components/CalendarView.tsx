@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Event, ViewMode, EventCategory, UserRole } from '../types';
-import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths } from '../utils/date';
+import { Event, ViewMode, UserRole } from '../types';
+import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths, isMultiDayEvent } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import {
   ChevronLeft,
@@ -19,13 +19,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useMedia } from '../hooks/useMedia';
 import { isAnyModalOpen } from '../hooks/useModalFocusTrap';
 import WeekView, { getCategoryColor, getCategoryDotColor } from './WeekView';
-
-const isMultiDayEvent = (event: Event): boolean => {
-  if (!event.endDate) return false;
-  const s = new Date(event.date);
-  const e = new Date(event.endDate);
-  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
-};
 
 /** Makes a clickable card reachable and usable from the keyboard */
 const clickableProps = (onActivate: () => void) => ({
@@ -53,7 +46,7 @@ const readStoredViewMode = (isMobile: boolean): ViewMode | null => {
 };
 
 const formatEventRangeText = (event: Event): string => {
-  if (!event.endDate || !isMultiDayEvent(event)) return '';
+  if (!event.endDate || !isMultiDayEvent(event.date, event.endDate)) return '';
   const sStr = event.date.toLocaleDateString([], { day: 'numeric', month: 'short' });
   const eStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
   return `${sStr} – ${eStr}`;
@@ -331,7 +324,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     for (const ev of displayEvents) {
       const s = new Date(ev.date);
       s.setHours(0, 0, 0, 0);
-      const isMulti = isMultiDayEvent(ev);
+      const isMulti = isMultiDayEvent(ev.date, ev.endDate);
       const e = ev.endDate && isMulti ? new Date(ev.endDate) : new Date(s);
       e.setHours(0, 0, 0, 0);
 
@@ -369,7 +362,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     for (const ev of listViewEvents) {
       const s = new Date(ev.date);
-      const isMulti = isMultiDayEvent(ev);
+      const isMulti = isMultiDayEvent(ev.date, ev.endDate);
       const e = ev.endDate && isMulti ? new Date(ev.endDate) : (ev.endDate ? new Date(ev.endDate) : s);
 
       if (e < startOfToday) {
@@ -440,7 +433,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {dayEvents.map(event => {
               const colorClass = getCategoryColor(event.category);
-              const isMulti = isMultiDayEvent(event);
+              const isMulti = isMultiDayEvent(event.date, event.endDate);
 
               return (
                 <div
@@ -768,7 +761,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   ) : (
                     selectedMobileDayEvents.map(event => {
                       const colorClass = getCategoryColor(event.category);
-                      const isMulti = isMultiDayEvent(event);
+                      const isMulti = isMultiDayEvent(event.date, event.endDate);
                       const timeStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                       const endStr = event.endDate
                         ? isMulti
@@ -937,7 +930,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               )}
               {popoverDayEvents.map(ev => {
                 const colorClass = getCategoryColor(ev.category);
-                const isMulti = isMultiDayEvent(ev);
+                const isMulti = isMultiDayEvent(ev.date, ev.endDate);
                 const timeStr = ev.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const endStr = ev.endDate
                   ? isMulti

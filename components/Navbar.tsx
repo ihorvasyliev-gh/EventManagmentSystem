@@ -76,7 +76,7 @@ const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <nav className={`sticky top-0 z-50 w-full pt-[env(safe-area-inset-top)] ${theme === 'dark' ? 'glass-panel-dark text-white' : 'glass-panel text-slate-800'}`}>
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="max-w-7xl 2xl:max-w-[96rem] mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 sm:h-16 items-center gap-2">
             {/* Brand */}
             <button

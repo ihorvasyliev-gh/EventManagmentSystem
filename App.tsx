@@ -1096,7 +1096,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         onEventClick={handleEventClick}
       />
 
-      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+      <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Admin: submissions waiting for review */}
         {user.role === UserRole.ADMIN && pendingSubmissions.length > 0 && (
           <button
@@ -1261,6 +1261,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             isOpen={isSubmissionsModalOpen}
             onClose={() => setIsSubmissionsModalOpen(false)}
             submissions={pendingSubmissions}
+            events={events}
             onApprove={handleApproveSubmission}
             onEdit={(ev) => {
               setEventDraft(null);
@@ -1276,7 +1277,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       )}
 
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-28 md:pb-6">
-        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
+        <div className="max-w-7xl 2xl:max-w-[96rem] mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
           &copy; {new Date().getFullYear()} Cork City Partnership. Internal Use Only.
           <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
             Keyboard: <kbd className="font-sans font-semibold">/</kbd> search · <kbd className="font-sans font-semibold">←</kbd> <kbd className="font-sans font-semibold">→</kbd> previous / next · <kbd className="font-sans font-semibold">T</kbd> today

@@ -965,42 +965,20 @@ const EventModal: React.FC<EventModalProps> = ({
                     )}
                   </div>
 
-                  <div className="flex justify-between items-start gap-4">
-                    <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  <div className="flex justify-between items-start gap-3">
+                    <h2 className={`text-xl sm:text-2xl font-bold leading-tight break-words ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                       {event.title}
                     </h2>
-                    <div className="flex gap-2 shrink-0">
-                      {getShareLink && (
-                        <button
-                          onClick={handleCopyLink}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                          title="Copy link to this event"
-                          aria-label="Copy link to this event"
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    {role === UserRole.ADMIN && (
-                      <>
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                          title="Edit Event (E)"
-                          aria-label="Edit event"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={handleDeleteClick}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                          title="Delete Event"
-                          aria-label="Delete event"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
+                    {getShareLink && (
+                      <button
+                        onClick={handleCopyLink}
+                        className="shrink-0 p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
+                        title="Copy link to this event"
+                        aria-label="Copy link to this event"
+                      >
+                        <Link2 className="h-5 w-5" />
+                      </button>
                     )}
-                    </div>
                   </div>
                 </div>
 
@@ -1219,14 +1197,14 @@ const EventModal: React.FC<EventModalProps> = ({
                     type="text"
                     value={title}
                     onChange={(e) => { setTitle(e.target.value); clearFieldError('title'); }}
-                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                     placeholder="e.g. Enterprise Network Breakfast, Community Family Day"
                   />
                   {fieldErrors.title && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.title}</p>}
                 </div>
 
                 {/* 2. Category & Status */}
-                <div className={`grid gap-4 ${role === UserRole.ADMIN ? 'grid-cols-1 sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-1 sm:grid-cols-[1fr_auto]'}`}>
+                <div className={`grid gap-x-2 gap-y-4 sm:gap-4 ${role === UserRole.ADMIN ? 'grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-[1fr_auto]'}`}>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                       Category <span className="text-red-500">*</span>
@@ -1235,7 +1213,7 @@ const EventModal: React.FC<EventModalProps> = ({
                       required
                       value={category}
                       onChange={(e) => setCategory(e.target.value as EventCategory | '')}
-                      className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
                     >
                       <option value="">Select...</option>
                       {availableCategories.map((cat) => (
@@ -1249,19 +1227,19 @@ const EventModal: React.FC<EventModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowAddCategoryModal(true)}
-                      className="p-2.5 sm:p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 border transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      className="p-2.5 sm:p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       title="Add new category"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
                   </div>
                   {role === UserRole.ADMIN && (
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
                       <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value as EventStatus)}
-                        className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                        className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
                       >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
@@ -1317,7 +1295,7 @@ const EventModal: React.FC<EventModalProps> = ({
                       type="text"
                       value={location}
                       onChange={(e) => { setLocation(e.target.value); clearFieldError('location'); }}
-                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                       placeholder="e.g. Heron House, Room 4 / Mahon Community Centre"
                     />
                   </div>
@@ -1334,7 +1312,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     value={description}
                     onChange={(e) => { setDescription(e.target.value); clearFieldError('description'); }}
                     rows={3}
-                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-y min-h-[80px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-y min-h-[80px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                     placeholder="A few lines explaining what the event is about, who it's for, and key details for the Board & staff to pencil in."
                   />
                   {fieldErrors.description && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.description}</p>}
@@ -1444,7 +1422,7 @@ const EventModal: React.FC<EventModalProps> = ({
                           value={selectedDates.length > 1 ? 'custom' : recurrenceType}
                           onChange={(e) => setRecurrenceType(e.target.value as any)}
                           disabled={selectedDates.length > 1}
-                          className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="none">None</option>
                           <option value="daily">Daily</option>
@@ -1464,7 +1442,7 @@ const EventModal: React.FC<EventModalProps> = ({
                               min="1"
                               value={recurrenceInterval}
                               onChange={(e) => setRecurrenceInterval(Number(e.target.value))}
-                              className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
+                              className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
                             />
                           </div>
                           <div>
@@ -1473,7 +1451,7 @@ const EventModal: React.FC<EventModalProps> = ({
                               type="date"
                               value={recurrenceEndDate}
                               onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                              className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
+                              className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
                             />
                           </div>
                         </>
@@ -1590,7 +1568,7 @@ const EventModal: React.FC<EventModalProps> = ({
                           handleAddCategory();
                         }
                       }}
-                      className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium placeholder-slate-400"
+                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium placeholder-slate-400"
                       placeholder="Enter category name"
                       autoFocus
                     />
@@ -1625,13 +1603,39 @@ const EventModal: React.FC<EventModalProps> = ({
           <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
             {showForm ? (
               <>
-                <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-slate-900 text-white font-medium hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
+                <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
                   {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? (autoApproveOnSave ? 'Save & Approve' : 'Save Changes') : 'Create Event')}
                 </button>
                 <button type="button" onClick={handleCancelForm} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                   Cancel
                 </button>
               </>
+            ) : role === UserRole.ADMIN && event ? (
+              <div className="flex w-full items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteClick}
+                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-3 sm:px-4 py-3 sm:py-2 min-h-[48px] sm:min-h-0 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-all text-sm"
+                  title="Delete event"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </button>
+                <span className="flex-1" />
+                <button type="button" onClick={onClose} className="hidden sm:inline-flex justify-center items-center rounded-lg px-5 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm">
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all text-sm flex-1 sm:flex-none"
+                  title="Edit event (E)"
+                  aria-keyshortcuts="e"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit event
+                </button>
+              </div>
             ) : (
               <button type="button" onClick={onClose} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                 Close

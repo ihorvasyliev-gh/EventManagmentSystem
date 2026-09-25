@@ -474,7 +474,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
                               {event.category || 'Event'}
                             </span>
-                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">
                               {event.title}
                             </h3>
                           </div>
@@ -518,7 +518,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="p-3 sm:p-6 flex flex-col sm:flex-row justify-between items-center border-b border-slate-100 dark:border-slate-800 gap-2 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-start">
           <h2 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:min-w-48 truncate">
-            {headerTitle}
+            {viewMode === 'week' ? headerTitle : (
+              <>
+                <span className="min-[400px]:hidden">{currentDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
+                <span className="hidden min-[400px]:inline">{headerTitle}</span>
+              </>
+            )}
           </h2>
           <div className="flex items-center gap-1.5 sm:gap-4">
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">

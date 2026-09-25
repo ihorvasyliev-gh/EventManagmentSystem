@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { X, Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { Event } from '../types';
 import { exportToICal, exportToExcel, downloadFile, downloadBlob } from '../utils/export';
 import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import ModalShell from './ModalShell';
 import { useToast } from '../contexts/ToastContext';
 
 const EXPORT_RANGE_YEARS = 2;
@@ -21,9 +21,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   const [exportFormat, setExportFormat] = useState<'ical' | 'excel'>('ical');
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const modalPanelRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
-  useModalFocusTrap(isOpen, onClose, modalPanelRef);
 
   if (!isOpen) return null;
 
@@ -92,215 +90,175 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="export-modal-title" role="dialog" aria-modal="true">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={onClose}></div>
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div ref={modalPanelRef} className="inline-block align-bottom bg-white dark:bg-slate-800 rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md w-full">
-          {/* Header */}
-          <div className="bg-slate-50 dark:bg-slate-700/50 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
-            <h3 className="text-lg leading-6 font-semibold text-gray-900 dark:text-white" id="export-modal-title">
-              Export & Subscribe
-            </h3>
-            <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-300 focus:outline-none">
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setActiveTab('export')}
-              className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${activeTab === 'export'
-                ? 'border-brand-600 text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-                }`}
-            >
-              <Download className="h-4 w-4 inline mr-1.5 -mt-0.5" />
-              Export
-            </button>
-            <button
-              onClick={() => setActiveTab('subscribe')}
-              className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${activeTab === 'subscribe'
-                ? 'border-brand-600 text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-                }`}
-            >
-              <Link2 className="h-4 w-4 inline mr-1.5 -mt-0.5" />
-              Subscribe
-            </button>
-          </div>
-
-          {/* Export Tab */}
-          {activeTab === 'export' && (
+  const exportFooter = (
+    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex justify-center items-center rounded-xl border border-slate-300 dark:border-slate-600 px-4 py-2.5 bg-white dark:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+      >
+        {activeTab === 'export' ? 'Cancel' : 'Close'}
+      </button>
+      {activeTab === 'export' && (
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex justify-center items-center gap-2 rounded-xl px-5 py-2.5 bg-brand-600 text-sm font-semibold text-white hover:bg-brand-700 shadow-sm disabled:opacity-50 transition-colors"
+        >
+          {exporting ? (
             <>
-              <div className="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                {onOpenFortnightlyBulletin && (
-                  <div className="mb-5 p-4 rounded-xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/80 flex items-center justify-between gap-3 shadow-xs">
-                    <div>
-                      <h4 className="text-sm font-bold text-brand-900 dark:text-brand-100 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-brand-600" />
-                        Upcoming Events Digest (PDF)
-                      </h4>
-                      <p className="text-xs text-brand-700 dark:text-brand-300 mt-0.5">
-                        Generate the 2-week PDF digest & WhatsApp summary for the Board & staff.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenFortnightlyBulletin();
-                      }}
-                      className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex-shrink-0"
-                    >
-                      Open Generator
-                    </button>
-                  </div>
-                )}
-
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                  Or export calendar data:
-                </p>
-
-                <div className="space-y-3">
-                  <label className="flex items-center p-4 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <input
-                      type="radio"
-                      name="format"
-                      value="ical"
-                      checked={exportFormat === 'ical'}
-                      onChange={() => setExportFormat('ical')}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      disabled={exporting}
-                    />
-                    <div className="ml-3 flex-1">
-                      <div className="flex items-center">
-                        <Calendar className="h-5 w-5 text-blue-500 dark:text-blue-400 mr-2" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">iCal Format (.ics)</span>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Import into Google Calendar, Outlook, or Apple Calendar</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center p-4 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <input
-                      type="radio"
-                      name="format"
-                      value="excel"
-                      checked={exportFormat === 'excel'}
-                      onChange={() => setExportFormat('excel')}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      disabled={exporting}
-                    />
-                    <div className="ml-3 flex-1">
-                      <div className="flex items-center">
-                        <FileSpreadsheet className="h-5 w-5 text-green-500 dark:text-green-400 mr-2" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">Excel (.xlsx)</span>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Published events with start & end dates, posters, and comments</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 dark:bg-slate-700/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className="w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-brand-600 text-base font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  {exporting ? (
-                    <span className="animate-pulse">Preparing export…</span>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-slate-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Preparing…
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              Download {exportFormat === 'ical' ? '.ics' : '.xlsx'}
             </>
           )}
-
-          {/* Subscribe Tab */}
-          {activeTab === 'subscribe' && (
-            <>
-              <div className="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                  Subscribe to this calendar in Outlook, Google Calendar, or Apple Calendar. Events will auto-update.
-                </p>
-
-                {/* Feed URL with copy button */}
-                <div className="mb-4">
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                    Calendar Feed URL
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-100 dark:bg-slate-700 rounded-lg px-3 py-2.5 text-xs text-gray-700 dark:text-gray-300 font-mono break-all select-all border border-gray-200 dark:border-gray-600">
-                      {feedUrl}
-                    </div>
-                    <button
-                      onClick={handleCopyUrl}
-                      className="flex-shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
-                      title="Copy URL"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {copied && (
-                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">Copied to clipboard!</p>
-                  )}
-                </div>
-
-                {/* Quick subscribe button */}
-                <a
-                  href={webcalUrl}
-                  className="w-full inline-flex justify-center items-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-colors mb-4"
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Open in Calendar App
-                  <ExternalLink className="h-3.5 w-3.5 ml-1.5 opacity-70" />
-                </a>
-
-                {/* Instructions */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                  <h4 className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-2">
-                    How to subscribe manually:
-                  </h4>
-                  <ol className="text-xs text-blue-700 dark:text-blue-400 space-y-1 list-decimal list-inside">
-                    <li><strong>Outlook:</strong> Add Calendar → From Internet → paste URL</li>
-                    <li><strong>Google Calendar:</strong> Other calendars (+) → From URL → paste</li>
-                    <li><strong>Apple Calendar:</strong> File → New Subscription → paste URL</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 dark:bg-slate-700/50 px-4 py-3 sm:px-6 flex justify-end">
-                <button
-                  onClick={onClose}
-                  className="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-slate-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
-                >
-                  Close
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+        </button>
+      )}
     </div>
+  );
+
+  const formatOption = (value: 'ical' | 'excel', icon: React.ReactNode, name: string, hint: string) => {
+    const active = exportFormat === value;
+    return (
+      <label
+        className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+          active ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/30' : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500'
+        }`}
+      >
+        <input
+          type="radio"
+          name="format"
+          value={value}
+          checked={active}
+          onChange={() => setExportFormat(value)}
+          className="sr-only"
+          disabled={exporting}
+        />
+        <span className="shrink-0 mt-0.5">{icon}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-semibold text-slate-900 dark:text-white">{name}</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{hint}</span>
+        </span>
+        <span className={`shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${active ? 'border-brand-600 bg-brand-600' : 'border-slate-300 dark:border-slate-500'}`} aria-hidden="true">
+          {active && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+        </span>
+      </label>
+    );
+  };
+
+  return (
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Export & subscribe"
+      subtitle="Download the calendar or keep it synced in your own calendar app"
+      icon={<Download className="w-5 h-5" />}
+      footer={exportFooter}
+    >
+      {/* Tabs */}
+      <div className="grid grid-cols-2 gap-1 p-1 mb-5 bg-slate-100 dark:bg-slate-900/60 rounded-xl" role="tablist">
+        {([
+          { id: 'export', label: 'Download', icon: <Download className="h-4 w-4" /> },
+          { id: 'subscribe', label: 'Subscribe', icon: <Link2 className="h-4 w-4" /> }
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === t.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'export' ? (
+        <div className="space-y-4">
+          {onOpenFortnightlyBulletin && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenFortnightlyBulletin();
+              }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/80 text-left hover:bg-brand-100/70 dark:hover:bg-brand-900/40 transition-colors"
+            >
+              <FileText className="w-5 h-5 shrink-0 text-brand-600 dark:text-brand-400" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-brand-900 dark:text-brand-100">Looking for the Events Digest?</span>
+                <span className="block text-xs text-brand-700 dark:text-brand-300 mt-0.5">The branded PDF & WhatsApp summary for the Board & staff.</span>
+              </span>
+              <ExternalLink className="w-4 h-4 shrink-0 text-brand-500" />
+            </button>
+          )}
+
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+              Export published events as
+            </legend>
+            {formatOption('ical', <Calendar className="h-5 w-5 text-blue-500 dark:text-blue-400" />, 'Calendar file (.ics)', 'Import into Outlook, Google Calendar or Apple Calendar')}
+            {formatOption('excel', <FileSpreadsheet className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />, 'Excel spreadsheet (.xlsx)', 'Every event with dates, venues, posters and comments')}
+          </fieldset>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Subscribe once and new or changed events show up in your own calendar automatically.
+          </p>
+
+          <a
+            href={webcalUrl}
+            className="w-full inline-flex justify-center items-center gap-2 rounded-xl px-4 py-3 bg-brand-600 text-sm font-semibold text-white hover:bg-brand-700 shadow-sm transition-colors"
+          >
+            <Calendar className="h-4 w-4" />
+            Open in my calendar app
+            <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+          </a>
+
+          <div>
+            <label htmlFor="feed-url" className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+              Or copy the feed address
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="feed-url"
+                readOnly
+                value={feedUrl}
+                onFocus={(e) => e.target.select()}
+                className="flex-1 min-w-0 bg-slate-100 dark:bg-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-700 dark:text-slate-300 font-mono border border-slate-200 dark:border-slate-600"
+              />
+              <button
+                type="button"
+                onClick={handleCopyUrl}
+                className="shrink-0 inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+              >
+                {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 p-4">
+            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Adding it by hand</h4>
+            <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
+              <li><strong className="text-slate-800 dark:text-slate-200">Outlook:</strong> Add calendar → Subscribe from web → paste the address</li>
+              <li><strong className="text-slate-800 dark:text-slate-200">Google Calendar:</strong> Other calendars (+) → From URL → paste</li>
+              <li><strong className="text-slate-800 dark:text-slate-200">Apple Calendar:</strong> File → New Calendar Subscription → paste</li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </ModalShell>
   );
 };
 

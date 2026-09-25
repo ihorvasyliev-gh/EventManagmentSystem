@@ -67,10 +67,11 @@ This calendar includes a dedicated, streamlined workflow tailored to Cork City P
 - Click the **"Events Digest"** button in the Navbar or in the **Export** dialog.
 - Select the 14-day date range (defaults to next 2 weeks).
 - Choose layout style:
-  - **Executive Digest:** A4 visual cards with category pills, date/time badges, descriptions, and embedded flyer thumbnails. Ideal for the Board of Directors.
-  - **Compact Table:** Dense agenda table.
-- Click **Download Events Digest PDF** to generate the document with official Cork City Partnership colors (`#B30066` and `#39B54A`) and logo.
-- Click **Copy WhatsApp Summary** to copy a preformatted markdown text with emojis ready to paste directly into company WhatsApp groups.
+  - **Executive cards:** branded cover with event/day/venue totals, an "At a glance" mini calendar (click a day to jump to it), then events grouped by day with category colours, full descriptions, contact details and flyer thumbnails. Ideal for the Board of Directors.
+  - **Compact table:** dense day-by-day agenda that fits the most events per page.
+- Click **Preview** to open the PDF in a new tab, or **Download PDF** to save it. The digest uses the bundled Inter font (`public/fonts/`) and falls back to Helvetica if the font can't be loaded.
+- Pending submissions in the chosen period are flagged in the dialog (with a shortcut to the inbox) — only approved events are included.
+- Click **WhatsApp text** to copy a preformatted summary with emojis ready to paste into company WhatsApp groups.
 
 ### Database Setup
 To enable anonymous draft submissions in Supabase, execute `submission-migration.sql` in your Supabase SQL Editor.

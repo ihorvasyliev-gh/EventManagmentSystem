@@ -540,7 +540,7 @@ export const generateEventsDigestPDF = async (
   events: Event[],
   options: BulletinOptions
 ): Promise<Blob | void> => {
-  const { jsPDF: JsPDF, GState } = await import('jspdf');
+  const { jsPDF: JsPDF } = await import('jspdf');
   const doc: jsPDF = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
 
   const W = doc.internal.pageSize.getWidth();   // 210
@@ -578,7 +578,6 @@ export const generateEventsDigestPDF = async (
     doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
     doc.setLineWidth(width);
   };
-  const opacity = (value: number) => doc.setGState(new GState({ opacity: value }));
 
   /** Letter-spaced small caps label; returns its width */
   const spaced = (text: string, x: number, y: number, spacing = 0.35, align: 'left' | 'right' | 'center' = 'left'): number => {
@@ -687,80 +686,62 @@ export const generateEventsDigestPDF = async (
     return doc.getTextWidth('CORK CITY PARTNERSHIP');
   };
 
-  // --- Page 1: hero --------------------------------------------------------
-  const HERO_H = 58;
-  const drawHero = () => {
+  // --- Page 1: header -------------------------------------------------------
+  // Deliberately light: white paper, a thin brand stripe and dark text, so the
+  // digest prints cheaply and doesn't shout on screen.
+  const drawBrandStripe = () => {
     fill(RED);
-    doc.rect(0, 0, W, HERO_H, 'F');
-
-    // Soft decorative rings for depth
-    opacity(0.08);
-    fill(WHITE);
-    doc.circle(W - 14, 6, 38, 'F');
-    doc.circle(W - 60, HERO_H + 4, 20, 'F');
-    opacity(0.06);
-    doc.circle(W - 14, 6, 26, 'F');
-    opacity(1);
-
-    // Brand stripe
+    doc.rect(0, 0, W, 1.8, 'F');
     fill(GREEN);
-    doc.rect(0, HERO_H - 1.6, W * 0.28, 1.6, 'F');
-
-    // Logo on a white pill
-    const logoH = 10.5;
-    const logoW = logo ? logoH * logo.aspectRatio : 62;
-    fill(WHITE);
-    doc.roundedRect(M, 10, logoW + 7, logoH + 5, 3, 3, 'F');
-    logoDraw(M + 3.5, 12.5, logoH);
-
-    // Issue label
-    font('semibold', 7);
-    color(WHITE);
-    opacity(0.85);
-    spaced('EVENTS DIGEST', W - M, 15.5, 0.6, 'right');
-    font('regular', 8);
-    const issued = new Date();
-    doc.text(`Issued ${WEEKDAYS_LONG[issued.getDay()].slice(0, 3)} ${issued.getDate()} ${monthShort(issued)} ${issued.getFullYear()}`, W - M, 20.5, { align: 'right' });
-    opacity(1);
-
-    // Title
-    font('bold', 27);
-    color(WHITE);
-    doc.text(txt(options.title) || 'Upcoming Events', M, 38);
-    font('medium', 10.5);
-    opacity(0.92);
-    doc.text(txt(formatLongRange(periodStart, periodEnd)), M, 45.5);
-    opacity(1);
+    doc.rect(W * 0.72, 0, W * 0.28, 1.8, 'F');
   };
 
-  const STAT_Y = HERO_H - 6;
-  const STAT_H = 17;
+  const drawHero = () => {
+    drawBrandStripe();
+    logoDraw(M, 10, 13);
+
+    font('semibold', 7);
+    color(MUTED);
+    spaced('EVENTS DIGEST', W - M, 14.5, 0.6, 'right');
+    font('regular', 8);
+    const issued = new Date();
+    doc.text(`Issued ${WEEKDAYS_LONG[issued.getDay()].slice(0, 3)} ${issued.getDate()} ${monthShort(issued)} ${issued.getFullYear()}`, W - M, 19.5, { align: 'right' });
+
+    font('bold', 24);
+    color(INK);
+    doc.text(txt(options.title) || 'Upcoming Events', M, 37);
+    font('medium', 10.5);
+    color(BODY);
+    doc.text(txt(formatLongRange(periodStart, periodEnd)), M, 44);
+
+    stroke(BORDER, 0.3);
+    doc.line(M, 49, W - M, 49);
+  };
+
+  const STAT_Y = 53;
+  const STAT_H = 13;
   const drawStats = () => {
     const stats: Array<{ value: string; label: string; accent: Rgb }> = [
       { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: RED },
       { value: String(eventDays.size), label: eventDays.size === 1 ? 'Day with events' : 'Days with events', accent: GREEN },
-      { value: String(venues.size), label: venues.size === 1 ? 'Venue' : 'Venues', accent: INK }
+      { value: String(venues.size), label: venues.size === 1 ? 'Venue' : 'Venues', accent: MUTED }
     ];
-    const gap = 4;
-    const w = (CW - gap * 2) / 3;
+    const w = CW / 3;
     stats.forEach((s, i) => {
-      const x = M + i * (w + gap);
-      // Shadow
-      opacity(0.5);
-      fill([203, 213, 225]);
-      doc.roundedRect(x + 0.3, STAT_Y + 0.8, w, STAT_H, 2.5, 2.5, 'F');
-      opacity(1);
-      fill(WHITE);
-      stroke(BORDER);
-      doc.roundedRect(x, STAT_Y, w, STAT_H, 2.5, 2.5, 'FD');
+      const x = M + i * w;
+      if (i > 0) {
+        stroke(BORDER, 0.3);
+        doc.line(x, STAT_Y + 1, x, STAT_Y + STAT_H - 1);
+      }
+      const tx = x + (i > 0 ? 6 : 0);
       fill(s.accent);
-      doc.roundedRect(x + 4, STAT_Y + 4.5, 1.2, STAT_H - 9, 0.6, 0.6, 'F');
-      font('bold', 16);
+      doc.roundedRect(tx, STAT_Y + 2.2, 0.9, STAT_H - 4.4, 0.45, 0.45, 'F');
+      font('bold', 15);
       color(INK);
-      doc.text(s.value, x + 8, STAT_Y + 9.2);
+      doc.text(s.value, tx + 3.5, STAT_Y + 7.4);
       font('medium', 7.5);
       color(MUTED);
-      doc.text(s.label, x + 8, STAT_Y + 13.6);
+      doc.text(s.label, tx + 3.5, STAT_Y + 11.4);
     });
   };
 
@@ -888,10 +869,7 @@ export const generateEventsDigestPDF = async (
 
   // --- Continuation page header & footers ---------------------------------
   const drawPageHeader = () => {
-    fill(RED);
-    doc.rect(0, 0, W, 2.2, 'F');
-    fill(GREEN);
-    doc.rect(0, 0, W * 0.28, 2.2, 'F');
+    drawBrandStripe();
     logoDraw(M, 8, 7.5);
     font('bold', 9.5);
     color(INK);
@@ -943,8 +921,8 @@ export const generateEventsDigestPDF = async (
         const label = `WEEK ${weekIndex + 1}`;
         font('bold', 6.8);
         const lw = doc.getTextWidth(label) + 0.5 * (label.length - 1) + 6;
-        pill(M, y + 2.6, lw, 5.4, INK);
-        color(WHITE);
+        pill(M, y + 2.6, lw, 5.4, BG, BORDER);
+        color(INK);
         spaced(label, M + 3, y + 6.3, 0.5);
         font('semibold', 9);
         color(INK);
@@ -976,17 +954,18 @@ export const generateEventsDigestPDF = async (
         const countLabel = count === 1 ? '1 event' : `${count} events`;
         const rel = relativeDayLabel(day);
         if (isExecutive) {
-          // Date tile
+          // Date tile (outlined — no solid ink block)
           const tile = 11.5;
           const ty = y + 1.5;
-          fill(isToday ? RED : INK);
-          doc.roundedRect(M, ty, tile, tile, 2.2, 2.2, 'F');
+          const tileColor = isToday ? RED : INK;
+          fill(isToday ? RED_TINT : WHITE);
+          stroke(isToday ? RED : BORDER, isToday ? 0.45 : 0.35);
+          doc.roundedRect(M, ty, tile, tile, 2.2, 2.2, 'FD');
           font('semibold', 5.2);
-          color(WHITE);
-          opacity(0.8);
+          color(isToday ? RED : MUTED);
           spaced(monthShortUpper(day), M + tile / 2, ty + 3.7, 0.3, 'center');
-          opacity(1);
           font('bold', 12);
+          color(tileColor);
           doc.text(String(day.getDate()), M + tile / 2, ty + 9.3, { align: 'center' });
 
           font('bold', 11);
@@ -1314,10 +1293,12 @@ export const generateEventsDigestPDF = async (
   };
   const TABLE_HEAD_H = 7;
   const drawTableHead = (y: number) => {
-    fill(INK);
-    doc.roundedRect(M, y, CW, TABLE_HEAD_H, 1.5, 1.5, 'F');
+    fill(BG);
+    doc.rect(M, y, CW, TABLE_HEAD_H, 'F');
+    stroke(BORDER, 0.3);
+    doc.line(M, y + TABLE_HEAD_H, M + CW, y + TABLE_HEAD_H);
     font('bold', 6.5);
-    color(WHITE);
+    color(MUTED);
     spaced('TIME', COL.time, y + 4.6, 0.4);
     spaced('EVENT', COL.event, y + 4.6, 0.4);
     spaced('VENUE', COL.venue, y + 4.6, 0.4);

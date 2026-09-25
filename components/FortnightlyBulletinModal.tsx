@@ -52,10 +52,12 @@ const fmtTime = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(
 /** Tiny schematic of each PDF layout so the choice is visual, not just a label */
 const LayoutThumb: React.FC<{ kind: 'executive' | 'compact'; active: boolean }> = ({ kind, active }) => {
   const bar = active ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600';
+  const heading = 'bg-slate-300 dark:bg-slate-600';
   const line = 'bg-slate-200 dark:bg-slate-600';
   return (
     <div className="w-full h-20 sm:h-24 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1.5 flex flex-col gap-1 overflow-hidden" aria-hidden="true">
-      <div className={`h-3 rounded-sm ${bar}`} />
+      <div className={`h-0.5 -mx-1.5 -mt-1.5 mb-0.5 ${bar}`} />
+      <div className={`h-1.5 w-1/2 rounded-sm ${heading}`} />
       {kind === 'executive' ? (
         [0, 1].map((i) => (
           <div key={i} className="flex-1 flex gap-1 rounded-sm border border-slate-200 dark:border-slate-700 p-1">
@@ -69,7 +71,7 @@ const LayoutThumb: React.FC<{ kind: 'executive' | 'compact'; active: boolean }> 
         ))
       ) : (
         <>
-          <div className="h-1.5 rounded-sm bg-slate-700 dark:bg-slate-500" />
+          <div className="h-1.5 rounded-sm bg-slate-200 dark:bg-slate-700" />
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="flex gap-1">
               <div className={`h-1 w-2 rounded ${line}`} />

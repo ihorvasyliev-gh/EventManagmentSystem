@@ -156,14 +156,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, events 
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+          <span className="absolute top-1 right-1 min-w-[1rem] h-4 px-1 bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-50 max-h-[calc(100vh-5rem)] overflow-hidden flex flex-col animate-slide-down origin-top-right">
+        <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto top-[calc(3.75rem+env(safe-area-inset-top))] sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 max-h-[calc(100vh-5rem)] overflow-hidden flex flex-col animate-slide-down origin-top-right">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h3>
             <div className="flex items-center space-x-2">

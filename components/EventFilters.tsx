@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Filter, X, Calendar, MapPin, Mail, Tag } from 'lucide-react';
+import { SlidersHorizontal, X, Calendar, MapPin, Mail } from 'lucide-react';
 import { EventFilters, EventCategory, EventStatus } from '../types';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { formatLocalDate } from '../utils/date';
@@ -101,6 +101,15 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
     [filters]
   );
 
+  const activeCount = [
+    filters.category ? 1 : 0,
+    filters.status ? 1 : 0,
+    filters.dateRange ? 1 : 0,
+    filters.location ? 1 : 0,
+    filters.submitterEmail || filters.creatorId ? 1 : 0,
+    filters.tags?.length || 0
+  ].reduce((a, b) => a + b, 0);
+
   const clearFilters = () => {
     onFiltersChange({});
   };
@@ -113,27 +122,21 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-colors ${
+        className={`flex items-center gap-2 h-10 sm:h-11 px-3 sm:px-4 rounded-xl border transition-colors ${
           hasActiveFilters
-            ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+            ? 'bg-brand-50 dark:bg-brand-950/40 border-brand-300 dark:border-brand-800 text-brand-700 dark:text-brand-300'
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
         }`}
         aria-label="Filter events"
         aria-expanded={isOpen}
       >
-        <Filter className="h-4 w-4" />
-        <span className="text-sm font-medium">Filters</span>
-        {hasActiveFilters && (
-          <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-            {[
-              filters.category ? 1 : 0,
-              filters.status ? 1 : 0,
-              filters.dateRange ? 1 : 0,
-              filters.location ? 1 : 0,
-              filters.submitterEmail || filters.creatorId ? 1 : 0,
-              filters.tags?.length || 0
-            ].reduce((a, b) => a + b, 0)}
+        <SlidersHorizontal className="h-4 w-4" />
+        <span className="hidden min-[400px]:inline text-sm font-medium">Filters</span>
+        {activeCount > 0 && (
+          <span className="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center bg-brand-600 text-white text-[11px] font-bold rounded-full">
+            {activeCount}
           </span>
         )}
       </button>

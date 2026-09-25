@@ -185,7 +185,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   return (
     <div className={`p-2 sm:p-4 lg:p-6 transition-colors ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>
       {/* Mobile: 7-day pill strip / tabs */}
-      <div className="block md:hidden mb-4">
+      <div className="block lg:hidden mb-4">
         <div className="grid grid-cols-7 gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
           {eventsByDay.map((group, idx) => {
             const isSelected = idx === selectedMobileDayIndex;
@@ -207,7 +207,10 @@ const WeekView: React.FC<WeekViewProps> = ({
                 }`}
                 aria-label={`${group.day.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' })}, ${count} events`}
               >
-                <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">{dayName}</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
+                  <span className="sm:hidden">{dayName}</span>
+                  <span className="hidden sm:inline">{group.day.toLocaleDateString('default', { weekday: 'short' })}</span>
+                </span>
                 <span className="text-sm font-extrabold">{group.day.getDate()}</span>
                 <div className="h-1.5 flex items-center justify-center gap-0.5 mt-0.5">
                   {count > 0 && (
@@ -245,7 +248,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               </button>
 
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-slate-900 dark:text-white">
+                <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
                   {activeMobileGroup.day.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
                 {isSameDay(activeMobileGroup.day, today) && (
@@ -330,7 +333,7 @@ const WeekView: React.FC<WeekViewProps> = ({
       </div>
 
       {/* Desktop / Tablet: 7 Day Columns Grid */}
-      <div className="hidden md:grid md:grid-cols-7 gap-2 lg:gap-3">
+      <div className="hidden lg:grid lg:grid-cols-7 gap-2 xl:gap-3">
         {eventsByDay.map((group, idx) => {
           const isToday = isSameDay(group.day, today);
           const dayName = group.day.toLocaleDateString('default', { weekday: 'short' });

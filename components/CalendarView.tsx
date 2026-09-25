@@ -64,14 +64,16 @@ const formatWeekRange = (start: Date, end: Date): string => {
   const endMonth = end.toLocaleDateString('default', { month: 'short' });
   const startYear = start.getFullYear();
   const endYear = end.getFullYear();
+  // The year is only noise while browsing the current year
+  const yearSuffix = endYear === new Date().getFullYear() ? '' : `, ${endYear}`;
 
   if (startYear !== endYear) {
-    return `${startMonth} ${start.getDate()}, ${startYear} – ${endMonth} ${end.getDate()}, ${endYear}`;
+    return `${start.getDate()} ${startMonth} ${startYear} – ${end.getDate()} ${endMonth} ${endYear}`;
   }
   if (startMonth !== endMonth) {
-    return `${startMonth} ${start.getDate()} – ${endMonth} ${end.getDate()}, ${startYear}`;
+    return `${start.getDate()} ${startMonth} – ${end.getDate()} ${endMonth}${yearSuffix}`;
   }
-  return `${startMonth} ${start.getDate()} – ${end.getDate()}, ${startYear}`;
+  return `${start.getDate()}–${end.getDate()} ${endMonth}${yearSuffix}`;
 };
 
 interface CalendarViewProps {
@@ -104,7 +106,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   );
   const [showPastEvents, setShowPastEvents] = useState(false);
   const [popoverDay, setPopoverDay] = useState<Date | null>(null);
-  const [selectedMobileDay, setSelectedMobileDay] = useState<Date | null>(null);
+  // Phones show the selected day's events under the month grid; start on today
+  const [selectedMobileDay, setSelectedMobileDay] = useState<Date | null>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  });
   const { theme } = useTheme();
 
   // Mobile detection
@@ -130,10 +136,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     setViewModeState(readStoredViewMode(isMobile) ?? (isMobile ? 'agenda' : 'grid'));
   }, [isMobile]);
 
-  // Reset day details popover/drawer when currentDate changes
+  // Reset day details when the month changes; the current month keeps today selected
   useEffect(() => {
     setPopoverDay(null);
-    setSelectedMobileDay(null);
+    const now = new Date();
+    const isCurrentMonth = now.getFullYear() === currentDate.getFullYear() && now.getMonth() === currentDate.getMonth();
+    setSelectedMobileDay(isCurrentMonth ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : null);
   }, [currentDate]);
 
   // Swipe Gestures (horizontal only — vertical scrolling must not change the month)
@@ -534,7 +542,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <button
               type="button"
               onClick={goToday}
-              className="px-2.5 py-2 sm:px-3 sm:py-0 min-h-[44px] sm:min-h-0 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+              title="Go to today (T)"
+              className="px-3 h-10 sm:h-8 min-h-0 rounded-lg border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
             >
               Today
             </button>
@@ -598,7 +607,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             </div>
             <div className="grid grid-cols-7 border-t border-l border-slate-100 dark:border-slate-800">
               {calendarDays.map((day, idx) => {
-                if (!day) return <div key={`empty-${idx}`} className="min-h-[4.5rem] sm:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
+                if (!day) return <div key={`empty-${idx}`} className="min-h-[3.25rem] sm:min-h-[6.5rem] lg:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>;
 
                 const dayEvents = day ? (eventsByDayKey.get(toDayKey(day)) || []) : [];
                 const isToday = isSameDay(day, new Date());
@@ -615,7 +624,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         setPopoverDay(day);
                       }
                     }}
-                    className={`min-h-[4.5rem] sm:min-h-[8rem] group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-2 transition-colors ${
+                    className={`min-h-[3.25rem] sm:min-h-[6.5rem] lg:min-h-[8rem] group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-2 transition-colors ${
                       isMobile ? 'cursor-pointer active:bg-slate-100 dark:active:bg-slate-800/60' : `hover:bg-slate-50/50 dark:hover:bg-slate-800/50 ${hasEvents || (onAddEventForDate && userRole === UserRole.ADMIN) ? 'cursor-pointer' : ''}`
                     } ${
                       isSelectedMobile
@@ -682,7 +691,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               className={`w-full text-left ${colorClass} text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-[4px] truncate font-medium transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                               title={itemTitle}
                             >
-                              <span className="font-bold mr-1 opacity-80">{timeStr}</span>
+                              <span className="hidden lg:inline font-bold mr-1 opacity-80">{timeStr}</span>
                               {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                               {ev.title}
                             </div>
@@ -706,6 +715,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 );
               })}
             </div>
+
+            {isMobile && !selectedMobileDay && (
+              <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
+                Tap a day to see its events
+              </p>
+            )}
 
             {/* Mobile: Tapping a day displays clean card section below the grid */}
             {isMobile && selectedMobileDay && (

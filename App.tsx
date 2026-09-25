@@ -22,6 +22,8 @@ import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
 import { isAnyModalOpen } from './hooks/useModalFocusTrap';
 import { EVENT_CATEGORIES } from './constants/categories';
+import { getCategoryDotColor } from './components/WeekView';
+import { Inbox, ArrowRight } from 'lucide-react';
 
 /** Flags an error as already reported to the user (EventModal won't show it again) */
 const markHandled = (e: unknown): Error => {
@@ -55,6 +57,8 @@ const AppContent: React.FC = () => {
 
   // Mobile State
   const isMobile = useMedia('(max-width: 640px)');
+  // Phones and small tablets get the bottom tab bar
+  const hasTabBar = useMedia('(max-width: 767px)');
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -1092,9 +1096,34 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         onEventClick={handleEventClick}
       />
 
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        {/* Admin: submissions waiting for review */}
+        {user.role === UserRole.ADMIN && pendingSubmissions.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setIsSubmissionsModalOpen(true)}
+            className="group mb-4 w-full flex items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-left hover:bg-amber-100/70 dark:hover:bg-amber-900/30 transition-colors"
+          >
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+              <Inbox className="w-5 h-5" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-amber-900 dark:text-amber-100">
+                {pendingSubmissions.length} {pendingSubmissions.length === 1 ? 'submission is' : 'submissions are'} waiting for review
+              </span>
+              <span className="block text-xs text-amber-800/80 dark:text-amber-200/70 truncate">
+                {pendingSubmissions.slice(0, 3).map((e) => e.title).join(' · ')}
+              </span>
+            </span>
+            <span className="shrink-0 hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-amber-800 dark:text-amber-200">
+              Review <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </span>
+            <ArrowRight className="sm:hidden shrink-0 w-5 h-5 text-amber-700 dark:text-amber-300" />
+          </button>
+        )}
+
         {/* Search and Filters Bar */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+        <div className="mb-3 sm:mb-4 flex gap-2 sm:gap-3 items-center">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
           <EventFiltersComponent
             filters={filters}
@@ -1105,17 +1134,18 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
 
         {/* Quick Category Filter Pills */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 no-scrollbar text-xs -mx-4 px-4 sm:mx-0 sm:px-0 touch-pan-x">
+        <div className="mb-4 sm:mb-6 flex items-center gap-2 overflow-x-auto lg:overflow-visible lg:flex-wrap pb-1 pt-0.5 no-scrollbar text-xs -mx-3 px-3 sm:mx-0 sm:px-0 touch-pan-x" role="group" aria-label="Filter by category">
           <button
             type="button"
             onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
+            aria-pressed={!filters.category}
             className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
               !filters.category
                 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
             }`}
           >
-            All Categories
+            All
           </button>
           {EVENT_CATEGORIES.map(cat => {
             const isSelected = filters.category === cat;
@@ -1124,12 +1154,14 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
                 key={cat}
                 type="button"
                 onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
-                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                aria-pressed={isSelected}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
                   isSelected
-                    ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-400 dark:ring-brand-500'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                 }`}
               >
+                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)}`} aria-hidden="true" />
                 {cat}
               </button>
             );
@@ -1215,6 +1247,10 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
+            onOpenSubmissions={user.role === UserRole.ADMIN ? () => {
+              setIsBulletinModalOpen(false);
+              setIsSubmissionsModalOpen(true);
+            } : undefined}
           />
         </Suspense>
       )}
@@ -1239,7 +1275,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </Suspense>
       )}
 
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-24 md:pb-6">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-28 md:pb-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
           &copy; {new Date().getFullYear()} Cork City Partnership. Internal Use Only.
           <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
@@ -1250,13 +1286,19 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
       </footer>
 
-      {isMobile && (
+      {hasTabBar && (
         <BottomNavigation
           onHomeClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           onCreateClick={user.role === UserRole.ADMIN ? handleCreateClick : openSubmitPage}
-          showCreateButton={true}
-          createLabel={user.role === UserRole.ADMIN ? 'New Event' : 'Submit'}
-          activeTab="home"
+          createLabel={user.role === UserRole.ADMIN ? 'New event' : 'Submit'}
+          onInboxClick={user.role === UserRole.ADMIN ? () => setIsSubmissionsModalOpen(true) : undefined}
+          inboxCount={pendingSubmissions.length}
+          onSearchClick={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.getElementById(SEARCH_INPUT_ID)?.focus();
+          }}
+          onDigestClick={() => setIsBulletinModalOpen(true)}
+          onExportClick={handleExportClick}
         />
       )}
     </div>

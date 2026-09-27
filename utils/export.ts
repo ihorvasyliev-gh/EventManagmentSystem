@@ -1,4 +1,5 @@
 import { Event } from '../types';
+import { foldICSLine } from './icsFold.ts';
 
 interface LoadedPoster {
   base64: string;
@@ -100,7 +101,7 @@ export const exportToICal = (events: Event[]): string => {
   });
 
   ical += 'END:VCALENDAR\r\n';
-  return ical;
+  return ical.split('\r\n').map(foldICSLine).join('\r\n');
 };
 
 // Download file helper (string content)

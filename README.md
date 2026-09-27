@@ -44,7 +44,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
    - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title and an *At a glance* month grid. After that, each day gets its own cards with category colours, descriptions, contact details, flyers and add-to-calendar buttons.
    - **Compact table.** A dense day-by-day agenda that fits the most events per page.
 
-   **Preview** opens the PDF in a new tab and **Download PDF** saves it. Only approved events are included, and the dialog flags any submissions still pending for that period.
+   **Preview** opens the PDF in a new tab and **Download PDF** saves it. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
 
 Step-by-step instructions, including email templates, are in the [coordinator guide](docs/GUIDE_FOR_ELIZABETH.md).
 

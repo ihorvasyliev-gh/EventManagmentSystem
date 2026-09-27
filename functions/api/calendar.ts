@@ -214,6 +214,28 @@ function escapeICS(text: string): string {
         .replace(/\r?\n/g, '\\n');
 }
 
+const encoder = new TextEncoder();
+
+/** Folds a content line to at most 75 octets (RFC 5545 §3.1) without splitting a character */
+function foldLine(line: string): string {
+    if (encoder.encode(line).length <= 75) return line;
+    const parts: string[] = [];
+    let current = '';
+    let size = 0;
+    for (const ch of line) {
+        const bytes = encoder.encode(ch).length;
+        if (size + bytes > (parts.length === 0 ? 75 : 74)) {
+            parts.push(current);
+            current = '';
+            size = 0;
+        }
+        current += ch;
+        size += bytes;
+    }
+    parts.push(current);
+    return parts.join('\r\n ');
+}
+
 function formatDateUTC(date: Date): string {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
@@ -256,7 +278,7 @@ function buildICS(events: SupabaseEvent[]): string {
     }
 
     lines.push('END:VCALENDAR');
-    return lines.join('\r\n') + '\r\n';
+    return lines.map(foldLine).join('\r\n') + '\r\n';
 }
 
 // ─── Request handler ──────────────────────────────────────────────────

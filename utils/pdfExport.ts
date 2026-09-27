@@ -1,4 +1,5 @@
 import type jsPDF from 'jspdf';
+import { createScreenOnlyLayer } from './pdfScreenOnly.ts';
 import { Event } from '../types';
 import { formatLocalDate, isMultiDayEvent } from './date';
 import { getCategoryRgb, Rgb } from '../constants/categoryColors';
@@ -16,7 +17,6 @@ export interface BulletinOptions {
   endDate: Date;
   format: 'executive' | 'compact';
   baseUrl?: string;
-  includeCalendarButtons?: boolean;
   /** 'save' downloads the file (default); 'blob' returns it, e.g. for an in-browser preview */
   output?: 'save' | 'blob';
 }
@@ -354,6 +354,8 @@ export const generateEventsDigestPDF = async (
 ): Promise<Blob | void> => {
   const { jsPDF: JsPDF } = await import('jspdf');
   const doc: jsPDF = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  // "Add to calendar" buttons show in the viewer but are left off paper when printed
+  const screenOnly = createScreenOnlyLayer(doc);
 
   const W = doc.internal.pageSize.getWidth();   // 210
   const H = doc.internal.pageSize.getHeight();  // 297
@@ -446,7 +448,6 @@ export const generateEventsDigestPDF = async (
     return !!d && d.getTime() >= startMs && d.getTime() <= endMs;
   });
   const groups = groupDigestOccurrences(inPeriod);
-  const showButtons = options.includeCalendarButtons !== false;
   const isExecutive = options.format === 'executive';
   const today = startOfLocalDay(new Date());
 
@@ -973,22 +974,20 @@ export const generateEventsDigestPDF = async (
         let cy = y + PAD_Y + 2.6;
         const catLabel = txt(ev.category || 'Event').toUpperCase();
         let buttonsLeft = mainRight;
-        if (showButtons) {
-          font('semibold', 6.2);
-          const buttons: Array<{ label: string; url: string; fg: Rgb; bg: Rgb }> = [
-            { label: '+ Google', url: createGoogleCalendarUrl(ev), fg: GOOGLE_BLUE, bg: GOOGLE_BG },
-            { label: '+ Outlook', url: createOutlookWebUrl(ev), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG }
-          ];
-          buttons.forEach((b) => {
-            const bw = doc.getTextWidth(b.label) + 5.4;
-            const bx = buttonsLeft - bw;
-            pill(bx, cy - 3.45, bw, BTN_H, b.bg, BORDER);
-            color(b.fg);
-            doc.text(b.label, bx + 2.7, cy - 0.15);
-            doc.link(bx, cy - 3.45, bw, BTN_H, { url: b.url });
-            buttonsLeft = bx - 1.5;
-          });
-        }
+        font('semibold', 6.2);
+        const buttons: Array<{ label: string; url: string; fg: Rgb; bg: Rgb }> = [
+          { label: '+ Google', url: createGoogleCalendarUrl(ev), fg: GOOGLE_BLUE, bg: GOOGLE_BG },
+          { label: '+ Outlook', url: createOutlookWebUrl(ev), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG }
+        ];
+        screenOnly(() => buttons.forEach((b) => {
+          const bw = doc.getTextWidth(b.label) + 5.4;
+          const bx = buttonsLeft - bw;
+          pill(bx, cy - 3.45, bw, BTN_H, b.bg, BORDER);
+          color(b.fg);
+          doc.text(b.label, bx + 2.7, cy - 0.15);
+          doc.link(bx, cy - 3.45, bw, BTN_H, { url: b.url });
+          buttonsLeft = bx - 1.5;
+        }));
         fill(cat.accent);
         doc.circle(mainX + 1, cy - 1, 1, 'F');
         font('bold', 6.3);
@@ -1138,7 +1137,7 @@ export const generateEventsDigestPDF = async (
     let contentH = titleLines.length * TL;
     if (descLine) contentH += 3.3;
     contentH += alsoLines.length * 3.1;
-    if (showButtons) contentH += 3.5;
+    contentH += 3.5;
     const h = Math.max(11.5, 3.2 + contentH + 2.4, 3.2 + venueLines.length * 3.3 + 2.4);
 
     return {
@@ -1177,8 +1176,8 @@ export const generateEventsDigestPDF = async (
           doc.text(alsoLines, COL.event, ly, { lineHeightFactor: 1.3 });
           ly += (alsoLines.length - 1) * 3.1;
         }
-        if (showButtons) {
-          ly += 3.5;
+        ly += 3.5;
+        screenOnly(() => {
           font('semibold', 6.4);
           color(OUTLOOK_BLUE);
           doc.text('+ Outlook', COL.event, ly);
@@ -1189,7 +1188,7 @@ export const generateEventsDigestPDF = async (
           color(GOOGLE_BLUE);
           doc.text('+ Google', COL.event + ow + 3.6, ly);
           doc.link(COL.event + ow + 3.6, ly - 2.6, doc.getTextWidth('+ Google'), 3.4, { url: createGoogleCalendarUrl(ev) });
-        }
+        });
 
         // Venue
         if (venueLines.length) {

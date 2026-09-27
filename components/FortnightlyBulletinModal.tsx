@@ -29,7 +29,6 @@ const PRESETS: Array<{ id: DateRangePreset; label: string }> = [
 ];
 
 const FORMAT_KEY = 'ccp_digest_format';
-const BUTTONS_KEY = 'ccp_digest_buttons';
 
 const readPref = (key: string): string | null => {
   try {
@@ -98,7 +97,6 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [startDateStr, setStartDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).startDateStr);
   const [endDateStr, setEndDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).endDateStr);
   const [format, setFormat] = useState<'executive' | 'compact'>(() => (readPref(FORMAT_KEY) === 'compact' ? 'compact' : 'executive'));
-  const [includeCalendarButtons, setIncludeCalendarButtons] = useState(() => readPref(BUTTONS_KEY) !== 'false');
   const [busy, setBusy] = useState<'download' | 'preview' | null>(null);
   const [copied, setCopied] = useState(false);
   const [showList, setShowList] = useState(true);
@@ -140,7 +138,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
 
   const dayCount = rangeValid ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0;
 
-  const pdfOptions = { startDate, endDate, format, baseUrl: window.location.origin, includeCalendarButtons };
+  const pdfOptions = { startDate, endDate, format, baseUrl: window.location.origin };
 
   const handleDownloadPDF = async () => {
     setBusy('download');
@@ -330,28 +328,10 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
             })}
           </div>
 
-          <label className="mt-3 flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
-            <span className="flex items-start gap-2.5">
-              <CalendarPlus className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" />
-              <span>
-                <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">“Add to calendar” buttons</span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  {includeCalendarButtons ? 'One-click Outlook & Google links for email readers.' : 'Hidden — cleaner for printing on paper.'}
-                </span>
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={includeCalendarButtons}
-              onChange={(e) => { setIncludeCalendarButtons(e.target.checked); writePref(BUTTONS_KEY, String(e.target.checked)); }}
-              className="peer sr-only"
-            />
-            <span
-              aria-hidden="true"
-              className="relative shrink-0 w-10 h-6 rounded-full bg-slate-300 dark:bg-slate-600 peer-checked:bg-brand-600 transition-colors after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500 peer-focus-visible:ring-offset-2"
-            />
-          </label>
+          <p className="mt-3 flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <CalendarPlus className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>Outlook &amp; Google “add to calendar” buttons show on screen and are left out automatically when the PDF is printed.</span>
+          </p>
         </section>
 
         {/* 3. What's included */}

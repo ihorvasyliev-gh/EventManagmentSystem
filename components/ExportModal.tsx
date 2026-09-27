@@ -8,6 +8,7 @@ import ModalShell from './ModalShell';
 import { useToast } from '../contexts/ToastContext';
 
 const EXPORT_RANGE_YEARS = 2;
+const FEED_NAME = 'CCP Events';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -28,7 +29,11 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   // Build the subscription URL based on current origin
   const feedPath = '/api/calendar';
   const feedUrl = `${window.location.origin}${feedPath}`;
+  // webcal:// only opens apps that register for it (Apple Calendar, desktop Outlook) —
+  // Android has none, so Google Calendar and Outlook on the web get their own links
   const webcalUrl = feedUrl.replace(/^https?:/, 'webcal:');
+  const googleSubscribeUrl = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcalUrl)}`;
+  const outlookSubscribeUrl = `https://outlook.office.com/calendar/0/addfromweb?url=${encodeURIComponent(feedUrl)}&name=${encodeURIComponent(FEED_NAME)}`;
 
   const handleCopyUrl = async () => {
     try {
@@ -151,6 +156,21 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
     );
   };
 
+  const subscribeOption = (href: string, name: string, hint: string, newTab: boolean) => (
+    <a
+      href={href}
+      {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-600 hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50/40 dark:hover:bg-brand-950/20 transition-colors"
+    >
+      <Calendar className="h-5 w-5 shrink-0 text-brand-600 dark:text-brand-400" />
+      <span className="flex-1 min-w-0">
+        <span className="block text-sm font-semibold text-slate-900 dark:text-white">{name}</span>
+        <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{hint}</span>
+      </span>
+      <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+    </a>
+  );
+
   return (
     <ModalShell
       isOpen={isOpen}
@@ -216,14 +236,11 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
             Subscribe once and new or changed events show up in your own calendar automatically.
           </p>
 
-          <a
-            href={webcalUrl}
-            className="w-full inline-flex justify-center items-center gap-2 rounded-xl px-4 py-3 bg-brand-600 text-sm font-semibold text-white hover:bg-brand-700 shadow-sm transition-colors"
-          >
-            <Calendar className="h-4 w-4" />
-            Open in my calendar app
-            <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-          </a>
+          <div className="space-y-2">
+            {subscribeOption(googleSubscribeUrl, 'Google Calendar', 'Opens Google Calendar in your browser', true)}
+            {subscribeOption(outlookSubscribeUrl, 'Outlook', 'Microsoft 365 / Outlook on the web', true)}
+            {subscribeOption(webcalUrl, 'Apple Calendar & other apps', 'iPhone, iPad, Mac or Outlook on the desktop', false)}
+          </div>
 
           <div>
             <label htmlFor="feed-url" className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
@@ -255,6 +272,10 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
               <li><strong className="text-slate-800 dark:text-slate-200">Google Calendar:</strong> Other calendars (+) → From URL → paste</li>
               <li><strong className="text-slate-800 dark:text-slate-200">Apple Calendar:</strong> File → New Calendar Subscription → paste</li>
             </ul>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+              Google Calendar adds subscriptions on a computer only; after that it syncs to your phone. Calendar apps refresh
+              subscribed calendars on their own schedule, so changes can take a few hours (Google: up to a day) to appear.
+            </p>
           </div>
         </div>
       )}

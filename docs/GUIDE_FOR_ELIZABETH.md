@@ -149,7 +149,7 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 * **Executive Digest (Recommended for Board of Directors):**
   * Branded A4 document with Cork City Partnership logo, magenta (`#B30066`) and green (`#39B54A`) styling.
   * Individual event cards with date badges, venue map links, descriptions, and embedded flyer thumbnails.
-  * Built-in interactive buttons allowing Board members to add events to **Outlook 365** or download an **.ics** file in 1 click.
+  * Built-in interactive buttons allowing Board members to add events to **Outlook 365** or **Google Calendar** in 1 click. The buttons appear when the PDF is viewed on screen and are left out automatically when it is printed, so there is nothing to switch off.
 * **Compact Table:**
   * Clean, dense agenda table suitable for printing as a one-page handout.
 

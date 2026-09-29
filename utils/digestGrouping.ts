@@ -75,4 +75,3 @@ export const formatAlsoOnDates = (group: DigestEventGroup, separator = '  ·  ')
 
 export const monthShort = (d: Date): string => MONTHS_SHORT[d.getMonth()];
 export const monthShortUpper = (d: Date): string => MONTHS_SHORT[d.getMonth()].toUpperCase();
-export const weekdayShortUpper = (d: Date): string => WEEKDAYS_SHORT[d.getDay()].toUpperCase();

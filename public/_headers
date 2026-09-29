@@ -54,6 +54,14 @@
   Cache-Control: public, max-age=31536000, immutable
   Content-Type: font/woff2
 
+/fonts/*.woff2
+  Cache-Control: public, max-age=31536000
+  Content-Type: font/woff2
+
+/fonts/*.ttf
+  Cache-Control: public, max-age=31536000
+  Content-Type: font/ttf
+
 # JSON files
 /*.json
   Cache-Control: no-cache

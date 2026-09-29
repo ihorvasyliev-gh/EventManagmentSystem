@@ -1,4 +1,5 @@
 import { expandRecurringEvents } from './recurrence.ts';
+import { formatDateChipLabel, getTimesForDate, type PerDateTimes } from './multiDateUtils.ts';
 import type { Event } from '../types.ts';
 
 export interface ConflictEvent {
@@ -67,31 +68,20 @@ export interface MultiDateConflictResult {
   summaryMessage: string;
 }
 
+/**
+ * Checks each picked date against existing events. Every date uses the shared start/end
+ * times, or its own entry in `perDateTimes` when the event runs at different times per day.
+ */
 export function detectMultiDateConflicts(
   dates: Date[],
   startTimeStr: string,
   endTimeStr: string,
   existingEvents: ConflictEvent[],
-  excludeEventId?: string
+  excludeEventId?: string,
+  perDateTimes?: PerDateTimes | null
 ): MultiDateConflictResult {
-  if (!dates || dates.length === 0 || !startTimeStr || !endTimeStr) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      summaryMessage: ''
-    };
-  }
-
-  const [startH, startM = 0, startS = 0] = startTimeStr.split(':').map(Number);
-  const [endH, endM = 0, endS = 0] = endTimeStr.split(':').map(Number);
-
-  if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) {
-    return {
-      hasConflict: false,
-      conflicts: [],
-      summaryMessage: ''
-    };
-  }
+  const none: MultiDateConflictResult = { hasConflict: false, conflicts: [], summaryMessage: '' };
+  if (!dates || dates.length === 0) return none;
 
   const conflicts: MultiDateConflictItem[] = [];
 
@@ -99,6 +89,12 @@ export function detectMultiDateConflicts(
     if (!(date instanceof Date) || isNaN(date.getTime())) {
       continue;
     }
+
+    const times = getTimesForDate(perDateTimes, date, { start: startTimeStr, end: endTimeStr });
+    if (!times.start || !times.end) continue;
+    const [startH, startM = 0, startS = 0] = times.start.split(':').map(Number);
+    const [endH, endM = 0, endS = 0] = times.end.split(':').map(Number);
+    if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) continue;
 
     const startDateTime = new Date(date);
     startDateTime.setHours(startH, startM, startS, 0);
@@ -133,7 +129,7 @@ export function detectMultiDateConflicts(
   const summaryMessage = conflicts.length === 0
     ? ''
     : conflicts
-        .map(item => `Conflict on ${item.date.toLocaleDateString()}: ${item.message}`)
+        .map(item => `Conflict on ${formatDateChipLabel(item.date)}: ${item.message}`)
         .join('; ');
 
   return {

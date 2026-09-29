@@ -63,6 +63,15 @@ const periodsBefore = (base: Date, target: Date, type: RecurrenceRule['type']): 
   }
 };
 
+/**
+ * True when a custom-dates series stores its own times for every date
+ * (`customDates` hold each start, `customEndDates` each end).
+ */
+export const hasPerDateTimes = (rule?: RecurrenceRule): boolean =>
+  !!rule && rule.type === 'custom' &&
+  !!rule.customDates && rule.customDates.length > 0 &&
+  !!rule.customEndDates && rule.customEndDates.length === rule.customDates.length;
+
 /** Instance overlaps [rangeStart, rangeEnd] (multi-day events that started earlier still count). */
 const overlapsRange = (start: Date, end: Date | undefined, rangeStart: Date, rangeEnd: Date): boolean => {
   const effectiveEnd = end && end > start ? end : start;
@@ -106,24 +115,33 @@ export const expandRecurringEvents = (
       : null;
     const isExcluded = (d: Date) => excludedDays?.has(toDayKey(d)) ?? false;
 
-    const pushInstance = (start: Date) => {
+    const pushInstance = (start: Date, end: Date | undefined) => {
       expandedEvents.push({
         ...event,
         instanceKey: `${event.id}_${start.getTime()}`,
         date: start,
-        endDate: instanceEnd(start),
+        endDate: end,
       });
     };
 
-    // 2. Custom dates (manually picked): each date takes the time of day of the original event
+    // 2. Custom dates (manually picked): each date takes the time of day of the original event,
+    //    or its own start/end when the series has per-date times
     if (rule.type === 'custom') {
+      const perDate = hasPerDateTimes(rule);
       const customDates = rule.customDates && rule.customDates.length > 0 ? rule.customDates : [baseStart];
-      customDates.forEach(customDate => {
+      customDates.forEach((customDate, i) => {
         const d = new Date(customDate);
-        d.setHours(baseStart.getHours(), baseStart.getMinutes(), baseStart.getSeconds(), baseStart.getMilliseconds());
+        let end: Date | undefined;
+        if (perDate) {
+          const ownEnd = new Date(rule.customEndDates![i]);
+          end = ownEnd.getTime() > d.getTime() ? ownEnd : undefined;
+        } else {
+          d.setHours(baseStart.getHours(), baseStart.getMinutes(), baseStart.getSeconds(), baseStart.getMilliseconds());
+          end = instanceEnd(d);
+        }
         if (isNaN(d.getTime()) || isExcluded(d)) return;
-        if (overlapsRange(d, instanceEnd(d), rangeStart, rangeEnd)) {
-          pushInstance(d);
+        if (overlapsRange(d, end, rangeStart, rangeEnd)) {
+          pushInstance(d, end);
         }
       });
       return;
@@ -145,8 +163,9 @@ export const expandRecurringEvents = (
       if (endLimit && start > endLimit) break;
       if (start > rangeEnd) break;
       if (isExcluded(start)) continue;
-      if (overlapsRange(start, instanceEnd(start), rangeStart, rangeEnd)) {
-        pushInstance(start);
+      const end = instanceEnd(start);
+      if (overlapsRange(start, end, rangeStart, rangeEnd)) {
+        pushInstance(start, end);
       }
     }
   });

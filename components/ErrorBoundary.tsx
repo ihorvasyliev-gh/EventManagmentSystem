@@ -1,5 +1,6 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 
 interface Props {
   children: ReactNode;
@@ -39,17 +40,29 @@ class ErrorBoundary extends Component<Props, State> {
               <AlertCircle className="h-8 w-8 text-red-500" />
               <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Something went wrong</h2>
             </div>
-            <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
-              {this.state.error?.message || 'An unexpected error occurred'}
+            <p className={`mb-3 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
+              The page hit an unexpected problem. Reloading usually fixes it.
+            </p>
+            {this.state.error?.message && (
+              <p className={`mb-3 text-xs font-mono break-words rounded-md px-3 py-2 ${isDark ? 'bg-slate-900 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                {this.state.error.message}
+              </p>
+            )}
+            <p className={`mb-4 text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
+              If it keeps happening, please email{' '}
+              <a href={buildSupportMailto(this.state.error?.message)} className="font-semibold text-brand-600 dark:text-brand-400 underline underline-offset-2 break-all">
+                {CONTACT_EMAIL}
+              </a>{' '}
+              and say what you were doing.
             </p>
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="w-full px-4 py-2.5 bg-brand-600 text-white font-semibold rounded-md hover:bg-brand-700 transition-colors"
             >
-              Reload Page
+              Reload page
             </button>
           </div>
         </div>

@@ -1,6 +1,32 @@
 import { Event, Attachment, EventComment, EventHistoryEntry, RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
 
+/** Columns added by later migrations: while a database doesn't have one yet, events are saved without it. */
+const OPTIONAL_COLUMNS = ['recurrence_custom_end_dates'] as const;
+
+const toIsoList = (dates?: Date[]): string[] | null =>
+  dates ? dates.map(d => (d instanceof Date ? d : new Date(d)).toISOString()) : null;
+
+/**
+ * Runs an insert/update and, if it fails because an optional column is missing from the
+ * database, retries without that column (the per-date times fall back to the series time).
+ */
+async function withOptionalColumns<T extends { error: { message?: string } | null }>(
+  payload: Record<string, any>,
+  run: (payload: Record<string, any>) => PromiseLike<T>
+): Promise<T> {
+  let current = payload;
+  let result = await run(current);
+  let missing: string | undefined;
+  while (result.error && (missing = OPTIONAL_COLUMNS.find(col => col in current && result.error?.message?.includes(col)))) {
+    console.warn(`Database column "${missing}" is missing: run add-custom-end-dates-migration.sql. Saving without it.`);
+    const { [missing]: _dropped, ...rest } = current;
+    current = rest;
+    result = await run(current);
+  }
+  return result;
+}
+
 interface RelatedData {
   attachmentsByEvent: Record<string, Attachment[]>;
   commentsByEvent: Record<string, EventComment[]>;
@@ -227,6 +253,9 @@ const mapSupabaseEventToEvent = async (
       daysOfWeek: supabaseEvent.recurrence_days_of_week || undefined,
       customDates: supabaseEvent.recurrence_custom_dates
         ? supabaseEvent.recurrence_custom_dates.map((d: string) => new Date(d))
+        : undefined,
+      customEndDates: supabaseEvent.recurrence_custom_end_dates
+        ? supabaseEvent.recurrence_custom_end_dates.map((d: string) => new Date(d))
         : undefined
     };
   }
@@ -327,9 +356,10 @@ export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>, us
     recurrence_end_date: eventData.recurrence?.endDate ? eventData.recurrence.endDate.toISOString() : null,
     recurrence_occurrences: eventData.recurrence?.occurrences || null,
     recurrence_days_of_week: eventData.recurrence?.daysOfWeek || null,
-    recurrence_custom_dates: eventData.recurrence?.customDates
-      ? eventData.recurrence.customDates.map(d => d.toISOString())
-      : null,
+    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
+    ...(eventData.recurrence?.customEndDates
+      ? { recurrence_custom_end_dates: toIsoList(eventData.recurrence.customEndDates) }
+      : {}),
     rsvp_enabled: eventData.rsvpEnabled || false,
     max_attendees: eventData.maxAttendees || null,
     submitter_name: eventData.submitterName || null,
@@ -337,11 +367,9 @@ export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>, us
     creator_id: userId
   };
 
-  const { data: newEventData, error: eventError } = await supabase
-    .from('events')
-    .insert(eventInsert)
-    .select()
-    .single();
+  const { data: newEventData, error: eventError } = await withOptionalColumns(eventInsert, payload =>
+    supabase.from('events').insert(payload).select().single()
+  );
 
   if (eventError || !newEventData) {
     console.error('Error creating event:', eventError);
@@ -418,21 +446,17 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
     recurrence_end_date: eventData.recurrence?.endDate ? eventData.recurrence.endDate.toISOString() : null,
     recurrence_occurrences: eventData.recurrence?.occurrences || null,
     recurrence_days_of_week: eventData.recurrence?.daysOfWeek || null,
-    recurrence_custom_dates: eventData.recurrence?.customDates
-      ? eventData.recurrence.customDates.map(d => d.toISOString())
-      : null,
+    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
+    recurrence_custom_end_dates: toIsoList(eventData.recurrence?.customEndDates),
     rsvp_enabled: eventData.rsvpEnabled || false,
     max_attendees: eventData.maxAttendees || null,
     submitter_name: eventData.submitterName || null,
     submitter_email: eventData.submitterEmail || null
   };
 
-  const { data: updatedEventData, error: updateError } = await supabase
-    .from('events')
-    .update(eventUpdate)
-    .eq('id', id)
-    .select()
-    .single();
+  const { data: updatedEventData, error: updateError } = await withOptionalColumns(eventUpdate, payload =>
+    supabase.from('events').update(payload).eq('id', id).select().single()
+  );
 
   if (updateError || !updatedEventData) {
     console.error('Error updating event:', updateError);
@@ -540,23 +564,6 @@ export const uploadAttachment = async (file: File): Promise<{ id: string; name: 
 };
 
 /**
- * Получить список исключений для события (удаленных экземпляров)
- */
-export const getRecurrenceExceptions = async (eventId: string): Promise<Date[]> => {
-  const { data, error } = await supabase
-    .from('recurrence_exceptions')
-    .select('exception_date')
-    .eq('event_id', eventId);
-
-  if (error) {
-    console.error('Error fetching recurrence exceptions:', error);
-    return [];
-  }
-
-  return (data || []).map(item => new Date(item.exception_date));
-};
-
-/**
  * Получить список исключений для группы событий одним пакетным запросом (1 запрос вместо N)
  */
 export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<Map<string, Date[]>> => {
@@ -649,6 +656,56 @@ export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Da
     console.error('Error creating history entry:', historyError);
     // Не прерываем операцию, только логируем
   }
+};
+
+/**
+ * Saves a new set of dates for a custom-dates series (e.g. after removing one date) and
+ * drops the event's old per-day exceptions, since the date list is now complete.
+ */
+export const saveCustomSchedule = async (
+  eventId: string,
+  schedule: { date: Date; endDate?: Date; recurrence?: RecurrenceRule },
+  userId: string,
+  userName: string,
+  removedDay?: Date
+): Promise<void> => {
+  const payload = {
+    date: schedule.date.toISOString(),
+    end_date: schedule.endDate ? schedule.endDate.toISOString() : null,
+    recurrence_type: schedule.recurrence?.type || 'none',
+    recurrence_custom_dates: toIsoList(schedule.recurrence?.customDates),
+    recurrence_custom_end_dates: toIsoList(schedule.recurrence?.customEndDates),
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await withOptionalColumns(payload, p => supabase.from('events').update(p).eq('id', eventId));
+  if (error) {
+    console.error('Error saving event dates:', error);
+    throw new Error(error.message || 'Failed to update event dates');
+  }
+
+  await clearRecurrenceExceptions(eventId);
+
+  if (removedDay) {
+    const { error: historyError } = await supabase.from('event_history').insert({
+      event_id: eventId,
+      user_id: userId,
+      user_name: userName,
+      action: 'updated',
+      changes: {
+        deleted_instance: {
+          old: removedDay.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+          new: 'deleted'
+        }
+      }
+    });
+    if (historyError) console.error('Error creating history entry:', historyError);
+  }
+};
+
+/** Removes all "deleted occurrence" records of an event */
+export const clearRecurrenceExceptions = async (eventId: string): Promise<void> => {
+  const { error } = await supabase.from('recurrence_exceptions').delete().eq('event_id', eventId);
+  if (error) console.error('Error clearing recurrence exceptions:', error);
 };
 
 /**
@@ -827,9 +884,10 @@ export const submitEvent = async (eventData: {
     submitter_email: eventData.submitterEmail.trim(),
     end_date: eventData.endDate ? eventData.endDate.toISOString() : null,
     recurrence_type: eventData.recurrence?.type || 'none',
-    recurrence_custom_dates: eventData.recurrence?.customDates
-      ? eventData.recurrence.customDates.map(d => (d instanceof Date ? d.toISOString() : new Date(d).toISOString()))
-      : null
+    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
+    ...(eventData.recurrence?.customEndDates
+      ? { recurrence_custom_end_dates: toIsoList(eventData.recurrence.customEndDates) }
+      : {})
   };
 
   // Check if current user is logged in
@@ -843,9 +901,9 @@ export const submitEvent = async (eventData: {
   // If anonymous, insert without .select() because Postgres evaluates SELECT RLS on RETURNING,
   // and anonymous visitors cannot read unapproved draft events
   if (isAnonymous) {
-    const { error } = await supabase
-      .from('events')
-      .insert([insertPayload]);
+    const { error } = await withOptionalColumns(insertPayload, payload =>
+      supabase.from('events').insert([payload])
+    );
 
     if (error) {
       console.error('Error submitting event:', error);
@@ -857,6 +915,7 @@ export const submitEvent = async (eventData: {
         delete minimalPayload.end_date;
         delete minimalPayload.recurrence_type;
         delete minimalPayload.recurrence_custom_dates;
+        delete minimalPayload.recurrence_custom_end_dates;
         const { error: retryError } = await supabase
           .from('events')
           .insert([minimalPayload]);
@@ -888,11 +947,9 @@ export const submitEvent = async (eventData: {
   }
 
   // Authenticated submission
-  const { data, error } = await supabase
-    .from('events')
-    .insert([insertPayload])
-    .select()
-    .single();
+  const { data, error } = await withOptionalColumns(insertPayload, payload =>
+    supabase.from('events').insert([payload]).select().single()
+  );
 
   if (error || !data) {
     console.error('Error submitting event:', error);

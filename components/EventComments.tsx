@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { MessageCircle, Send, User, Trash2 } from 'lucide-react';
 import { EventComment } from '../types';
 

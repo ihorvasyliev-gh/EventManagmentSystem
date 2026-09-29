@@ -1,5 +1,5 @@
 import type { User } from '../types.ts';
-import { isRememberMeEnabled, getActiveAuthStorage } from './authStorage.ts';
+import { isRememberMeEnabled, getActiveAuthStorage, safeGetStorage } from './authStorage.ts';
 
 export const USER_CACHE_KEY = 'ccp_user_cache';
 export const USER_CACHE_TIMESTAMP_KEY = 'ccp_user_cache_timestamp';
@@ -9,18 +9,6 @@ export interface CachedUser {
   user: User;
   timestamp: number;
 }
-
-const getStorage = (type: 'local' | 'session'): Storage | null => {
-  try {
-    if (typeof window !== 'undefined' || typeof globalThis !== 'undefined') {
-      const g = (typeof window !== 'undefined' ? window : globalThis) as any;
-      return type === 'local' ? g.localStorage : g.sessionStorage;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 /**
  * Сохранить пользователя в кэш активного хранилища (sessionStorage для одноразового входа, localStorage для Remember Me)
@@ -40,7 +28,7 @@ export const cacheUser = (user: User): void => {
 
     // Если Remember Me выключен, убеждаемся, что в постоянном localStorage нет данных пользователя
     if (!isRememberMeEnabled()) {
-      const ls = getStorage('local');
+      const ls = safeGetStorage('local');
       ls?.removeItem(USER_CACHE_KEY);
       ls?.removeItem(USER_CACHE_TIMESTAMP_KEY);
     }
@@ -59,7 +47,7 @@ export const getCachedUser = (): User | null => {
 
     // Если Remember Me включен, но в активном хранилище еще нет, проверяем localStorage напрямую
     if (!cachedStr && isRememberMeEnabled()) {
-      const ls = getStorage('local');
+      const ls = safeGetStorage('local');
       cachedStr = ls?.getItem(USER_CACHE_KEY);
     }
 
@@ -87,8 +75,8 @@ export const getCachedUser = (): User | null => {
  */
 export const clearUserCache = (): void => {
   try {
-    const ls = getStorage('local');
-    const ss = getStorage('session');
+    const ls = safeGetStorage('local');
+    const ss = safeGetStorage('session');
 
     ls?.removeItem(USER_CACHE_KEY);
     ls?.removeItem(USER_CACHE_TIMESTAMP_KEY);
@@ -99,45 +87,3 @@ export const clearUserCache = (): void => {
   }
 };
 
-/**
- * Проверить, есть ли валидная сессия (синхронно)
- */
-export const hasValidSession = (): boolean => {
-  try {
-    const cachedUser = getCachedUser();
-    if (cachedUser) {
-      return true;
-    }
-
-    const storage = getActiveAuthStorage();
-    if (storage) {
-      for (let i = 0; i < storage.length; i++) {
-        const key = storage.key(i);
-        if (key && (key.includes('auth-token') || key.startsWith('sb-'))) {
-          const value = storage.getItem(key);
-          if (value) {
-            try {
-              const parsed = JSON.parse(value);
-              if (parsed?.access_token) {
-                if (parsed.expires_at) {
-                  const expiresAt = parsed.expires_at * 1000;
-                  if (expiresAt > Date.now()) {
-                    return true;
-                  }
-                } else {
-                  return true;
-                }
-              }
-            } catch {
-              // Игнорируем ошибки парсинга
-            }
-          }
-          break;
-        }
-      }
-    }
-    return false;
-  } catch (error) {
-    return false;
-  }
-};

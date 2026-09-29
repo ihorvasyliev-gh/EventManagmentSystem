@@ -9,19 +9,22 @@ import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { User, Event, EventFilters, UserRole, EventStatus } from './types';
-import { getEvents, createEvent, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
+import { getEvents, updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
 import { logout as logoutService, getCurrentUser } from './services/authService';
-import { getUserRsvps } from './services/rsvpService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
 import { expandRecurringEvents } from './utils/recurrence';
-import { getCachedUser, cacheUser, clearUserCache, hasValidSession } from './utils/sessionCache';
-import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, getCachedRsvps, cacheRsvps, clearRsvpsCache } from './utils/eventsCache';
+import { getCachedUser, cacheUser, clearUserCache } from './utils/sessionCache';
+import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions } from './utils/eventsCache';
+import { isSameDay } from './utils/date';
+import { materializeCustomSchedule } from './utils/multiDateUtils';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
 import { isAnyModalOpen } from './hooks/useModalFocusTrap';
 import { EVENT_CATEGORIES } from './constants/categories';
+import { getCategoryDotColor } from './components/WeekView';
+import { Inbox, ArrowRight } from 'lucide-react';
 
 /** Flags an error as already reported to the user (EventModal won't show it again) */
 const markHandled = (e: unknown): Error => {
@@ -46,7 +49,6 @@ const AppContent: React.FC = () => {
   // Global State
   const [user, setUser] = useState<User | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
-  const [userRsvpEventIds, setUserRsvpEventIds] = useState<Set<string>>(new Set());
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -55,6 +57,8 @@ const AppContent: React.FC = () => {
 
   // Mobile State
   const isMobile = useMedia('(max-width: 640px)');
+  // Phones and small tablets get the bottom tab bar
+  const hasTabBar = useMedia('(max-width: 767px)');
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,15 +241,8 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       const data = await getEvents();
       // If manual refresh requested, always update state.
       // Otherwise, update if any event data actually changed.
-      setEvents((prev) => {
-        if (isManual || !areEventsEqual(prev, data)) {
-          cacheEvents(data);
-          return data;
-        }
-        return prev;
-      });
-
-      // Always cache new data even if state didn't update (to ensure cache is fresh)
+      setEvents((prev) => (isManual || !areEventsEqual(prev, data) ? data : prev));
+      // Also refreshes the cache timestamp when nothing changed
       cacheEvents(data);
 
       // Load recurrence exceptions for recurring events in one batch
@@ -261,15 +258,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         } catch (err) {
           console.error('Error loading batch exceptions:', err);
         }
-      }
-
-      // Load user RSVPs
-      try {
-        const rsvps = await getUserRsvps(user.id);
-        setUserRsvpEventIds(new Set(rsvps));
-        cacheRsvps(rsvps);
-      } catch (err) {
-        console.error('Error loading RSVPs:', err);
       }
 
     } catch (error) {
@@ -296,13 +284,9 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     checkTomorrowRSVPEvents(user.id).catch(console.error);
 
     const cached = getCachedEvents();
-    const cachedRsvps = getCachedRsvps();
 
     if (cached && cached.length > 0) {
       setEvents(cached);
-      if (cachedRsvps) {
-        setUserRsvpEventIds(new Set(cachedRsvps));
-      }
       setLoadingEvents(false);
 
       // Load cached exceptions immediately
@@ -322,18 +306,10 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     }
   }, [user, refreshEvents]);
 
-  // Background periodic sync (every 30 seconds) when page is visible
+  // Keep the local cache in step with every optimistic change
   useEffect(() => {
-    if (!user) return;
-
-    const syncInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        refreshEvents(false);
-      }
-    }, 30 * 1000);
-
-    return () => clearInterval(syncInterval);
-  }, [user, refreshEvents]);
+    if (user) cacheEvents(events);
+  }, [user, events]);
 
   // Pull-to-refresh on mobile when at top of page
   const pullStartYRef = React.useRef<number | null>(null);
@@ -374,11 +350,9 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     await logoutService();
     clearUserCache();
     clearEventsCache();
-    clearRsvpsCache();
     setUser(null);
     setEvents([]);
     setPendingSubmissions([]);
-    setUserRsvpEventIds(new Set());
   }, []);
 
   // Submissions handlers for Admins
@@ -439,7 +413,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         )
         .subscribe((status) => {
           if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {
-            console.warn('[Realtime] Subscription error; fallback polling is active.');
+            console.warn('[Realtime] Subscription error; set VITE_SUPABASE_REALTIME=false to poll instead.');
           }
         });
     } catch (err) {
@@ -455,7 +429,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     };
   }, [user, refreshSubmissions, refreshEvents, showToast]);
 
-  // Fallback sync: tab focus, visibility change, and periodic poll for admin submissions
+  // Fallback sync on tab focus / visibility; a 30s poll only when realtime is switched off
   useEffect(() => {
     if (!user) return;
 
@@ -470,20 +444,12 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
     window.addEventListener('focus', handleSyncOnVisible);
     document.addEventListener('visibilitychange', handleSyncOnVisible);
-
-    let adminPollInterval: any = null;
-    if (user.role === UserRole.ADMIN) {
-      adminPollInterval = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          refreshSubmissions();
-        }
-      }, 25000);
-    }
+    const poll = import.meta.env.VITE_SUPABASE_REALTIME === 'false' ? setInterval(handleSyncOnVisible, 30 * 1000) : undefined;
 
     return () => {
       window.removeEventListener('focus', handleSyncOnVisible);
       document.removeEventListener('visibilitychange', handleSyncOnVisible);
-      if (adminPollInterval) clearInterval(adminPollInterval);
+      clearInterval(poll);
     };
   }, [user, refreshSubmissions, refreshEvents]);
 
@@ -496,28 +462,19 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       const next = exists
         ? prev.map((e) => (e.id === event.id ? updatedEvent : e))
         : [...prev, updatedEvent];
-      cacheEvents(next);
       return next;
     });
 
     try {
       const serverEvent = await approveSubmission(event.id);
       showToast(`Event "${event.title}" approved and published!`, 'success');
-      setEvents((prev) => {
-        const next = prev.map((e) => (e.id === event.id ? serverEvent : e));
-        cacheEvents(next);
-        return next;
-      });
+      setEvents((prev) => prev.map((e) => (e.id === event.id ? serverEvent : e)));
       refreshSubmissions();
       refreshEvents(true);
     } catch (err: any) {
       // Rollback on failure
       setPendingSubmissions((prev) => [event, ...prev]);
-      setEvents((prev) => {
-        const next = prev.map((e) => (e.id === event.id ? event : e));
-        cacheEvents(next);
-        return next;
-      });
+      setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
       showToast(err?.message || 'Failed to approve event', 'error');
     }
   }, [refreshSubmissions, refreshEvents, showToast]);
@@ -526,11 +483,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     const rejectedSub = pendingSubmissions.find((e) => e.id === eventId);
     // Optimistic update: remove from submissions inbox and events list
     setPendingSubmissions((prev) => prev.filter((e) => e.id !== eventId));
-    setEvents((prev) => {
-      const next = prev.filter((e) => e.id !== eventId);
-      cacheEvents(next);
-      return next;
-    });
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
 
     try {
       await rejectSubmission(eventId);
@@ -541,11 +494,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       // Rollback on failure
       if (rejectedSub) {
         setPendingSubmissions((prev) => [rejectedSub, ...prev]);
-        setEvents((prev) => {
-          const next = [...prev, rejectedSub];
-          cacheEvents(next);
-          return next;
-        });
+        setEvents((prev) => [...prev, rejectedSub]);
       }
       showToast(err?.message || 'Failed to reject event', 'error');
     }
@@ -570,7 +519,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
           next.push({ ...sub, status: 'published' as EventStatus, updatedAt: new Date() });
         }
       }
-      cacheEvents(next);
       return next;
     });
 
@@ -624,70 +572,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     }
   }, []);
 
-  const handleCreateClick = openSubmitPage;
-
-  const handleAddEventForDate = useCallback((date: Date) => {
-    openSubmitPageWithDate(date);
-  }, [openSubmitPageWithDate]);
-
-  const handleSaveEvent = useCallback(async (eventData: Omit<Event, 'id' | 'createdAt'>) => {
-    if (!user) return;
-
-    // Optimistic update: create event immediately with temporary ID
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
-    const optimisticEvent: Event = {
-      ...eventData,
-      id: tempId,
-      createdAt: new Date(),
-      creatorId: user.id,
-      attendees: undefined,
-      comments: undefined,
-      history: undefined,
-      attachments: eventData.attachments || undefined
-    };
-
-    // Update UI immediately
-    setEvents((prev) => {
-      const next = [...prev, optimisticEvent];
-      cacheEvents(next);
-      return next;
-    });
-
-    // Close modal immediately for better UX
-    setIsModalOpen(false);
-    resetModalStateLater();
-
-    // Sync with server in background
-    try {
-      const serverEvent = await createEvent(eventData, user.id, user.fullName);
-      // Replace temporary event with server response
-      setEvents((prev) => {
-        const next = prev.map(e => e.id === tempId ? serverEvent : e);
-        cacheEvents(next);
-        return next;
-      });
-      showToast('Event created successfully', 'success');
-
-      // If creator is automatically RSVP'd (optional logic), update RSVP list here
-      // But typically create doesn't auto-RSVP in this app unless logic changes
-    } catch (e) {
-      console.error("Error saving event", e);
-      // Rollback optimistic update on error
-      setEvents((prev) => {
-        const next = prev.filter(e => e.id !== tempId);
-        cacheEvents(next);
-        return next;
-      });
-      showToast('Failed to create event — your details have been kept, please try again', 'error');
-      // Reopen the form with what the user typed
-      setEventDraft(eventData);
-      setSelectedEvent(null);
-      setModalInitialMode('edit');
-      setIsModalOpen(true);
-      throw markHandled(e);
-    }
-  }, [user, showToast]);
-
   const handleUpdateEvent = useCallback(async (id: string, eventData: Omit<Event, 'id' | 'createdAt'>) => {
     if (!user) return;
 
@@ -712,7 +596,6 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     setEvents((prev) => {
       const exists = prev.some(e => e.id === id);
       const next = exists ? prev.map((e) => (e.id === id ? optimisticEvent : e)) : [...prev, optimisticEvent];
-      cacheEvents(next);
       return next;
     });
     setSelectedEvent(prev => prev?.id === id ? optimisticEvent : prev);
@@ -728,11 +611,20 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     // Sync with server in background
     try {
       const serverEvent = await updateEvent(id, eventData, user.id, user.fullName);
+      // Hand-picked dates: the form already left out deleted days, so the saved list is complete
+      if (originalEvent.recurrence?.type === 'custom' && recurrenceExceptions.get(id)?.length) {
+        await clearRecurrenceExceptions(id);
+        setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+          const next = new Map(prev);
+          next.delete(id);
+          cacheExceptions(next);
+          return next;
+        });
+      }
       // Replace optimistic event with server response
       setEvents((prev) => {
         const exists = prev.some(e => e.id === id);
         const next = exists ? prev.map((e) => (e.id === id ? serverEvent : e)) : [...prev, serverEvent];
-        cacheEvents(next);
         return next;
       });
 
@@ -749,11 +641,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     } catch (e) {
       console.error("Error updating event", e);
       // Rollback optimistic update on error
-      setEvents((prev) => {
-        const next = prev.map((e) => (e.id === id ? originalEvent : e));
-        cacheEvents(next);
-        return next;
-      });
+      setEvents((prev) => prev.map((e) => (e.id === id ? originalEvent : e)));
       if (isDraftBeingPublished) {
         setPendingSubmissions(prev => {
           if (prev.some(e => e.id === id)) return prev;
@@ -770,7 +658,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       setIsModalOpen(true);
       throw markHandled(e);
     }
-  }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents]);
+  }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents, recurrenceExceptions]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
@@ -782,35 +670,55 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     // Attendees/comments are per occurrence. For a recurring series, `updatedEvent` is one
     // expanded instance (its own date), so it must never replace the series itself.
     if (!isRecurring) {
-      setEvents((prev) => {
-        const next = prev.map((e) => (e.id === updatedEvent.id
-          ? { ...e, attendees: updatedEvent.attendees, attendeeNames: updatedEvent.attendeeNames, comments: updatedEvent.comments }
-          : e));
-        cacheEvents(next);
-        return next;
-      });
+      setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id
+        ? { ...e, attendees: updatedEvent.attendees, attendeeNames: updatedEvent.attendeeNames, comments: updatedEvent.comments }
+        : e)));
     }
     setSelectedEvent(prev => (prev && (prev.instanceKey ?? prev.id) === (updatedEvent.instanceKey ?? updatedEvent.id)) ? updatedEvent : prev);
-
-    // Update RSVP set if user's attendance status changed (keys match rsvpService.getUserRsvps)
-    if (user && updatedEvent.attendees) {
-      const isAttending = updatedEvent.attendees.includes(user.id);
-      const rsvpKey = `${updatedEvent.id}_${updatedEvent.date.getTime()}`;
-      setUserRsvpEventIds(prev => {
-        const next = new Set<string>(prev);
-        if (isAttending) {
-          next.add(rsvpKey);
-        } else {
-          next.delete(rsvpKey);
-        }
-        cacheRsvps(Array.from(next) as string[]);
-        return next;
-      });
-    }
-  }, [user]);
+  }, []);
 
   const handleDeleteInstance = useCallback(async (eventId: string, instanceDate: Date) => {
     if (!user) return;
+
+    // Hand-picked dates: take the day out of the event itself, so editing shows the real list
+    // and the day can be picked again later
+    const master = events.find(e => e.id === eventId);
+    if (master?.recurrence?.type === 'custom') {
+      const schedule = materializeCustomSchedule(master, recurrenceExceptions.get(eventId), instanceDate);
+      const previousExceptions = recurrenceExceptions.get(eventId);
+      const updated: Event | null = schedule ? { ...master, ...schedule, recurrence: schedule.recurrence } : null;
+
+      setEvents(prev => updated ? prev.map(e => (e.id === eventId ? updated : e)) : prev.filter(e => e.id !== eventId));
+      setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+        const next = new Map(prev);
+        next.delete(eventId);
+        cacheExceptions(next);
+        return next;
+      });
+
+      try {
+        if (schedule) {
+          await saveCustomSchedule(eventId, schedule, user.id, user.fullName, instanceDate);
+          showToast('Date removed from the event', 'success');
+        } else {
+          await deleteEvent(eventId, user.id, user.fullName);
+          showToast('That was the last date, so the event was deleted', 'success');
+        }
+      } catch (error) {
+        console.error('Error removing date', error);
+        setEvents(prev => (prev.some(e => e.id === eventId) ? prev.map(e => (e.id === eventId ? master : e)) : [...prev, master]));
+        if (previousExceptions) {
+          setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+            const next = new Map(prev);
+            next.set(eventId, previousExceptions);
+            cacheExceptions(next);
+            return next;
+          });
+        }
+        showToast('Failed to remove this date', 'error');
+      }
+      return;
+    }
 
     // Обновляем исключения (Optimistic)
     const normalizedDate = new Date(instanceDate);
@@ -821,11 +729,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       const exceptions = next.get(eventId) || [];
 
       // Добавляем исключение, если его еще нет
-      if (!exceptions.some((d: Date) => {
-        const dNormalized = new Date(d);
-        dNormalized.setHours(0, 0, 0, 0);
-        return dNormalized.getTime() === normalizedDate.getTime();
-      })) {
+      if (!exceptions.some((d) => isSameDay(d, normalizedDate))) {
         next.set(eventId, [...exceptions, normalizedDate]);
       }
       cacheExceptions(next);
@@ -844,18 +748,13 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       setRecurrenceExceptions((prev: Map<string, Date[]>) => {
         const next = new Map(prev);
         const exceptions = next.get(eventId) || [];
-        const nextExceptions = exceptions.filter(d => {
-          const dNormalized = new Date(d);
-          dNormalized.setHours(0, 0, 0, 0);
-          return dNormalized.getTime() !== normalizedDate.getTime();
-        });
-        next.set(eventId, nextExceptions);
+        next.set(eventId, exceptions.filter((d) => !isSameDay(d, normalizedDate)));
         cacheExceptions(next);
         return next;
       });
     }
 
-  }, [user, showToast]);
+  }, [user, showToast, events, recurrenceExceptions]);
 
   const handleDeleteEvent = useCallback(async (id: string) => {
     if (!user) return;
@@ -868,11 +767,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     }
 
     // Optimistic update: remove event immediately
-    setEvents((prev) => {
-      const next = prev.filter(e => e.id !== id);
-      cacheEvents(next);
-      return next;
-    });
+    setEvents((prev) => prev.filter(e => e.id !== id));
 
     // Close modal if it's open for this event
     if (selectedEvent?.id === id) {
@@ -897,11 +792,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     } catch (e) {
       console.error("Error deleting event", e);
       // Rollback optimistic update on error
-      setEvents((prev) => {
-        const next = [...prev, eventToDelete];
-        cacheEvents(next);
-        return next;
-      });
+      setEvents((prev) => [...prev, eventToDelete]);
       showToast('Failed to delete event', 'error');
     }
   }, [user, events, selectedEvent, showToast]);
@@ -929,14 +820,14 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       } else if (e.key === 'c' || e.key === 'C') {
         if (user.role === UserRole.ADMIN) {
           e.preventDefault();
-          handleCreateClick();
+          openSubmitPage();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [user, handleCreateClick]);
+  }, [user, openSubmitPage]);
 
   // Shareable links: /?event=<id>&at=<occurrence timestamp>
   const getEventShareLink = useCallback((event: Event) => {
@@ -1078,23 +969,45 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       <Navbar
         user={user}
         onLogout={handleLogout}
-        onAddEventClick={handleCreateClick}
+        onAddEventClick={openSubmitPage}
         onOpenSubmitEvent={openSubmitPage}
         onExportClick={handleExportClick}
         onRefresh={() => refreshEvents(true)}
         loadingEvents={loadingEvents}
         isRefreshing={isRefreshing}
-        events={events}
-        userRsvpEventIds={userRsvpEventIds}
         pendingSubmissionsCount={pendingSubmissions.length}
         onOpenSubmissions={() => setIsSubmissionsModalOpen(true)}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
-        onEventClick={handleEventClick}
       />
 
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        {/* Admin: submissions waiting for review */}
+        {user.role === UserRole.ADMIN && pendingSubmissions.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setIsSubmissionsModalOpen(true)}
+            className="group mb-4 w-full flex items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-left hover:bg-amber-100/70 dark:hover:bg-amber-900/30 transition-colors"
+          >
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+              <Inbox className="w-5 h-5" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-amber-900 dark:text-amber-100">
+                {pendingSubmissions.length} {pendingSubmissions.length === 1 ? 'submission is' : 'submissions are'} waiting for review
+              </span>
+              <span className="block text-xs text-amber-800/80 dark:text-amber-200/70 truncate">
+                {pendingSubmissions.slice(0, 3).map((e) => e.title).join(' · ')}
+              </span>
+            </span>
+            <span className="shrink-0 hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-amber-800 dark:text-amber-200">
+              Review <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </span>
+            <ArrowRight className="sm:hidden shrink-0 w-5 h-5 text-amber-700 dark:text-amber-300" />
+          </button>
+        )}
+
         {/* Search and Filters Bar */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+        <div className="mb-3 sm:mb-4 flex gap-2 sm:gap-3 items-center">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
           <EventFiltersComponent
             filters={filters}
@@ -1105,17 +1018,18 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
 
         {/* Quick Category Filter Pills */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 no-scrollbar text-xs -mx-4 px-4 sm:mx-0 sm:px-0 touch-pan-x">
+        <div className="mb-4 sm:mb-6 flex items-center gap-2 overflow-x-auto lg:overflow-visible lg:flex-wrap pb-1 pt-0.5 no-scrollbar text-xs -mx-3 px-3 sm:mx-0 sm:px-0 touch-pan-x" role="group" aria-label="Filter by category">
           <button
             type="button"
             onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
+            aria-pressed={!filters.category}
             className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
               !filters.category
                 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
             }`}
           >
-            All Categories
+            All
           </button>
           {EVENT_CATEGORIES.map(cat => {
             const isSelected = filters.category === cat;
@@ -1124,12 +1038,14 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
                 key={cat}
                 type="button"
                 onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
-                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                aria-pressed={isSelected}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
                   isSelected
-                    ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-400 dark:ring-brand-500'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                 }`}
               >
+                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)}`} aria-hidden="true" />
                 {cat}
               </button>
             );
@@ -1164,7 +1080,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
           <CalendarView
             events={filteredEvents}
             onEventClick={handleEventClick}
-            onAddEventForDate={user.role === UserRole.ADMIN ? handleAddEventForDate : undefined}
+            onAddEventForDate={user.role === UserRole.ADMIN ? openSubmitPageWithDate : undefined}
             recurrenceExceptions={recurrenceExceptions}
             userRole={user.role}
             hasActiveFilters={hasActiveFilters}
@@ -1184,11 +1100,11 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             role={user.role}
             currentUserId={user.id}
             currentUserName={user.fullName}
-            onSave={handleSaveEvent}
             onUpdate={handleUpdateEvent}
             onEventUpdate={handleEventUpdate}
             onDelete={handleDeleteEvent}
             onDeleteInstance={handleDeleteInstance}
+            recurrenceExceptions={recurrenceExceptions}
             initialMode={modalInitialMode}
             autoApproveOnSave={modalAutoApprove}
             draft={eventDraft}
@@ -1215,6 +1131,10 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
+            onOpenSubmissions={user.role === UserRole.ADMIN ? () => {
+              setIsBulletinModalOpen(false);
+              setIsSubmissionsModalOpen(true);
+            } : undefined}
           />
         </Suspense>
       )}
@@ -1225,6 +1145,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             isOpen={isSubmissionsModalOpen}
             onClose={() => setIsSubmissionsModalOpen(false)}
             submissions={pendingSubmissions}
+            events={events}
             onApprove={handleApproveSubmission}
             onEdit={(ev) => {
               setEventDraft(null);
@@ -1239,8 +1160,8 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </Suspense>
       )}
 
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-24 md:pb-6">
-        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-28 md:pb-6">
+        <div className="max-w-7xl 2xl:max-w-[96rem] mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
           &copy; {new Date().getFullYear()} Cork City Partnership. Internal Use Only.
           <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
             Keyboard: <kbd className="font-sans font-semibold">/</kbd> search · <kbd className="font-sans font-semibold">←</kbd> <kbd className="font-sans font-semibold">→</kbd> previous / next · <kbd className="font-sans font-semibold">T</kbd> today
@@ -1250,13 +1171,19 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
       </footer>
 
-      {isMobile && (
+      {hasTabBar && (
         <BottomNavigation
           onHomeClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          onCreateClick={user.role === UserRole.ADMIN ? handleCreateClick : openSubmitPage}
-          showCreateButton={true}
-          createLabel={user.role === UserRole.ADMIN ? 'New Event' : 'Submit'}
-          activeTab="home"
+          onCreateClick={openSubmitPage}
+          createLabel={user.role === UserRole.ADMIN ? 'New event' : 'Submit'}
+          onInboxClick={user.role === UserRole.ADMIN ? () => setIsSubmissionsModalOpen(true) : undefined}
+          inboxCount={pendingSubmissions.length}
+          onSearchClick={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.getElementById(SEARCH_INPUT_ID)?.focus();
+          }}
+          onDigestClick={() => setIsBulletinModalOpen(true)}
+          onExportClick={handleExportClick}
         />
       )}
     </div>

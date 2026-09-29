@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Event, UserRole, EventCategory } from '../types';
-import { isSameDay } from '../utils/date';
+import { isSameDay, isMultiDayEvent } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -30,17 +30,10 @@ export const getWeekDays = (date: Date): Date[] => {
   return days;
 };
 
-const isMultiDayEvent = (event: Event): boolean => {
-  if (!event.endDate) return false;
-  const s = new Date(event.date);
-  const e = new Date(event.endDate);
-  return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth() || s.getDate() !== e.getDate();
-};
-
 const isEventOnDay = (event: Event, day: Date): boolean => {
   const s = new Date(event.date);
   s.setHours(0, 0, 0, 0);
-  if (!event.endDate || !isMultiDayEvent(event)) {
+  if (!event.endDate || !isMultiDayEvent(event.date, event.endDate)) {
     return isSameDay(event.date, day);
   }
   const e = new Date(event.endDate);
@@ -96,7 +89,7 @@ export const getCategoryDotColor = (category?: EventCategory): string => {
 const formatTimeRange = (event: Event): string => {
   const startStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (event.endDate) {
-    if (isMultiDayEvent(event)) {
+    if (isMultiDayEvent(event.date, event.endDate)) {
       const endDayStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
       return `${startStr} – ${endDayStr}`;
     }
@@ -185,7 +178,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   return (
     <div className={`p-2 sm:p-4 lg:p-6 transition-colors ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>
       {/* Mobile: 7-day pill strip / tabs */}
-      <div className="block md:hidden mb-4">
+      <div className="block lg:hidden mb-4">
         <div className="grid grid-cols-7 gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
           {eventsByDay.map((group, idx) => {
             const isSelected = idx === selectedMobileDayIndex;
@@ -207,7 +200,10 @@ const WeekView: React.FC<WeekViewProps> = ({
                 }`}
                 aria-label={`${group.day.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' })}, ${count} events`}
               >
-                <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">{dayName}</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
+                  <span className="sm:hidden">{dayName}</span>
+                  <span className="hidden sm:inline">{group.day.toLocaleDateString('default', { weekday: 'short' })}</span>
+                </span>
                 <span className="text-sm font-extrabold">{group.day.getDate()}</span>
                 <div className="h-1.5 flex items-center justify-center gap-0.5 mt-0.5">
                   {count > 0 && (
@@ -245,7 +241,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               </button>
 
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-slate-900 dark:text-white">
+                <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
                   {activeMobileGroup.day.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
                 {isSameDay(activeMobileGroup.day, today) && (
@@ -289,7 +285,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               activeMobileGroup.events.map(event => {
                 const colorClass = getCategoryColor(event.category);
                 const timeText = formatTimeRange(event);
-                const isMulti = isMultiDayEvent(event);
+                const isMulti = isMultiDayEvent(event.date, event.endDate);
 
                 return (
                   <div
@@ -330,7 +326,7 @@ const WeekView: React.FC<WeekViewProps> = ({
       </div>
 
       {/* Desktop / Tablet: 7 Day Columns Grid */}
-      <div className="hidden md:grid md:grid-cols-7 gap-2 lg:gap-3">
+      <div className="hidden lg:grid lg:grid-cols-7 gap-2 xl:gap-3">
         {eventsByDay.map((group, idx) => {
           const isToday = isSameDay(group.day, today);
           const dayName = group.day.toLocaleDateString('default', { weekday: 'short' });
@@ -394,7 +390,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                   group.events.map(event => {
                     const colorClass = getCategoryColor(event.category);
                     const timeText = formatTimeRange(event);
-                    const isMulti = isMultiDayEvent(event);
+                    const isMulti = isMultiDayEvent(event.date, event.endDate);
                     const statusClass = event.status === 'draft' ? 'opacity-70 border-dashed' : '';
 
                     return (

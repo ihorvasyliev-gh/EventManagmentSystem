@@ -20,6 +20,14 @@ export const isSameDay = (d1: Date, d2: Date): boolean => {
   );
 };
 
+/** True when an event ends on a later calendar day than it starts */
+export const isMultiDayEvent = (start: Date | string, end?: Date | string | null): boolean => {
+  if (!end) return false;
+  const s = new Date(start);
+  const e = new Date(end);
+  return !isNaN(s.getTime()) && !isNaN(e.getTime()) && !isSameDay(s, e);
+};
+
 export const formatDate = (date: Date): string => {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -64,6 +72,36 @@ export interface DateRangeResult {
   endDateStr: string;
 }
 
+export interface LastOccurrenceSource {
+  date: Date | string;
+  endDate?: Date | string;
+  recurrence?: {
+    type: string;
+    endDate?: Date | string;
+    customDates?: Array<Date | string>;
+    customEndDates?: Array<Date | string>;
+  };
+}
+
+/**
+ * Latest known moment of an event: its end, its last hand-picked date, or the end date of
+ * its repeat. Open-ended repeats count only from their first date.
+ */
+export const getLastOccurrenceTime = (ev: LastOccurrenceSource): number => {
+  const candidates: Array<Date | string | undefined> = [ev.date, ev.endDate];
+  const rule = ev.recurrence;
+  if (rule?.type === 'custom') {
+    candidates.push(...(rule.customDates ?? []), ...(rule.customEndDates ?? []));
+  } else if (rule && rule.type !== 'none' && rule.endDate) {
+    candidates.push(rule.endDate);
+  }
+  return candidates.reduce<number>((max, c) => {
+    if (!c) return max;
+    const t = (c instanceof Date ? c : new Date(c)).getTime();
+    return !isNaN(t) && t > max ? t : max;
+  }, 0);
+};
+
 /**
  * Calculates start and end dates for quick range presets based on a reference local date.
  */
@@ -71,7 +109,7 @@ export const calculatePresetDateRange = (
   preset: DateRangePreset,
   options?: {
     referenceDate?: Date;
-    events?: Array<{ date: Date | string }>;
+    events?: Array<LastOccurrenceSource>;
   }
 ): DateRangeResult => {
   const ref = options?.referenceDate ? new Date(options.referenceDate) : new Date();
@@ -91,9 +129,8 @@ export const calculatePresetDateRange = (
     let maxMs = 0;
     if (options?.events && options.events.length > 0) {
       for (const ev of options.events) {
-        const d = ev.date instanceof Date ? ev.date : new Date(ev.date);
-        const t = d.getTime();
-        if (!isNaN(t) && t > maxMs) {
+        const t = getLastOccurrenceTime(ev);
+        if (t > maxMs) {
           maxMs = t;
         }
       }

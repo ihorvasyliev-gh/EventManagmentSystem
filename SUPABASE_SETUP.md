@@ -238,7 +238,7 @@ SET role = 'admin', full_name = 'CCP Administrator';
 - [ ] SQL скрипт `supabase-setup.sql` выполнен успешно
 - [ ] Все таблицы созданы и видны в Table Editor
 - [ ] RLS политики активны
-- [ ] Выполнены миграции: `submission-migration.sql`, `recurrence-exceptions-migration.sql`, `realtime-events-migration.sql`, `custom-dates-migration.sql`, `rsvp-occurrence-migration.sql`, `event-comments-occurrence-migration.sql`
+- [ ] Выполнены миграции: `submission-migration.sql`, `recurrence-exceptions-migration.sql`, `realtime-events-migration.sql`, `custom-dates-migration.sql`, `add-custom-end-dates-migration.sql`, `rsvp-occurrence-migration.sql`, `event-comments-occurrence-migration.sql`
 - [ ] **Выполнен `security-hardening-migration.sql`** (последним)
 - [ ] **Публичная регистрация отключена** (Authentication → Sign In / Providers → Allow new users to sign up: OFF)
 - [ ] Получены Project URL и anon key

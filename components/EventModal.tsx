@@ -1,22 +1,24 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry, EventCategoryItem } from '../types';
-import { X, MapPin, Clock, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, XCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat } from 'lucide-react';
+import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry } from '../types';
+import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
 import { formatDate, formatTime, isSameDay, formatLocalDate } from '../utils/date';
-import { uploadPosterToR2, uploadAttachment, addComment, deleteComment, fetchEventDetails, deleteEvent, deleteRecurrenceInstance } from '../services/eventService';
-import { rsvpToEvent, cancelRsvp, hasUserRsvped } from '../services/rsvpService';
-import { getCategories, createCategory } from '../services/categoryService';
+import { uploadPosterToR2, addComment, deleteComment, fetchEventDetails } from '../services/eventService';
+import { rsvpToEvent, cancelRsvp } from '../services/rsvpService';
+import { createCategory } from '../services/categoryService';
 import EventComments from './EventComments';
 import EventHistory from './EventHistory';
 import { validateEvent } from '../utils/validation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
+import PosterLightbox, { PosterDownloadButton } from './PosterLightbox';
 import MultiDatePicker from './MultiDatePicker';
+import { PerDateTimes, buildOccurrences, buildSchedule, validateOccurrenceTimes, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
-import { expandRecurringEvents } from '../utils/recurrence';
 import { useToast } from '../contexts/ToastContext';
+import { exportToICal, downloadFile } from '../utils/export';
 
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
@@ -26,9 +28,6 @@ const parseLocalDateInput = (value: string): Date | undefined => {
   return new Date(y, m - 1, d);
 };
 
-const toTimeInputValue = (date: Date): string =>
-  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-
 /** Event end for calendar invites: the real end time, or 1 hour when none is set */
 const getEventEnd = (ev: Event): Date =>
   ev.endDate && ev.endDate > ev.date ? ev.endDate : new Date(ev.date.getTime() + 60 * 60 * 1000);
@@ -36,24 +35,14 @@ const getEventEnd = (ev: Event): Date =>
 const isRecurringEvent = (ev?: Event | null): boolean =>
   !!ev?.recurrence && ev.recurrence.type !== 'none';
 
-// Convert minutes to "HH:mm"
-const minutesToTime = (totalMinutes: number): string => {
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
-  const h = Math.floor(normalized / 60);
-  const m = normalized % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
-
 interface EventModalProps {
   isOpen: boolean;
   onClose: () => void;
-  event: Event | null; // If null, we are in "Create Mode"
+  event: Event | null;
   events?: Event[];
-  initialDate?: Date | null; // Pre-fill date when creating from calendar day plus
   role: UserRole;
   currentUserId?: string;
   currentUserName?: string;
-  onSave?: (eventData: Omit<Event, 'id' | 'createdAt'>) => Promise<void>;
   onUpdate?: (id: string, eventData: Omit<Event, 'id' | 'createdAt'>) => Promise<void>;
   onEventUpdate?: (event: Event) => void; // For RSVP and comment updates
   onDelete?: (id: string) => Promise<void>; // For event deletion
@@ -64,6 +53,8 @@ interface EventModalProps {
   draft?: Omit<Event, 'id' | 'createdAt'> | null;
   /** Builds a shareable link for an event occurrence */
   getShareLink?: (event: Event) => string;
+  /** Days deleted from recurring series (event id → days) */
+  recurrenceExceptions?: Map<string, Date[]>;
 }
 
 const EventModal: React.FC<EventModalProps> = ({
@@ -71,11 +62,9 @@ const EventModal: React.FC<EventModalProps> = ({
   onClose,
   event,
   events = [],
-  initialDate,
   role,
   currentUserId = '1',
   currentUserName = 'User',
-  onSave,
   onUpdate,
   onEventUpdate,
   onDelete,
@@ -83,16 +72,18 @@ const EventModal: React.FC<EventModalProps> = ({
   initialMode = 'view',
   autoApproveOnSave = false,
   draft = null,
-  getShareLink
+  getShareLink,
+  recurrenceExceptions
 }) => {
   const { theme } = useTheme();
   const { showToast } = useToast();
   // Latest events without making the form re-initialise on every background refresh
   const eventsRef = useRef(events);
   eventsRef.current = events;
+  const exceptionsRef = useRef(recurrenceExceptions);
+  exceptionsRef.current = recurrenceExceptions;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(initialMode === 'edit');
-  const [isRsvping, setIsRsvping] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -103,16 +94,13 @@ const EventModal: React.FC<EventModalProps> = ({
     if (event?.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
       return event.recurrence.customDates.map(d => new Date(d));
     }
-    if (event?.date) {
-      return [new Date(event.date)];
-    }
-    if (initialDate) {
-      return [new Date(initialDate)];
-    }
-    return [new Date()];
+    return [event?.date ? new Date(event.date) : new Date()];
   });
   const [startTimeStr, setStartTimeStr] = useState('10:00');
   const [endTimeStr, setEndTimeStr] = useState('11:30');
+  const [sameTimeForAll, setSameTimeForAll] = useState(true);
+  const [perDateTimes, setPerDateTimes] = useState<PerDateTimes>({});
+  const activePerDate = sameTimeForAll ? null : perDateTimes;
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState<EventCategory | ''>('');
   const [status, setStatus] = useState<EventStatus>('published');
@@ -124,7 +112,6 @@ const EventModal: React.FC<EventModalProps> = ({
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [newAttachments, setNewAttachments] = useState<File[]>([]);
   // Lazy loaded states
   const [comments, setComments] = useState<EventComment[]>([]);
   const [history, setHistory] = useState<EventHistoryEntry[]>([]);
@@ -139,6 +126,7 @@ const EventModal: React.FC<EventModalProps> = ({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [showCalendarDropdown, setShowCalendarDropdown] = useState(false);
+  const [showPosterPreview, setShowPosterPreview] = useState(false);
 
   // Available categories: standard EVENT_CATEGORIES, current event's category, plus any custom
   const availableCategories = useMemo(() => {
@@ -170,7 +158,6 @@ const EventModal: React.FC<EventModalProps> = ({
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const modalPanelRef = useRef<HTMLDivElement>(null);
   // Escape / backdrop / close button go through requestClose (defined below)
   const requestCloseRef = useRef<() => void>(onClose);
@@ -178,10 +165,7 @@ const EventModal: React.FC<EventModalProps> = ({
   // Bumped to re-initialise the form from the event (e.g. "Cancel" back to details)
   const [formResetKey, setFormResetKey] = useState(0);
 
-  // Determine if we are creating a new event from scratch
-  const isCreating = !event;
-  // Show form if we are creating OR editing
-  const showForm = isCreating || isEditing;
+  const showForm = isEditing;
 
   // "E" opens the edit form from the details view (admins)
   useEffect(() => {
@@ -199,12 +183,12 @@ const EventModal: React.FC<EventModalProps> = ({
   }, [isOpen, showForm, showDeleteDialog, role]);
 
   const conflictInfo = useMemo(() => {
-    if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0 || !startTimeStr || !endTimeStr) {
+    if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0) {
       return { hasConflict: false, conflicts: [], summaryMessage: '' };
     }
     const occurrences = getOccurrencesAroundDates(events || [], selectedDates);
-    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id);
-  }, [selectedDates, startTimeStr, endTimeStr, events, event?.id, isOpen, showForm]);
+    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id, activePerDate);
+  }, [selectedDates, startTimeStr, endTimeStr, activePerDate, events, event?.id, isOpen, showForm]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
@@ -214,6 +198,7 @@ const EventModal: React.FC<EventModalProps> = ({
 
   // Initialize form state when opening or switching modes
   useEffect(() => {
+    setShowPosterPreview(false);
     if (isOpen) {
       // Re-capture the unsaved-changes baseline once this initialisation has rendered
       setBaselineTick(t => t + 1);
@@ -258,26 +243,16 @@ const EventModal: React.FC<EventModalProps> = ({
           ? (eventsRef.current.find(e => e.id === event.id) ?? event)
           : event;
 
-        if (source.recurrence?.type === 'custom' && source.recurrence.customDates && source.recurrence.customDates.length > 0) {
-          setSelectedDates(source.recurrence.customDates.map(d => new Date(d)));
-        } else if (source.date) {
-          setSelectedDates([new Date(source.date)]);
-        } else if (initialDate) {
-          setSelectedDates([new Date(initialDate)]);
-        } else {
-          setSelectedDates([new Date()]);
-        }
-
-        setStartTimeStr(toTimeInputValue(source.date));
-        if (source.endDate) {
-          setEndTimeStr(toTimeInputValue(source.endDate));
-        } else {
-          const startM = source.date.getHours() * 60 + source.date.getMinutes();
-          setEndTimeStr(minutesToTime(startM + 90));
-        }
+        // Days deleted earlier ("Delete only this occurrence") are left out of hand-picked dates
+        const remaining = materializeCustomSchedule(source, exceptionsRef.current?.get(source.id));
+        const schedule = readScheduleFromEvent(remaining ? { ...source, ...remaining } : source);
+        setSelectedDates(schedule.dates);
+        setStartTimeStr(schedule.shared.start);
+        setEndTimeStr(schedule.shared.end);
+        setSameTimeForAll(schedule.sameTime);
+        setPerDateTimes(schedule.perDate);
 
         setPosterFile(null);
-        setNewAttachments([]);
 
         // Load Recurrence Data
         if (event.recurrence) {
@@ -321,57 +296,9 @@ const EventModal: React.FC<EventModalProps> = ({
         return () => {
           isActive = false;
         };
-      } else {
-        // We are creating a new event
-        setTitle('');
-        setDescription('');
-        setLocation('');
-        setCategory('');
-        setStatus('published');
-        setTags('');
-        setSubmitterName('');
-        setSubmitterEmail('');
-        setRsvpEnabled(false);
-        setMaxAttendees('');
-        setPreviewUrl(null);
-        setPosterFile(null);
-
-        // Auto-select date & time
-        if (initialDate) {
-          setSelectedDates([new Date(initialDate)]);
-        } else {
-          setSelectedDates([new Date()]);
-        }
-
-        let sTime = '10:00';
-        let eTime = '11:30';
-
-        if (!initialDate) {
-          const now = new Date();
-          const nextHour = now.getHours() + 1;
-          const clampedHour = Math.min(Math.max(nextHour, 8), 20);
-          sTime = `${String(clampedHour).padStart(2, '0')}:00`;
-          eTime = `${String(Math.min(clampedHour + 1, 23)).padStart(2, '0')}:30`;
-        }
-
-        setStartTimeStr(sTime);
-        setEndTimeStr(eTime);
-
-        setAttachments([]);
-        setNewAttachments([]);
-        setComments([]);
-        setHistory([]);
-        setAttendees([]);
-        setAttendeeNames([]);
-        setUserHasRsvped(false);
-        setIsEditing(false);
-        setRecurrenceType('none');
-        setRecurrenceInterval(1);
-        setRecurrenceEndDate('');
-        setFieldErrors({});
       }
     }
-  }, [isOpen, event, initialDate, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
+  }, [isOpen, event, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
 
   // Restore unsaved form data (e.g. the save failed and the modal was reopened)
   useEffect(() => {
@@ -389,13 +316,12 @@ const EventModal: React.FC<EventModalProps> = ({
     setMaxAttendees(draft.maxAttendees || '');
     setPreviewUrl(draft.posterUrl || null);
     setAttachments(draft.attachments || []);
-    setSelectedDates(
-      draft.recurrence?.type === 'custom' && draft.recurrence.customDates?.length
-        ? draft.recurrence.customDates.map(d => new Date(d))
-        : [new Date(draft.date)]
-    );
-    setStartTimeStr(toTimeInputValue(draft.date));
-    if (draft.endDate) setEndTimeStr(toTimeInputValue(draft.endDate));
+    const draftSchedule = readScheduleFromEvent(draft);
+    setSelectedDates(draftSchedule.dates);
+    setStartTimeStr(draftSchedule.shared.start);
+    setEndTimeStr(draftSchedule.shared.end);
+    setSameTimeForAll(draftSchedule.sameTime);
+    setPerDateTimes(draftSchedule.perDate);
     if (draft.recurrence && draft.recurrence.type !== 'custom') {
       setRecurrenceType(draft.recurrence.type);
       setRecurrenceInterval(draft.recurrence.interval || 1);
@@ -408,6 +334,7 @@ const EventModal: React.FC<EventModalProps> = ({
   const formSnapshot = JSON.stringify([
     title, description, location, category, status, tags, submitterName, submitterEmail,
     rsvpEnabled, maxAttendees, selectedDates.map(d => formatLocalDate(d)), startTimeStr, endTimeStr,
+    sameTimeForAll, sameTimeForAll ? null : selectedDates.map(d => perDateTimes[formatLocalDate(d)] ?? null),
     recurrenceType, recurrenceInterval, recurrenceEndDate, previewUrl, posterFile?.name ?? null
   ]);
   const baselineRef = useRef<string | null>(null);
@@ -422,6 +349,10 @@ const EventModal: React.FC<EventModalProps> = ({
 
   requestCloseRef.current = () => {
     // Close the innermost layer first
+    if (showPosterPreview) {
+      setShowPosterPreview(false);
+      return;
+    }
     if (showDeleteDialog) {
       if (!isDeleting) setShowDeleteDialog(false);
       return;
@@ -513,37 +444,21 @@ const EventModal: React.FC<EventModalProps> = ({
       setFieldErrors(prev => ({ ...prev, date: 'Please select at least one date' }));
       return;
     }
-    if (!startTimeStr) {
-      setFieldErrors(prev => ({ ...prev, date: 'Please select a start time.' }));
+    const sharedTimes = { start: startTimeStr, end: endTimeStr };
+    const timeError = validateOccurrenceTimes(selectedDates, sharedTimes, activePerDate);
+    if (timeError) {
+      setFieldErrors(prev => ({ ...prev, date: timeError }));
       return;
     }
 
-    const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
-
-    const [startH, startM = 0] = startTimeStr.split(':').map(Number);
-    const startDateTime = new Date(sortedDates[0]);
-    startDateTime.setHours(startH, startM, 0, 0);
-
-    if (isNaN(startDateTime.getTime())) {
+    const occurrences = buildOccurrences(selectedDates, sharedTimes, activePerDate);
+    if (occurrences.length === 0) {
       setFieldErrors(prev => ({ ...prev, date: 'Invalid start date or time.' }));
       return;
     }
-
-    let endDateTime: Date | undefined = undefined;
-    if (endTimeStr) {
-      const [endH, endM = 0] = endTimeStr.split(':').map(Number);
-      const end = new Date(sortedDates[0]);
-      end.setHours(endH, endM, 0, 0);
-      if (isNaN(end.getTime())) {
-        setFieldErrors(prev => ({ ...prev, date: 'Invalid end date or time.' }));
-        return;
-      }
-      if (end < startDateTime) {
-        setFieldErrors(prev => ({ ...prev, date: 'End Date & Time cannot be earlier than Start Date & Time.' }));
-        return;
-      }
-      endDateTime = end;
-    }
+    const schedule = buildSchedule(occurrences, !!activePerDate);
+    const startDateTime = schedule.date;
+    const endDateTime = schedule.endDate;
 
     if (!location.trim()) {
       setFieldErrors(prev => ({ ...prev, location: 'Please specify the venue/location.' }));
@@ -557,11 +472,8 @@ const EventModal: React.FC<EventModalProps> = ({
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     let recurrence: Event['recurrence'] = undefined;
-    if (sortedDates.length > 1) {
-      recurrence = {
-        type: 'custom',
-        customDates: sortedDates,
-      };
+    if (schedule.recurrence) {
+      recurrence = schedule.recurrence;
     } else if (['daily', 'weekly', 'monthly', 'yearly'].includes(recurrenceType)) {
       recurrence = {
         type: recurrenceType as 'daily' | 'weekly' | 'monthly' | 'yearly',
@@ -629,15 +541,6 @@ const EventModal: React.FC<EventModalProps> = ({
         finalPosterUrl = undefined;
       }
 
-      // Upload new attachments
-      const uploadedAttachments: Attachment[] = [];
-      if (newAttachments.length > 0) {
-        for (const file of newAttachments) {
-          const attachment = await uploadAttachment(file) as Attachment;
-          uploadedAttachments.push(attachment);
-        }
-      }
-
       const fullEventData = {
         title: title.trim(),
         description: description.trim(),
@@ -652,14 +555,12 @@ const EventModal: React.FC<EventModalProps> = ({
         submitterEmail: submitterEmail.trim() || undefined,
         rsvpEnabled,
         maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
-        attachments: [...attachments, ...uploadedAttachments],
+        attachments,
         creatorId: event?.creatorId || currentUserId,
         recurrence
       };
 
-      if (isCreating && onSave) {
-        await onSave(fullEventData);
-      } else if (isEditing && event && onUpdate) {
+      if (event && onUpdate) {
         await onUpdate(event.id, fullEventData);
       }
 
@@ -721,21 +622,6 @@ const EventModal: React.FC<EventModalProps> = ({
       // Show error toast (non-blocking)
       showToast('Failed to update RSVP. Please try again.', 'error');
     }
-  };
-
-  const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setNewAttachments(prev => [...prev, ...files]);
-    }
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const removeNewAttachment = (index: number) => {
-    setNewAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAddComment = async (content: string) => {
@@ -826,45 +712,7 @@ const EventModal: React.FC<EventModalProps> = ({
 
   const handleDownloadIcs = () => {
     if (!event) return;
-
-    const formatDate = (date: Date) => {
-      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
-
-    const escapeICS = (str: string) => {
-      return str
-        .replace(/\\/g, '\\\\')
-        .replace(/;/g, '\\;')
-        .replace(/,/g, '\\,')
-        .replace(/\n/g, '\\n');
-    };
-
-    const startDate = formatDate(event.date);
-    const endDate = formatDate(getEventEnd(event));
-
-    const icsContent = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//CCP Flow/Calendar//EN',
-      'BEGIN:VEVENT',
-      `UID:${event.instanceKey || event.id || Date.now()}@ccpflow.com`,
-      `DTSTAMP:${formatDate(new Date())}`,
-      `DTSTART:${startDate}`,
-      `DTEND:${endDate}`,
-      `SUMMARY:${escapeICS(event.title || '')}`,
-      `DESCRIPTION:${escapeICS(event.description || '')}`,
-      `LOCATION:${escapeICS(event.location || '')}`,
-      'END:VEVENT',
-      'END:VCALENDAR'
-    ].join('\r\n');
-
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(exportToICal([{ ...event, endDate: getEventEnd(event) }]), `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`, 'text/calendar;charset=utf-8');
     setShowCalendarDropdown(false);
   };
 
@@ -913,6 +761,9 @@ const EventModal: React.FC<EventModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      {showPosterPreview && event?.posterUrl && (
+        <PosterLightbox src={event.posterUrl} title={event.title} onClose={() => setShowPosterPreview(false)} />
+      )}
       <div className="flex items-end justify-center min-h-screen pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
 
         {/* Transparent Backdrop */}
@@ -926,7 +777,7 @@ const EventModal: React.FC<EventModalProps> = ({
           {/* Header */}
           <div className="px-4 sm:px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
             <h3 className={`text-base sm:text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
-              {isCreating ? 'Create New Event' : (isEditing ? 'Edit Event' : 'Event Details')}
+              {isEditing ? 'Edit Event' : 'Event Details'}
             </h3>
             <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
               <X className="h-5 w-5" />
@@ -965,42 +816,20 @@ const EventModal: React.FC<EventModalProps> = ({
                     )}
                   </div>
 
-                  <div className="flex justify-between items-start gap-4">
-                    <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  <div className="flex justify-between items-start gap-3">
+                    <h2 className={`text-xl sm:text-2xl font-bold leading-tight break-words ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                       {event.title}
                     </h2>
-                    <div className="flex gap-2 shrink-0">
-                      {getShareLink && (
-                        <button
-                          onClick={handleCopyLink}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                          title="Copy link to this event"
-                          aria-label="Copy link to this event"
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    {role === UserRole.ADMIN && (
-                      <>
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                          title="Edit Event (E)"
-                          aria-label="Edit event"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={handleDeleteClick}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                          title="Delete Event"
-                          aria-label="Delete event"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
+                    {getShareLink && (
+                      <button
+                        onClick={handleCopyLink}
+                        className="shrink-0 p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
+                        title="Copy link to this event"
+                        aria-label="Copy link to this event"
+                      >
+                        <Link2 className="h-5 w-5" />
+                      </button>
                     )}
-                    </div>
                   </div>
                 </div>
 
@@ -1009,14 +838,29 @@ const EventModal: React.FC<EventModalProps> = ({
                   <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
                     {event.posterUrl && (
                       <div className="relative group">
-                        <LazyImage
-                          src={event.posterUrl}
-                          alt={event.title}
-                          className="w-full h-56"
+                        <button
+                          type="button"
+                          onClick={() => setShowPosterPreview(true)}
+                          className="block w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                          aria-label="Open full poster"
+                          title="Open full poster"
+                        >
+                          <LazyImage
+                            src={event.posterUrl}
+                            alt={event.title}
+                            className="w-full h-56"
+                          />
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors">
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                              <Maximize2 className="h-3.5 w-3.5" /> View full poster
+                            </span>
+                          </span>
+                        </button>
+                        <PosterDownloadButton
+                          url={event.posterUrl}
+                          title={event.title}
+                          className="absolute bottom-3 right-3 p-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-all text-slate-700 dark:text-slate-200 hover:scale-105"
                         />
-                        <a href={event.posterUrl} download className="absolute bottom-3 right-3 p-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all text-slate-700 dark:text-slate-200 hover:scale-105">
-                          <Download className="h-4 w-4" />
-                        </a>
                       </div>
                     )}
                     {attachments.length > 0 && (
@@ -1100,13 +944,13 @@ const EventModal: React.FC<EventModalProps> = ({
                       </div>
                       <button
                         onClick={handleRsvp}
-                        disabled={isRsvping || (event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
+                        disabled={!!(event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
                         className={`px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm font-bold rounded-lg transition-all active:scale-95 ${userHasRsvped
                           ? 'bg-white text-red-600 border border-red-100 hover:bg-red-50'
                           : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        {isRsvping ? <Loader2 className="h-4 w-4 animate-spin" /> : userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
+                        {userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
                       </button>
                     </div>
                   </div>
@@ -1201,7 +1045,11 @@ const EventModal: React.FC<EventModalProps> = ({
                 {isEditing && event && isRecurringEvent(event) && (
                   <div className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 p-3.5 flex items-center gap-3 text-xs text-sky-800 dark:text-sky-300">
                     <Repeat className="w-4 h-4 shrink-0" />
-                    <span>This is a repeating event — changes apply to every occurrence. To remove a single date, use Delete → "Delete only this occurrence".</span>
+                    <span>
+                      {event.recurrence?.type === 'custom'
+                        ? 'This event runs on several dates — changes apply to all of them. Tap a date in the calendar below to add or remove it.'
+                        : 'This is a repeating event — changes apply to every occurrence. To remove a single date, use Delete → "Delete only this occurrence".'}
+                    </span>
                   </div>
                 )}
                 {Object.keys(fieldErrors).length > 0 && (
@@ -1219,14 +1067,14 @@ const EventModal: React.FC<EventModalProps> = ({
                     type="text"
                     value={title}
                     onChange={(e) => { setTitle(e.target.value); clearFieldError('title'); }}
-                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all font-medium placeholder-slate-400 min-h-[44px] sm:min-h-0 ${fieldErrors.title ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                     placeholder="e.g. Enterprise Network Breakfast, Community Family Day"
                   />
                   {fieldErrors.title && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.title}</p>}
                 </div>
 
                 {/* 2. Category & Status */}
-                <div className={`grid gap-4 ${role === UserRole.ADMIN ? 'grid-cols-1 sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-1 sm:grid-cols-[1fr_auto]'}`}>
+                <div className={`grid gap-x-2 gap-y-4 sm:gap-4 ${role === UserRole.ADMIN ? 'grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_1fr]' : 'grid-cols-[1fr_auto]'}`}>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                       Category <span className="text-red-500">*</span>
@@ -1235,7 +1083,7 @@ const EventModal: React.FC<EventModalProps> = ({
                       required
                       value={category}
                       onChange={(e) => setCategory(e.target.value as EventCategory | '')}
-                      className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
                     >
                       <option value="">Select...</option>
                       {availableCategories.map((cat) => (
@@ -1249,19 +1097,19 @@ const EventModal: React.FC<EventModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowAddCategoryModal(true)}
-                      className="p-2.5 sm:p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 border transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      className="p-2.5 sm:p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       title="Add new category"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
                   </div>
                   {role === UserRole.ADMIN && (
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
                       <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value as EventStatus)}
-                        className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
+                        className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all min-h-[44px] sm:min-h-0"
                       >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
@@ -1291,6 +1139,16 @@ const EventModal: React.FC<EventModalProps> = ({
                       setEndTimeStr(t);
                       clearFieldError('date');
                     }}
+                    sameTimeForAll={sameTimeForAll}
+                    onChangeSameTimeForAll={(same) => {
+                      setSameTimeForAll(same);
+                      clearFieldError('date');
+                    }}
+                    perDateTimes={perDateTimes}
+                    onChangePerDateTimes={(times) => {
+                      setPerDateTimes(times);
+                      clearFieldError('date');
+                    }}
                     error={fieldErrors.date}
                   />
                 </div>
@@ -1317,7 +1175,7 @@ const EventModal: React.FC<EventModalProps> = ({
                       type="text"
                       value={location}
                       onChange={(e) => { setLocation(e.target.value); clearFieldError('location'); }}
-                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                       placeholder="e.g. Heron House, Room 4 / Mahon Community Centre"
                     />
                   </div>
@@ -1334,7 +1192,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     value={description}
                     onChange={(e) => { setDescription(e.target.value); clearFieldError('description'); }}
                     rows={3}
-                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-y min-h-[80px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                    className={`block w-full rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all resize-y min-h-[80px] ${fieldErrors.description ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
                     placeholder="A few lines explaining what the event is about, who it's for, and key details for the Board & staff to pencil in."
                   />
                   {fieldErrors.description && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.description}</p>}
@@ -1444,7 +1302,7 @@ const EventModal: React.FC<EventModalProps> = ({
                           value={selectedDates.length > 1 ? 'custom' : recurrenceType}
                           onChange={(e) => setRecurrenceType(e.target.value as any)}
                           disabled={selectedDates.length > 1}
-                          className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="none">None</option>
                           <option value="daily">Daily</option>
@@ -1464,7 +1322,7 @@ const EventModal: React.FC<EventModalProps> = ({
                               min="1"
                               value={recurrenceInterval}
                               onChange={(e) => setRecurrenceInterval(Number(e.target.value))}
-                              className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
+                              className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
                             />
                           </div>
                           <div>
@@ -1473,7 +1331,7 @@ const EventModal: React.FC<EventModalProps> = ({
                               type="date"
                               value={recurrenceEndDate}
                               onChange={(e) => setRecurrenceEndDate(e.target.value)}
-                              className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
+                              className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0"
                             />
                           </div>
                         </>
@@ -1590,7 +1448,7 @@ const EventModal: React.FC<EventModalProps> = ({
                           handleAddCategory();
                         }
                       }}
-                      className="block w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium placeholder-slate-400"
+                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium placeholder-slate-400"
                       placeholder="Enter category name"
                       autoFocus
                     />
@@ -1625,13 +1483,39 @@ const EventModal: React.FC<EventModalProps> = ({
           <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
             {showForm ? (
               <>
-                <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-slate-900 text-white font-medium hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
+                <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
                   {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? (autoApproveOnSave ? 'Save & Approve' : 'Save Changes') : 'Create Event')}
                 </button>
                 <button type="button" onClick={handleCancelForm} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                   Cancel
                 </button>
               </>
+            ) : role === UserRole.ADMIN && event ? (
+              <div className="flex w-full items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteClick}
+                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-3 sm:px-4 py-3 sm:py-2 min-h-[48px] sm:min-h-0 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-all text-sm"
+                  title="Delete event"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </button>
+                <span className="flex-1" />
+                <button type="button" onClick={onClose} className="hidden sm:inline-flex justify-center items-center rounded-lg px-5 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm">
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all text-sm flex-1 sm:flex-none"
+                  title="Edit event (E)"
+                  aria-keyshortcuts="e"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit event
+                </button>
+              </div>
             ) : (
               <button type="button" onClick={onClose} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
                 Close
@@ -1645,40 +1529,4 @@ const EventModal: React.FC<EventModalProps> = ({
   );
 };
 
-// Memoize component to prevent unnecessary re-renders
-export default React.memo(EventModal, (prevProps, nextProps) => {
-  // Only re-render if critical props changed
-  if (prevProps.isOpen !== nextProps.isOpen) return false;
-  if (prevProps.role !== nextProps.role) return false;
-  if (prevProps.currentUserId !== nextProps.currentUserId) return false;
-  if (prevProps.currentUserName !== nextProps.currentUserName) return false;
-  if (prevProps.initialMode !== nextProps.initialMode) return false;
-  if (prevProps.autoApproveOnSave !== nextProps.autoApproveOnSave) return false;
-  if (prevProps.draft !== nextProps.draft) return false;
-  // Needed for up-to-date conflict warnings and series lookups
-  if (prevProps.events !== nextProps.events) return false;
-
-  // Compare event objects
-  if (prevProps.event?.id !== nextProps.event?.id) return false;
-  if (prevProps.event?.title !== nextProps.event?.title) return false;
-  if (prevProps.event?.category !== nextProps.event?.category) return false;
-  if (prevProps.event?.location !== nextProps.event?.location) return false;
-  if (prevProps.event?.date?.getTime() !== nextProps.event?.date?.getTime()) return false;
-  if (prevProps.event?.endDate?.getTime() !== nextProps.event?.endDate?.getTime()) return false;
-  if (prevProps.event?.submitterName !== nextProps.event?.submitterName) return false;
-  if (prevProps.event?.submitterEmail !== nextProps.event?.submitterEmail) return false;
-  if (prevProps.event?.status !== nextProps.event?.status) return false;
-  if (prevProps.event?.recurrence?.type !== nextProps.event?.recurrence?.type) return false;
-  if (prevProps.initialDate?.getTime() !== nextProps.initialDate?.getTime()) return false;
-
-  // Compare callbacks
-  if (prevProps.onClose !== nextProps.onClose) return false;
-  if (prevProps.onSave !== nextProps.onSave) return false;
-  if (prevProps.onUpdate !== nextProps.onUpdate) return false;
-  if (prevProps.onEventUpdate !== nextProps.onEventUpdate) return false;
-  if (prevProps.onDelete !== nextProps.onDelete) return false;
-  if (prevProps.onDeleteInstance !== nextProps.onDeleteInstance) return false;
-
-  return true; // Props are equal, skip re-render
-});
-
+export default React.memo(EventModal);

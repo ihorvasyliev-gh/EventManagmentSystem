@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
+
+// Error toasts carry a contact line, so they stay up long enough to read it
+const MIN_ERROR_DURATION = 10000;
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -32,6 +36,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
     const id = Math.random().toString(36).substr(2, 9);
+    if (type === 'error' && duration > 0) duration = Math.max(duration, MIN_ERROR_DURATION);
     const toast: Toast = { id, message, type, duration };
     
     setToasts(prev => [...prev, toast]);
@@ -113,8 +118,16 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
           <div className="flex-shrink-0 mt-0.5">
             {getIcon(toast.type)}
           </div>
-          <div className="flex-1 text-sm font-medium">
+          <div className="flex-1 min-w-0 text-sm font-medium">
             {toast.message}
+            {toast.type === 'error' && (
+              <p className="mt-1 text-xs font-normal opacity-90">
+                If this keeps happening, contact{' '}
+                <a href={buildSupportMailto(toast.message)} className="font-semibold underline underline-offset-2 break-all">
+                  {CONTACT_EMAIL}
+                </a>
+              </p>
+            )}
           </div>
           <button
             onClick={() => onRemove(toast.id)}

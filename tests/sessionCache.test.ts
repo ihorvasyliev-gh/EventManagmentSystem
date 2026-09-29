@@ -1,11 +1,10 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { setRememberMe, REMEMBER_ME_KEY } from '../utils/authStorage.ts';
+import { setRememberMe } from '../utils/authStorage.ts';
 import {
   cacheUser,
   getCachedUser,
   clearUserCache,
-  hasValidSession,
   USER_CACHE_KEY
 } from '../utils/sessionCache.ts';
 import type { User } from '../types.ts';
@@ -76,7 +75,6 @@ test('when rememberMe is false and sessionStorage is cleared (simulating browser
 
   const restored = getCachedUser();
   assert.equal(restored, null);
-  assert.equal(hasValidSession(), false);
 });
 
 test('when rememberMe is true, cacheUser stores user in localStorage', () => {
@@ -87,7 +85,6 @@ test('when rememberMe is true, cacheUser stores user in localStorage', () => {
 
   const restored = getCachedUser();
   assert.deepEqual(restored, testUser);
-  assert.equal(hasValidSession(), true);
 });
 
 test('clearUserCache clears user from both storages', () => {

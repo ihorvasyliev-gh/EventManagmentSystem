@@ -18,11 +18,13 @@ export const isAnyModalOpen = (): boolean => modalStack.length > 0;
 /**
  * Traps focus inside the modal and closes on Escape.
  * Call with the ref of the modal content container (the inner panel, not the overlay).
+ * With `focusContainer`, focus starts on the container itself (it needs tabIndex={-1}).
  */
 export function useModalFocusTrap(
   isOpen: boolean,
   onClose: () => void,
-  containerRef: RefObject<HTMLElement | null>
+  containerRef: RefObject<HTMLElement | null>,
+  focusContainer = false
 ): void {
   // Keep the latest onClose without re-running the effect: callers often pass inline
   // arrows, and re-running would steal focus back to the first element on every render.
@@ -38,7 +40,8 @@ export function useModalFocusTrap(
     const previousActiveElement = document.activeElement as HTMLElement | null;
 
     if (!container.contains(document.activeElement)) {
-      getFocusableElements(container)[0]?.focus();
+      if (focusContainer) container.focus();
+      else getFocusableElements(container)[0]?.focus();
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,5 +87,5 @@ export function useModalFocusTrap(
         previousActiveElement.focus?.();
       }
     };
-  }, [isOpen, containerRef]);
+  }, [isOpen, containerRef, focusContainer]);
 }

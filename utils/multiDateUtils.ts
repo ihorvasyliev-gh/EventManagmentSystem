@@ -1,4 +1,6 @@
 import { formatLocalDate } from './date.ts';
+import { hasPerDateTimes } from './recurrence.ts';
+import type { Event, RecurrenceRule } from '../types.ts';
 
 export const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 
@@ -205,4 +207,189 @@ export const calculatePreservedEndTime = (
     return currentEndTime;
   }
   return minutesToTimeString(newStartMins + prevDuration);
+};
+
+// ─── Per-date times ──────────────────────────────────────────────────────
+// A multi-date event can run at the same time every day (the default) or have
+// its own start/end on each picked date.
+
+export interface TimeRange {
+  start: string; // "HH:mm"
+  end: string;   // "HH:mm" or '' when there is no end time
+}
+
+/** Own times per picked day, keyed by YYYY-MM-DD. Days without an entry use the shared times. */
+export type PerDateTimes = Record<string, TimeRange>;
+
+export interface Occurrence {
+  start: Date;
+  end?: Date;
+}
+
+/** "HH:mm" of a Date in local time */
+export const toTimeString = (d: Date): string =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+/** Times for one day: its own entry when set, otherwise the shared times */
+export const getTimesForDate = (
+  perDate: PerDateTimes | null | undefined,
+  date: Date,
+  shared: TimeRange
+): TimeRange => perDate?.[formatLocalDate(date)] ?? shared;
+
+const atTime = (day: Date, time: string): Date | undefined => {
+  const mins = parseTimeToMinutes(time);
+  if (mins === null) return undefined;
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(mins / 60), mins % 60, 0, 0);
+};
+
+/**
+ * Each picked date (sorted) at its start/end time. With `perDate` null every day uses the
+ * shared times. Days whose start time is invalid are skipped (validate first).
+ */
+export const buildOccurrences = (
+  dates: Date[],
+  shared: TimeRange,
+  perDate: PerDateTimes | null
+): Occurrence[] =>
+  [...dates]
+    .sort((a, b) => a.getTime() - b.getTime())
+    .flatMap((day) => {
+      const times = getTimesForDate(perDate, day, shared);
+      const start = atTime(day, times.start);
+      if (!start) return [];
+      const end = times.end ? atTime(day, times.end) : undefined;
+      return [{ start, end }];
+    });
+
+/**
+ * Checks the times of every picked day. Returns a message naming the first bad day
+ * (per-date mode) or null when everything is fine.
+ */
+export const validateOccurrenceTimes = (
+  dates: Date[],
+  shared: TimeRange,
+  perDate: PerDateTimes | null
+): string | null => {
+  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  for (const day of sorted) {
+    const times = getTimesForDate(perDate, day, shared);
+    const where = perDate ? ` for ${formatDateChipLabel(day)}` : '';
+    const startMins = parseTimeToMinutes(times.start);
+    if (startMins === null) return `Please choose a start time${where}.`;
+    if (times.end) {
+      const endMins = parseTimeToMinutes(times.end);
+      if (endMins === null) return `Please choose a valid end time${where}.`;
+      if (endMins < startMins) return `The end time is before the start time${where}.`;
+    }
+  }
+  return null;
+};
+
+/**
+ * Turns picked occurrences into what an Event stores: the first occurrence as `date`/`endDate`
+ * and, for more than one date, a custom series. With `perDateTimes` each date keeps its own
+ * times (`customEndDates`); otherwise the series time applies to every date.
+ */
+export const buildSchedule = (
+  occurrences: Occurrence[],
+  perDateTimes: boolean
+): { date: Date; endDate?: Date; recurrence?: RecurrenceRule } => {
+  const [first] = occurrences;
+  if (!first) throw new Error('At least one date is required');
+  if (occurrences.length === 1) return { date: first.start, endDate: first.end };
+  return {
+    date: first.start,
+    endDate: first.end,
+    recurrence: {
+      type: 'custom',
+      customDates: occurrences.map((o) => o.start),
+      // A day without an end time stores its start, which reads back as "no end time"
+      customEndDates: perDateTimes ? occurrences.map((o) => o.end ?? o.start) : undefined,
+    },
+  };
+};
+
+/**
+ * Reads a stored event back into the picker's state: picked days, shared times and, for a
+ * series with per-date times that actually differ, each day's own times.
+ */
+export const readScheduleFromEvent = (
+  source: Pick<Event, 'date' | 'endDate' | 'recurrence'>,
+  defaultDurationMinutes = 90
+): { dates: Date[]; shared: TimeRange; sameTime: boolean; perDate: PerDateTimes } => {
+  const start = new Date(source.date);
+  const shared: TimeRange = {
+    start: toTimeString(start),
+    end: source.endDate
+      ? toTimeString(new Date(source.endDate))
+      : addMinutesToTime(toTimeString(start), defaultDurationMinutes),
+  };
+  const rule = source.recurrence;
+
+  if (rule?.type === 'custom' && rule.customDates && rule.customDates.length > 0) {
+    const dates = rule.customDates.map((d) => new Date(d));
+    if (!hasPerDateTimes(rule)) return { dates, shared, sameTime: true, perDate: {} };
+
+    const perDate: PerDateTimes = {};
+    dates.forEach((d, i) => {
+      const end = new Date(rule.customEndDates![i]);
+      perDate[formatLocalDate(d)] = {
+        start: toTimeString(d),
+        end: end.getTime() > d.getTime() ? toTimeString(end) : '',
+      };
+    });
+    const ranges = Object.values(perDate);
+    const sameTime = ranges.every((r) => r.start === ranges[0].start && r.end === ranges[0].end);
+    return {
+      dates,
+      shared: sameTime ? ranges[0] : shared,
+      sameTime,
+      perDate: sameTime ? {} : perDate,
+    };
+  }
+
+  return { dates: [start], shared, sameTime: true, perDate: {} };
+};
+
+/** "10:00 – 11:30", or just the start when there is no end time */
+export const formatTimeRange = (r: TimeRange): string => (r.end ? `${r.start} – ${r.end}` : r.start);
+
+/**
+ * The dates a custom-dates series really runs on: every picked date with its own times, minus
+ * days in `exceptions` (older "delete this occurrence" records) and minus `removeDay`.
+ * Returns the resulting schedule, or null when no date is left. Other event types are
+ * returned unchanged.
+ */
+export const materializeCustomSchedule = (
+  event: Pick<Event, 'id' | 'date' | 'endDate' | 'recurrence'>,
+  exceptions: Date[] = [],
+  removeDay?: Date
+): { date: Date; endDate?: Date; recurrence?: RecurrenceRule } | null => {
+  const rule = event.recurrence;
+  if (rule?.type !== 'custom' || !rule.customDates?.length) {
+    return { date: event.date, endDate: event.endDate, recurrence: rule };
+  }
+  const skip = new Set([...exceptions, ...(removeDay ? [removeDay] : [])].map((d) => formatLocalDate(new Date(d))));
+  const perDate = hasPerDateTimes(rule);
+  const baseStart = new Date(event.date);
+  const baseEnd = event.endDate ? new Date(event.endDate) : undefined;
+  const durationMs = baseEnd ? baseEnd.getTime() - baseStart.getTime() : undefined;
+
+  const occurrences: Occurrence[] = rule.customDates
+    .map((raw, i) => {
+      const start = new Date(raw);
+      if (perDate) {
+        const end = new Date(rule.customEndDates![i]);
+        return { start, end: end.getTime() > start.getTime() ? end : undefined };
+      }
+      // Older series: every date runs at the series time
+      start.setHours(baseStart.getHours(), baseStart.getMinutes(), 0, 0);
+      return { start, end: durationMs !== undefined && durationMs >= 0 ? new Date(start.getTime() + durationMs) : undefined };
+    })
+    .filter((o) => !isNaN(o.start.getTime()) && !skip.has(formatLocalDate(o.start)))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  if (occurrences.length === 0) return null;
+  return buildSchedule(occurrences, perDate);
 };

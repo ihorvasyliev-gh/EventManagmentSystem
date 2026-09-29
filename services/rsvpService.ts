@@ -52,48 +52,6 @@ export const cancelRsvp = async (
   }
 };
 
-/** Get attendee user IDs for a specific occurrence. */
-export const getEventAttendees = async (
-  eventId: string,
-  occurrenceDate: Date
-): Promise<string[]> => {
-  const { data, error } = await supabase
-    .from('rsvps')
-    .select('user_id')
-    .eq('event_id', eventId)
-    .eq('occurrence_date', toISODate(occurrenceDate))
-    .eq('status', 'going');
-
-  if (error) {
-    console.error('Error fetching attendees:', error);
-    return [];
-  }
-
-  return (data || []).map((r: { user_id: string }) => r.user_id);
-};
-
-export const getEventAttendeesWithNames = async (
-  eventId: string,
-  occurrenceDate: Date
-): Promise<{ userId: string; userName: string }[]> => {
-  const { data, error } = await supabase
-    .from('rsvps')
-    .select('user_id, user_name')
-    .eq('event_id', eventId)
-    .eq('occurrence_date', toISODate(occurrenceDate))
-    .eq('status', 'going');
-
-  if (error) {
-    console.error('Error fetching attendees with names:', error);
-    return [];
-  }
-
-  return (data || []).map((r: { user_id: string; user_name: string }) => ({
-    userId: r.user_id,
-    userName: r.user_name
-  }));
-};
-
 export const hasUserRsvped = async (
   eventId: string,
   userId: string,
@@ -116,24 +74,3 @@ export const hasUserRsvped = async (
   return !!data;
 };
 
-/**
- * Returns instance keys for occurrences the user has RSVP'd to.
- * Instance key format: `${event_id}_${occurrence_date.getTime()}` (matches recurrence.ts).
- */
-export const getUserRsvps = async (userId: string): Promise<string[]> => {
-  const { data, error } = await supabase
-    .from('rsvps')
-    .select('event_id, occurrence_date')
-    .eq('user_id', userId)
-    .eq('status', 'going');
-
-  if (error) {
-    console.error('Error fetching user RSVPs:', error);
-    return [];
-  }
-
-  return (data || []).map(
-    (r: { event_id: string; occurrence_date: string }) =>
-      `${r.event_id}_${new Date(r.occurrence_date).getTime()}`
-  );
-};

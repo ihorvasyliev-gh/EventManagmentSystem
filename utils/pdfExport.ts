@@ -7,7 +7,6 @@ import { getCategoryRgb, Rgb } from '../constants/categoryColors';
 import {
   groupDigestOccurrences,
   formatAlsoOnDates,
-  formatOccurrenceLabel,
   DigestEventGroup,
   monthShort,
   monthShortUpper
@@ -912,44 +911,29 @@ export const generateEventsDigestPDF = async (
     const descLines = fitLines(desc, mainW, 16);
     const DESC_LH = 3.85;
 
-    // "Also on": chips when every date is at the same venue, otherwise a small
-    // date | venue table with each venue linking to Google Maps
+    // "Also on": one row per other date with its time, venue (links to Google Maps)
+    // and small screen-only buttons adding that date to Google / Outlook
     const firstPlace = ev.location?.trim() ?? '';
     const otherDates = group.occurrences.slice(1).map((o) => {
-      const place = o.location?.trim() ?? '';
+      const s = toDate(o.date) || start;
+      const e = toDate(o.endDate);
+      const place = o.location?.trim() || firstPlace;
       return {
-        label: txt(formatOccurrenceLabel(o.date, ev.date)),
-        place: place && place !== firstPlace ? place : ''
+        date: `${WEEKDAYS_LONG[s.getDay()].slice(0, 3)} ${s.getDate()} ${monthShort(s)}`,
+        time: isAllDay(s, e) ? 'All day' : e && !isMultiDayEvent(s, e) ? `${clock(s)} – ${clock(e)}` : clock(s),
+        place,
+        calendarEvent: { ...ev, date: o.date, endDate: o.endDate, location: place }
       };
-    }).filter((o) => o.label);
-    const alsoOnTable = otherDates.some((o) => o.place);
-    const alsoOn = alsoOnTable ? [] : otherDates.map((o) => o.label);
+    });
     const ALSO_LABEL_H = 3.4;
-    const ALSO_ROW_H = 4.6;
+    const ALSO_ROW_H = 4.8;
     const ALSO_PAD = 1.8;
+    const ICON = 3.4;
     font('semibold', 7);
-    const alsoDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.label))) + 4;
-    const alsoH = alsoOnTable ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1 : 0;
-    const CHIP_H = 4.6;
-    const chipRows: Array<Array<{ label: string; w: number }>> = [];
-    if (alsoOn.length) {
-      font('semibold', 6.3);
-      const labelW = doc.getTextWidth('ALSO ON') + 0.3 * 6 + 2.5;
-      font('medium', 6.8);
-      let row: Array<{ label: string; w: number }> = [];
-      let rowW = labelW;
-      alsoOn.forEach((label) => {
-        const w = doc.getTextWidth(label) + 4.4;
-        if (rowW + w > mainW && row.length) {
-          chipRows.push(row);
-          row = [];
-          rowW = labelW;
-        }
-        row.push({ label, w });
-        rowW += w + 1.5;
-      });
-      if (row.length) chipRows.push(row);
-    }
+    const alsoDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3.5;
+    font('medium', 7);
+    const alsoTimeW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.time))) + 3.5;
+    const alsoH = otherDates.length ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1 : 0;
 
     const contact = ev.submitterName
       ? txt(`${ev.submitterName}${ev.submitterEmail ? ` · ${ev.submitterEmail}` : ''}`)
@@ -961,8 +945,7 @@ export const generateEventsDigestPDF = async (
     if (venueLines.length) contentH += 2.2 + venueLines.length * VENUE_LH;
     if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
     if (contact) contentH += 2.4 + 3.3;
-    if (chipRows.length) contentH += 3 + chipRows.length * (CHIP_H + 1.4) - 1.4;
-    if (alsoOnTable) contentH += 3 + alsoH;
+    if (otherDates.length) contentH += 3 + alsoH;
 
     let flyerW = 0;
     let flyerH = 0;
@@ -1098,56 +1081,58 @@ export const generateEventsDigestPDF = async (
         }
 
         // Also on
-        if (chipRows.length) {
-          cy += 3;
-          chipRows.forEach((row, ri) => {
-            const rowY = cy + ri * (CHIP_H + 1.4);
-            let x = mainX;
-            if (ri === 0) {
-              font('bold', 6.3);
-              color(RED);
-              x += spaced('ALSO ON', mainX, rowY + 3.2, 0.3) + 2.5;
-            } else {
-              font('bold', 6.3);
-              x += doc.getTextWidth('ALSO ON') + 0.3 * 6 + 2.5;
-            }
-            font('medium', 6.8);
-            row.forEach((chip) => {
-              pill(x, rowY, chip.w, CHIP_H, BG, BORDER);
-              color(INK);
-              doc.text(chip.label, x + 2.2, rowY + 3.15);
-              x += chip.w + 1.5;
-            });
-          });
-        }
-        if (alsoOnTable) {
+        if (otherDates.length) {
           const top = cy + 3;
           const boxW = mainRight - mainX;
+          const left = mainX + 2.5;
+          const right = mainX + boxW - 2.5;
           fill(BG);
           stroke(BORDER, 0.2);
           doc.roundedRect(mainX, top, boxW, alsoH, 1.6, 1.6, 'FD');
           font('bold', 6.3);
           color(RED);
-          spaced('ALSO ON', mainX + 2.5, top + ALSO_PAD + 2.3, 0.3);
-          const placeX = mainX + 2.5 + alsoDateW;
-          const placeW = mainX + boxW - 2.5 - placeX - 3.6;
+          spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
+          const timeX = left + alsoDateW;
+          const placeX = timeX + alsoTimeW;
+          const iconsW = ICON * 2 + 1.2;
+          const placeW = right - iconsW - 2.5 - placeX - 3.6;
           otherDates.forEach((o, i) => {
-            const rowY = top + ALSO_PAD + ALSO_LABEL_H + i * ALSO_ROW_H + 3.1;
+            const rowY = top + ALSO_PAD + ALSO_LABEL_H + i * ALSO_ROW_H + 3.2;
             if (i > 0) {
               stroke(BORDER, 0.15);
-              doc.line(mainX + 2.5, rowY - 3.4, mainX + boxW - 2.5, rowY - 3.4);
+              doc.line(left, rowY - 3.5, right, rowY - 3.5);
             }
             font('semibold', 7);
             color(INK);
-            doc.text(o.label, mainX + 2.5, rowY);
-            const place = txt(o.place || firstPlace);
-            if (!place) return;
-            drawPin(placeX, rowY, LINK);
+            doc.text(o.date, left, rowY);
             font('medium', 7);
-            color(o.place ? LINK : MUTED);
-            const shown = truncate(place, placeW);
-            doc.text(shown, placeX + 3.6, rowY);
-            doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place || firstPlace) });
+            color(BODY);
+            doc.text(o.time, timeX, rowY);
+            const place = txt(o.place);
+            if (place) {
+              drawPin(placeX, rowY, LINK);
+              color(LINK);
+              const shown = truncate(place, placeW);
+              doc.text(shown, placeX + 3.6, rowY);
+              doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place) });
+            }
+            screenOnly(() => {
+              const icons: Array<{ letter: string; url: string; fg: Rgb; bg: Rgb }> = [
+                { letter: 'G', url: createGoogleCalendarUrl(o.calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG },
+                { letter: 'O', url: createOutlookWebUrl(o.calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG }
+              ];
+              font('bold', 6);
+              icons.forEach((ic, k) => {
+                const ix = right - iconsW + k * (ICON + 1.2);
+                const iy = rowY - 2.55;
+                fill(ic.bg);
+                stroke(BORDER, 0.2);
+                doc.roundedRect(ix, iy, ICON, ICON, 0.8, 0.8, 'FD');
+                color(ic.fg);
+                doc.text(ic.letter, ix + ICON / 2, iy + 2.4, { align: 'center' });
+                doc.link(ix, iy, ICON, ICON, { url: ic.url });
+              });
+            });
           });
         }
 

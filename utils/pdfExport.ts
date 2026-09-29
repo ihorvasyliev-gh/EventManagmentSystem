@@ -119,17 +119,17 @@ export interface LoadedPdfFlyer {
 }
 
 /**
- * Loads an image as a JPEG/PNG data URL for jsPDF, at most 1200px on its long side.
+ * Loads an image as a JPEG/PNG data URL for jsPDF, at most `maxSide` px on its long side.
  * createImageBitmap applies the EXIF orientation, so phone photos come out upright.
  */
-export const loadImageForPdf = async (url: string): Promise<LoadedPdfFlyer | null> => {
+export const loadImageForPdf = async (url: string, maxSide = 1200): Promise<LoadedPdfFlyer | null> => {
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) return null;
     const blob = await res.blob();
     const isPng = blob.type === 'image/png' || url.toLowerCase().includes('.png');
     const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
@@ -488,7 +488,8 @@ export const generateEventsDigestPDF = async (
       await Promise.all(groups.map(async ({ event: ev }) => {
         const url = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (!url) return;
-        const flyer = await loadImageForPdf(url);
+        // Thumbnails are at most 42 mm tall: 600 px keeps them sharp in print at a fraction of the size
+        const flyer = await loadImageForPdf(url, 600);
         if (flyer) map.set(ev.id, flyer);
       }));
       return map;
@@ -509,7 +510,8 @@ export const generateEventsDigestPDF = async (
     }
   }
   const venues = new Set(groups.flatMap((g) => g.occurrences.map((o) => o.location?.trim().toLowerCase())).filter(Boolean));
-  const eventDays = new Set(groups.flatMap((g) => g.occurrences.map((o) => dayKeyOf(toDate(o.date)!))));
+  // Every day of the period something is on, counting each day a multi-day event spans
+  const eventDays = new Set(Array.from(eventsByDay.keys()).filter((key) => key >= dayKeyOf(periodStart) && key <= dayKeyOf(periodEnd)));
   const categories = Array.from(new Set(groups.map((g) => g.event.category || 'Other')));
 
   const logoDraw = (x: number, y: number, h: number): number => {
@@ -671,10 +673,12 @@ export const generateEventsDigestPDF = async (
 
       if (dayEvents.length > 0) {
         // One dot per event (by category), then a count
-        const maxDots = 5;
+        // Large enough, with a dark rim, to tell the colours apart on paper
+        const maxDots = 4;
         dayEvents.slice(0, maxDots).forEach((ev, idx) => {
           fill(getCategoryRgb(ev.category).accent);
-          doc.circle(x + 3 + idx * 2.5, y + cellH - 3.1, 0.85, 'F');
+          stroke(INK, 0.15);
+          doc.circle(x + 3.3 + idx * 3.2, y + cellH - 3, 1.25, 'FD');
         });
         font('semibold', 6);
         color(MUTED);
@@ -704,7 +708,8 @@ export const generateEventsDigestPDF = async (
         y += 4.5;
       }
       fill(getCategoryRgb(cat).accent);
-      doc.circle(x + 1.2, y - 1.05, 1.05, 'F');
+      stroke(INK, 0.15);
+      doc.circle(x + 1.3, y - 1.05, 1.25, 'FD');
       color(BODY);
       doc.text(label, x + 3.2, y);
       x += w;
@@ -748,13 +753,16 @@ export const generateEventsDigestPDF = async (
   // --- Blocks ------------------------------------------------------------
   const showWeekBanners = dayCountInclusive(periodStart, periodEnd) > 7;
   const periodDayStart = startOfLocalDay(periodStart);
+  // Weeks run Monday to Sunday, like the rows of "At a glance" (the first and last are cut to the period)
   const weekIndexOf = (d: Date) =>
-    Math.floor((startOfLocalDay(d).getTime() - periodDayStart.getTime()) / (7 * 86400000));
+    Math.floor(Math.round((startOfLocalDay(d).getTime() - gridStart.getTime()) / 86400000) / 7);
 
   const weekBanner = (weekIndex: number, h: number): Block => {
-    const wStart = addDays(periodDayStart, weekIndex * 7);
-    const wEndRaw = addDays(wStart, 6);
-    const wEnd = wEndRaw > periodEnd ? startOfLocalDay(periodEnd) : wEndRaw;
+    const monday = addDays(gridStart, weekIndex * 7);
+    const wStart = monday < periodDayStart ? periodDayStart : monday;
+    const sunday = addDays(monday, 6);
+    const lastDay = startOfLocalDay(periodEnd);
+    const wEnd = sunday > lastDay ? lastDay : sunday;
     const range = wStart.getMonth() === wEnd.getMonth()
       ? `${wStart.getDate()} – ${wEnd.getDate()} ${MONTHS_LONG[wEnd.getMonth()]}`
       : `${wStart.getDate()} ${monthShort(wStart)} – ${wEnd.getDate()} ${monthShort(wEnd)}`;
@@ -876,6 +884,46 @@ export const generateEventsDigestPDF = async (
     };
   };
 
+  /** Other dates of a series, each with its own time and venue (for "Also on") */
+  const otherDatesOf = (group: DigestEventGroup) => {
+    const ev = group.event;
+    const firstPlace = ev.location?.trim() ?? '';
+    return group.occurrences.slice(1).map((o) => {
+      const s = toDate(o.date) || toDate(ev.date) || new Date();
+      const e = toDate(o.endDate);
+      const place = o.location?.trim() || firstPlace;
+      return {
+        date: `${WEEKDAYS_LONG[s.getDay()].slice(0, 3)} ${s.getDate()} ${monthShort(s)}`,
+        time: isAllDay(s, e) ? 'All day' : e && !isMultiDayEvent(s, e) ? `${clock(s)} – ${clock(e)}` : clock(s),
+        place,
+        calendarEvent: { ...ev, date: o.date, endDate: o.endDate, location: place }
+      };
+    });
+  };
+
+  /** Small screen-only O / G buttons ending at `right`, centred on the text baseline `rowY` */
+  const calendarIcons = (right: number, rowY: number, calendarEvent: Parameters<typeof createGoogleCalendarUrl>[0], size: number) => {
+    const gap = size * 0.35;
+    screenOnly(() => {
+      const icons: Array<{ letter: string; url: string; fg: Rgb; bg: Rgb }> = [
+        { letter: 'O', url: createOutlookWebUrl(calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
+        { letter: 'G', url: createGoogleCalendarUrl(calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
+      ];
+      font('bold', size * 1.76);
+      icons.forEach((ic, k) => {
+        const ix = right - size * 2 - gap + k * (size + gap);
+        const iy = rowY - size * 0.75;
+        fill(ic.bg);
+        stroke(BORDER, 0.2);
+        doc.roundedRect(ix, iy, size, size, size * 0.24, size * 0.24, 'FD');
+        color(ic.fg);
+        doc.text(ic.letter, ix + size / 2, iy + size * 0.7, { align: 'center' });
+        doc.link(ix, iy, size, size, { url: ic.url });
+      });
+    });
+    return size * 2 + gap;
+  };
+
   /** Measures and returns the executive card for one event group */
   const executiveCard = (group: DigestEventGroup, dayKey: string, density: Density): Block => {
     const ev = group.event;
@@ -913,18 +961,7 @@ export const generateEventsDigestPDF = async (
 
     // "Also on": one row per other date with its time, venue (links to Google Maps)
     // and small screen-only buttons adding that date to Google / Outlook
-    const firstPlace = ev.location?.trim() ?? '';
-    const otherDates = group.occurrences.slice(1).map((o) => {
-      const s = toDate(o.date) || start;
-      const e = toDate(o.endDate);
-      const place = o.location?.trim() || firstPlace;
-      return {
-        date: `${WEEKDAYS_LONG[s.getDay()].slice(0, 3)} ${s.getDate()} ${monthShort(s)}`,
-        time: isAllDay(s, e) ? 'All day' : e && !isMultiDayEvent(s, e) ? `${clock(s)} – ${clock(e)}` : clock(s),
-        place,
-        calendarEvent: { ...ev, date: o.date, endDate: o.endDate, location: place }
-      };
-    });
+    const otherDates = otherDatesOf(group);
     const ALSO_LABEL_H = 3.4;
     const ALSO_ROW_H = 4.8;
     const ALSO_PAD = 1.8;
@@ -1094,7 +1131,7 @@ export const generateEventsDigestPDF = async (
           spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
           const timeX = left + alsoDateW;
           const placeX = timeX + alsoTimeW;
-          const iconsW = ICON * 2 + 1.2;
+          const iconsW = ICON * 2 + ICON * 0.35;
           const placeW = right - iconsW - 2.5 - placeX - 3.6;
           otherDates.forEach((o, i) => {
             const rowY = top + ALSO_PAD + ALSO_LABEL_H + i * ALSO_ROW_H + 3.2;
@@ -1116,23 +1153,7 @@ export const generateEventsDigestPDF = async (
               doc.text(shown, placeX + 3.6, rowY);
               doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place) });
             }
-            screenOnly(() => {
-              const icons: Array<{ letter: string; url: string; fg: Rgb; bg: Rgb }> = [
-                { letter: 'O', url: createOutlookWebUrl(o.calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
-                { letter: 'G', url: createGoogleCalendarUrl(o.calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
-              ];
-              font('bold', 6);
-              icons.forEach((ic, k) => {
-                const ix = right - iconsW + k * (ICON + 1.2);
-                const iy = rowY - 2.55;
-                fill(ic.bg);
-                stroke(BORDER, 0.2);
-                doc.roundedRect(ix, iy, ICON, ICON, 0.8, 0.8, 'FD');
-                color(ic.fg);
-                doc.text(ic.letter, ix + ICON / 2, iy + 2.4, { align: 'center' });
-                doc.link(ix, iy, ICON, ICON, { url: ic.url });
-              });
-            });
+            calendarIcons(right, rowY, o.calendarEvent, ICON);
           });
         }
 
@@ -1193,18 +1214,25 @@ export const generateEventsDigestPDF = async (
     const titleLines = fitLines(txt(ev.title) || 'Untitled event', eventW, 2);
     font('regular', 7);
     const descLine = truncate(txt(ev.description || ''), eventW);
-    font('semibold', 6.6);
-    const alsoOn = txt(formatAlsoOnDates(group, ', '));
-    const alsoLines: string[] = alsoOn ? doc.splitTextToSize(`Also on ${alsoOn}`, eventW) : [];
     font('regular', 7.3);
     const venueLines = fitLines(txt(ev.location), venueW, 3);
+
+    // "Also on" table under the row, across the event and venue columns
+    const otherDates = otherDatesOf(group);
+    const A_ROW = 3.9;
+    const A_ICON = 2.9;
+    font('semibold', 6.6);
+    const aDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3;
+    font('regular', 6.6);
+    const aTimeW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.time))) + 3;
+    const alsoH = otherDates.length ? 1.5 + 3 + otherDates.length * A_ROW : 0;
 
     const TL = 3.7;
     let contentH = titleLines.length * TL;
     if (descLine) contentH += 3.3;
-    contentH += alsoLines.length * 3.1;
     contentH += 3.5;
-    const h = Math.max(11.5, 3.2 + contentH + 2.4, 3.2 + venueLines.length * 3.3 + 2.4);
+    const mainH = Math.max(3.2 + contentH, 3.2 + venueLines.length * 3.3);
+    const h = Math.max(11.5, mainH + alsoH + 2.4);
 
     return {
       h,
@@ -1235,13 +1263,6 @@ export const generateEventsDigestPDF = async (
           color(MUTED);
           doc.text(descLine, COL.event, ly);
         }
-        if (alsoLines.length) {
-          ly += 3.2;
-          font('semibold', 6.6);
-          color(RED);
-          doc.text(alsoLines, COL.event, ly, { lineHeightFactor: 1.3 });
-          ly += (alsoLines.length - 1) * 3.1;
-        }
         ly += 3.5;
         screenOnly(() => {
           font('semibold', 6.4);
@@ -1262,6 +1283,37 @@ export const generateEventsDigestPDF = async (
           color(LINK);
           doc.text(venueLines, COL.venue, y + 5.6, { lineHeightFactor: 1.3 });
           doc.link(COL.venue, y + 2.6, venueW, venueLines.length * 3.3 + 1, { url: createGoogleMapsUrl(ev.location) });
+        }
+
+        // Also on
+        if (otherDates.length) {
+          const left = COL.event;
+          const right = COL.category - 3;
+          let ay = y + mainH + 1.5 + 2.4;
+          font('bold', 5.8);
+          color(RED);
+          spaced('ALSO ON', left, ay, 0.3);
+          const timeX = left + aDateW;
+          const placeX = timeX + aTimeW;
+          const placeW = right - (A_ICON * 2.35 + 2) - placeX - 3.4;
+          otherDates.forEach((o) => {
+            ay += A_ROW;
+            font('semibold', 6.6);
+            color(INK);
+            doc.text(o.date, left, ay);
+            font('regular', 6.6);
+            color(BODY);
+            doc.text(o.time, timeX, ay);
+            const place = txt(o.place);
+            if (place) {
+              drawPin(placeX, ay, LINK);
+              color(LINK);
+              const shown = truncate(place, placeW);
+              doc.text(shown, placeX + 3.4, ay);
+              doc.link(placeX, ay - 2.7, doc.getTextWidth(shown) + 3.4, 3.5, { url: createGoogleMapsUrl(o.place) });
+            }
+            calendarIcons(right, ay, o.calendarEvent, A_ICON);
+          });
         }
 
         // Category pill

@@ -124,7 +124,7 @@ const readDraftSlots = (value: unknown): TimeSlot[] => {
   return list.filter(isSlot).map((s, i) => makeSlot(s.start, s.end, typeof (s as TimeSlot).id === 'string' ? (s as TimeSlot).id : `t${i + 1}`));
 };
 
-const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date): ScheduleState => {
+const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date | null): ScheduleState => {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   // Dates that have passed since the draft was saved are dropped
@@ -140,7 +140,7 @@ const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date): Schedul
     });
   }
   return {
-    dates: future.length ? future : [defaultDate],
+    dates: future.length ? future : defaultDate ? [defaultDate] : [],
     shared: shared.length ? shared : [makeSlot(draft?.startTime || '10:00', draft?.endTime ?? '11:30', 't1')],
     sameTime: draft?.sameTime ?? true,
     perDate,
@@ -153,14 +153,10 @@ const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date): Schedul
 const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
+  // No date is picked up front, except the day an admin opened the form from
   const defaultDate = useMemo(() => {
-    if (initialDate && !isNaN(initialDate.getTime())) {
-      const d = new Date(initialDate);
-      d.setHours(10, 0, 0, 0);
-      return d;
-    }
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
+    if (!initialDate || isNaN(initialDate.getTime())) return null;
+    const d = new Date(initialDate);
     d.setHours(10, 0, 0, 0);
     return d;
   }, [initialDate]);

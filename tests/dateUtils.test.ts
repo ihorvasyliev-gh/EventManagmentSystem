@@ -77,3 +77,22 @@ test('calculatePresetDateRange for all with no future events defaults to +1 year
   assert.equal(result.startDateStr, '2026-09-17');
   assert.equal(result.endDateStr, '2027-09-17');
 });
+
+test('calculatePresetDateRange "all" reaches the last date of a multi-date series', () => {
+  const ref = new Date(2026, 8, 29);
+  const events = [
+    { date: new Date(2026, 9, 1, 9), recurrence: { type: 'custom', customDates: [new Date(2026, 9, 1, 9), new Date(2026, 9, 2, 9)] } },
+    { date: new Date(2026, 8, 30, 10) },
+  ];
+  assert.equal(calculatePresetDateRange('all', { referenceDate: ref, events }).endDateStr, '2026-10-02');
+});
+
+test('calculatePresetDateRange "all" uses the end date of a repeat and of a multi-day event', () => {
+  const ref = new Date(2026, 8, 29);
+  assert.equal(calculatePresetDateRange('all', { referenceDate: ref, events: [
+    { date: new Date(2026, 9, 1), recurrence: { type: 'weekly', endDate: new Date(2026, 10, 12) } },
+  ] }).endDateStr, '2026-11-12');
+  assert.equal(calculatePresetDateRange('all', { referenceDate: ref, events: [
+    { date: new Date(2026, 9, 1), endDate: new Date(2026, 9, 5) },
+  ] }).endDateStr, '2026-10-05');
+});

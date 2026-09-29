@@ -6,6 +6,7 @@ import {
   validateOccurrenceTimes,
   readScheduleFromEvent,
   formatTimeRange,
+  materializeCustomSchedule,
 } from '../utils/multiDateUtils.ts';
 import { expandRecurringEvents, hasPerDateTimes } from '../utils/recurrence.ts';
 import { detectMultiDateConflicts } from '../utils/conflictDetection.ts';
@@ -135,4 +136,52 @@ test('conflicts are checked at each date\'s own time', () => {
 test('formatTimeRange', () => {
   assert.equal(formatTimeRange({ start: '10:00', end: '11:30' }), '10:00 – 11:30');
   assert.equal(formatTimeRange({ start: '10:00', end: '' }), '10:00');
+});
+
+test('removing a date from a per-date series keeps the other dates and times', () => {
+  const series = makeEvent({
+    date: new Date(2026, 8, 30, 12, 30),
+    endDate: new Date(2026, 8, 30, 14, 0),
+    recurrence: {
+      type: 'custom',
+      customDates: [new Date(2026, 8, 30, 12, 30), new Date(2026, 9, 1, 8, 0), new Date(2026, 9, 2, 16, 30), new Date(2026, 9, 3, 23, 30)],
+      customEndDates: [new Date(2026, 8, 30, 14, 0), new Date(2026, 9, 1, 9, 30), new Date(2026, 9, 2, 18, 0), new Date(2026, 9, 3, 23, 59)],
+    },
+  });
+  // Oct 2 was deleted earlier (exception); now delete Sep 30 (the first date)
+  const result = materializeCustomSchedule(series, [new Date(2026, 9, 2)], new Date(2026, 8, 30, 12, 30))!;
+  assert.deepEqual(result.recurrence?.customDates?.map(d => [d.getDate(), d.getHours()]), [[1, 8], [3, 23]]);
+  assert.deepEqual(result.recurrence?.customEndDates?.map(d => [d.getHours(), d.getMinutes()]), [[9, 30], [23, 59]]);
+  // The event now starts on its new first date
+  assert.equal(result.date.getDate(), 1);
+  assert.equal(result.endDate?.getHours(), 9);
+});
+
+test('removing a date from an older series keeps the series time', () => {
+  const series = makeEvent({
+    date: new Date(2026, 9, 1, 10, 0),
+    endDate: new Date(2026, 9, 1, 11, 30),
+    recurrence: { type: 'custom', customDates: [new Date(2026, 9, 1), new Date(2026, 9, 2), new Date(2026, 9, 3)] },
+  });
+  const result = materializeCustomSchedule(series, [], new Date(2026, 9, 1))!;
+  assert.deepEqual(result.recurrence?.customDates?.map(d => [d.getDate(), d.getHours()]), [[2, 10], [3, 10]]);
+  assert.equal(result.recurrence?.customEndDates, undefined);
+  assert.equal(result.date.getDate(), 2);
+  assert.equal(result.endDate?.getMinutes(), 30);
+});
+
+test('one date left becomes a plain event; none left returns null', () => {
+  const series = makeEvent({
+    date: new Date(2026, 9, 1, 10, 0),
+    recurrence: { type: 'custom', customDates: [new Date(2026, 9, 1), new Date(2026, 9, 2)] },
+  });
+  const one = materializeCustomSchedule(series, [], new Date(2026, 9, 1))!;
+  assert.equal(one.recurrence, undefined);
+  assert.equal(one.date.getDate(), 2);
+  assert.equal(materializeCustomSchedule(series, [new Date(2026, 9, 2)], new Date(2026, 9, 1)), null);
+});
+
+test('non-custom events pass through unchanged', () => {
+  const weekly = makeEvent({ recurrence: { type: 'weekly', interval: 1 } });
+  assert.equal(materializeCustomSchedule(weekly, [new Date(2026, 9, 8)])?.recurrence?.type, 'weekly');
 });

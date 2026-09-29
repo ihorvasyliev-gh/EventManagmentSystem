@@ -354,3 +354,42 @@ export const readScheduleFromEvent = (
 
 /** "10:00 – 11:30", or just the start when there is no end time */
 export const formatTimeRange = (r: TimeRange): string => (r.end ? `${r.start} – ${r.end}` : r.start);
+
+/**
+ * The dates a custom-dates series really runs on: every picked date with its own times, minus
+ * days in `exceptions` (older "delete this occurrence" records) and minus `removeDay`.
+ * Returns the resulting schedule, or null when no date is left. Other event types are
+ * returned unchanged.
+ */
+export const materializeCustomSchedule = (
+  event: Pick<Event, 'id' | 'date' | 'endDate' | 'recurrence'>,
+  exceptions: Date[] = [],
+  removeDay?: Date
+): { date: Date; endDate?: Date; recurrence?: RecurrenceRule } | null => {
+  const rule = event.recurrence;
+  if (rule?.type !== 'custom' || !rule.customDates?.length) {
+    return { date: event.date, endDate: event.endDate, recurrence: rule };
+  }
+  const skip = new Set([...exceptions, ...(removeDay ? [removeDay] : [])].map((d) => formatLocalDate(new Date(d))));
+  const perDate = hasPerDateTimes(rule);
+  const baseStart = new Date(event.date);
+  const baseEnd = event.endDate ? new Date(event.endDate) : undefined;
+  const durationMs = baseEnd ? baseEnd.getTime() - baseStart.getTime() : undefined;
+
+  const occurrences: Occurrence[] = rule.customDates
+    .map((raw, i) => {
+      const start = new Date(raw);
+      if (perDate) {
+        const end = new Date(rule.customEndDates![i]);
+        return { start, end: end.getTime() > start.getTime() ? end : undefined };
+      }
+      // Older series: every date runs at the series time
+      start.setHours(baseStart.getHours(), baseStart.getMinutes(), 0, 0);
+      return { start, end: durationMs !== undefined && durationMs >= 0 ? new Date(start.getTime() + durationMs) : undefined };
+    })
+    .filter((o) => !isNaN(o.start.getTime()) && !skip.has(formatLocalDate(o.start)))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  if (occurrences.length === 0) return null;
+  return buildSchedule(occurrences, perDate);
+};

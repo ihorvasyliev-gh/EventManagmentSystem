@@ -13,7 +13,7 @@ import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
 import PosterLightbox, { PosterDownloadButton } from './PosterLightbox';
 import MultiDatePicker from './MultiDatePicker';
-import { PerDateTimes, buildOccurrences, buildSchedule, validateOccurrenceTimes, readScheduleFromEvent } from '../utils/multiDateUtils';
+import { PerDateTimes, buildOccurrences, buildSchedule, validateOccurrenceTimes, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
@@ -53,6 +53,8 @@ interface EventModalProps {
   draft?: Omit<Event, 'id' | 'createdAt'> | null;
   /** Builds a shareable link for an event occurrence */
   getShareLink?: (event: Event) => string;
+  /** Days deleted from recurring series (event id → days) */
+  recurrenceExceptions?: Map<string, Date[]>;
 }
 
 const EventModal: React.FC<EventModalProps> = ({
@@ -70,13 +72,16 @@ const EventModal: React.FC<EventModalProps> = ({
   initialMode = 'view',
   autoApproveOnSave = false,
   draft = null,
-  getShareLink
+  getShareLink,
+  recurrenceExceptions
 }) => {
   const { theme } = useTheme();
   const { showToast } = useToast();
   // Latest events without making the form re-initialise on every background refresh
   const eventsRef = useRef(events);
   eventsRef.current = events;
+  const exceptionsRef = useRef(recurrenceExceptions);
+  exceptionsRef.current = recurrenceExceptions;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(initialMode === 'edit');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -238,7 +243,9 @@ const EventModal: React.FC<EventModalProps> = ({
           ? (eventsRef.current.find(e => e.id === event.id) ?? event)
           : event;
 
-        const schedule = readScheduleFromEvent(source);
+        // Days deleted earlier ("Delete only this occurrence") are left out of hand-picked dates
+        const remaining = materializeCustomSchedule(source, exceptionsRef.current?.get(source.id));
+        const schedule = readScheduleFromEvent(remaining ? { ...source, ...remaining } : source);
         setSelectedDates(schedule.dates);
         setStartTimeStr(schedule.shared.start);
         setEndTimeStr(schedule.shared.end);
@@ -1038,7 +1045,11 @@ const EventModal: React.FC<EventModalProps> = ({
                 {isEditing && event && isRecurringEvent(event) && (
                   <div className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 p-3.5 flex items-center gap-3 text-xs text-sky-800 dark:text-sky-300">
                     <Repeat className="w-4 h-4 shrink-0" />
-                    <span>This is a repeating event — changes apply to every occurrence. To remove a single date, use Delete → "Delete only this occurrence".</span>
+                    <span>
+                      {event.recurrence?.type === 'custom'
+                        ? 'This event runs on several dates — changes apply to all of them. Tap a date in the calendar below to add or remove it.'
+                        : 'This is a repeating event — changes apply to every occurrence. To remove a single date, use Delete → "Delete only this occurrence".'}
+                    </span>
                   </div>
                 )}
                 {Object.keys(fieldErrors).length > 0 && (

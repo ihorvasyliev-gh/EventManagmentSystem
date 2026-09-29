@@ -9,7 +9,7 @@ import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { User, Event, EventFilters, UserRole, EventStatus } from './types';
-import { getEvents, updateEvent, deleteEvent, deleteRecurrenceInstance, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
+import { getEvents, updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
 import { logout as logoutService, getCurrentUser } from './services/authService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
@@ -18,6 +18,7 @@ import { expandRecurringEvents } from './utils/recurrence';
 import { getCachedUser, cacheUser, clearUserCache } from './utils/sessionCache';
 import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions } from './utils/eventsCache';
 import { isSameDay } from './utils/date';
+import { materializeCustomSchedule } from './utils/multiDateUtils';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
 import { isAnyModalOpen } from './hooks/useModalFocusTrap';
@@ -610,6 +611,16 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     // Sync with server in background
     try {
       const serverEvent = await updateEvent(id, eventData, user.id, user.fullName);
+      // Hand-picked dates: the form already left out deleted days, so the saved list is complete
+      if (originalEvent.recurrence?.type === 'custom' && recurrenceExceptions.get(id)?.length) {
+        await clearRecurrenceExceptions(id);
+        setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+          const next = new Map(prev);
+          next.delete(id);
+          cacheExceptions(next);
+          return next;
+        });
+      }
       // Replace optimistic event with server response
       setEvents((prev) => {
         const exists = prev.some(e => e.id === id);
@@ -647,7 +658,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       setIsModalOpen(true);
       throw markHandled(e);
     }
-  }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents]);
+  }, [user, showToast, events, pendingSubmissions, selectedEvent, modalAutoApprove, refreshSubmissions, refreshEvents, recurrenceExceptions]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
@@ -668,6 +679,46 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   const handleDeleteInstance = useCallback(async (eventId: string, instanceDate: Date) => {
     if (!user) return;
+
+    // Hand-picked dates: take the day out of the event itself, so editing shows the real list
+    // and the day can be picked again later
+    const master = events.find(e => e.id === eventId);
+    if (master?.recurrence?.type === 'custom') {
+      const schedule = materializeCustomSchedule(master, recurrenceExceptions.get(eventId), instanceDate);
+      const previousExceptions = recurrenceExceptions.get(eventId);
+      const updated: Event | null = schedule ? { ...master, ...schedule, recurrence: schedule.recurrence } : null;
+
+      setEvents(prev => updated ? prev.map(e => (e.id === eventId ? updated : e)) : prev.filter(e => e.id !== eventId));
+      setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+        const next = new Map(prev);
+        next.delete(eventId);
+        cacheExceptions(next);
+        return next;
+      });
+
+      try {
+        if (schedule) {
+          await saveCustomSchedule(eventId, schedule, user.id, user.fullName, instanceDate);
+          showToast('Date removed from the event', 'success');
+        } else {
+          await deleteEvent(eventId, user.id, user.fullName);
+          showToast('That was the last date, so the event was deleted', 'success');
+        }
+      } catch (error) {
+        console.error('Error removing date', error);
+        setEvents(prev => (prev.some(e => e.id === eventId) ? prev.map(e => (e.id === eventId ? master : e)) : [...prev, master]));
+        if (previousExceptions) {
+          setRecurrenceExceptions((prev: Map<string, Date[]>) => {
+            const next = new Map(prev);
+            next.set(eventId, previousExceptions);
+            cacheExceptions(next);
+            return next;
+          });
+        }
+        showToast('Failed to remove this date', 'error');
+      }
+      return;
+    }
 
     // Обновляем исключения (Optimistic)
     const normalizedDate = new Date(instanceDate);
@@ -703,7 +754,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       });
     }
 
-  }, [user, showToast]);
+  }, [user, showToast, events, recurrenceExceptions]);
 
   const handleDeleteEvent = useCallback(async (id: string) => {
     if (!user) return;
@@ -1053,6 +1104,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onEventUpdate={handleEventUpdate}
             onDelete={handleDeleteEvent}
             onDeleteInstance={handleDeleteInstance}
+            recurrenceExceptions={recurrenceExceptions}
             initialMode={modalInitialMode}
             autoApproveOnSave={modalAutoApprove}
             draft={eventDraft}

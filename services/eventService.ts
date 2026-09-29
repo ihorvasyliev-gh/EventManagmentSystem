@@ -659,6 +659,56 @@ export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Da
 };
 
 /**
+ * Saves a new set of dates for a custom-dates series (e.g. after removing one date) and
+ * drops the event's old per-day exceptions, since the date list is now complete.
+ */
+export const saveCustomSchedule = async (
+  eventId: string,
+  schedule: { date: Date; endDate?: Date; recurrence?: RecurrenceRule },
+  userId: string,
+  userName: string,
+  removedDay?: Date
+): Promise<void> => {
+  const payload = {
+    date: schedule.date.toISOString(),
+    end_date: schedule.endDate ? schedule.endDate.toISOString() : null,
+    recurrence_type: schedule.recurrence?.type || 'none',
+    recurrence_custom_dates: toIsoList(schedule.recurrence?.customDates),
+    recurrence_custom_end_dates: toIsoList(schedule.recurrence?.customEndDates),
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await withOptionalColumns(payload, p => supabase.from('events').update(p).eq('id', eventId));
+  if (error) {
+    console.error('Error saving event dates:', error);
+    throw new Error(error.message || 'Failed to update event dates');
+  }
+
+  await clearRecurrenceExceptions(eventId);
+
+  if (removedDay) {
+    const { error: historyError } = await supabase.from('event_history').insert({
+      event_id: eventId,
+      user_id: userId,
+      user_name: userName,
+      action: 'updated',
+      changes: {
+        deleted_instance: {
+          old: removedDay.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+          new: 'deleted'
+        }
+      }
+    });
+    if (historyError) console.error('Error creating history entry:', historyError);
+  }
+};
+
+/** Removes all "deleted occurrence" records of an event */
+export const clearRecurrenceExceptions = async (eventId: string): Promise<void> => {
+  const { error } = await supabase.from('recurrence_exceptions').delete().eq('event_id', eventId);
+  if (error) console.error('Error clearing recurrence exceptions:', error);
+};
+
+/**
  * Удалить событие (всю серию, если оно повторяющееся)
  */
 export const deleteEvent = async (id: string, userId?: string, userName?: string): Promise<void> => {

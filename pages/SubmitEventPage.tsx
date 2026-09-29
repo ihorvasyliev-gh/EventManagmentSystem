@@ -458,7 +458,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300">
               {isAdmin
                 ? 'It is live on the calendar and will appear in the next Upcoming Events Digest.'
-                : `We'll let you know at ${submitted.email} if anything needs changing.`}
+                : 'It will appear on the calendar once it has been reviewed.'}
             </p>
           </div>
 

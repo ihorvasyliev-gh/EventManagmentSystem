@@ -12,6 +12,20 @@ import {
   monthShortUpper
 } from './digestGrouping';
 
+/**
+ * Links inside a PDF must be absolute: a site-relative poster URL ("/api/file/…") would
+ * open as a file on the reader's computer. Returns null when no web link can be made.
+ */
+export const toAbsoluteHttpUrl = (url: string | undefined, base = typeof window !== 'undefined' ? window.location.origin : ''): string | null => {
+  if (!url) return null;
+  try {
+    const abs = new URL(url, base || undefined);
+    return abs.protocol === 'https:' || abs.protocol === 'http:' ? abs.href : null;
+  } catch {
+    return null;
+  }
+};
+
 export interface BulletinOptions {
   startDate: Date;
   endDate: Date;
@@ -1084,7 +1098,8 @@ export const generateEventsDigestPDF = async (
             doc.restoreGraphicsState();
             stroke(BORDER, 0.3);
             doc.roundedRect(fx, fy, flyerW, flyerH, 1.6, 1.6, 'S');
-            if (ev.posterUrl) doc.link(fx, fy, flyerW, flyerH, { url: ev.posterUrl });
+            const posterLink = toAbsoluteHttpUrl(ev.posterUrl);
+            if (posterLink) doc.link(fx, fy, flyerW, flyerH, { url: posterLink });
           } catch (err) {
             console.warn('Could not embed flyer thumbnail in PDF:', err);
           }

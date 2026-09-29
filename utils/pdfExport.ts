@@ -593,7 +593,8 @@ export const generateEventsDigestPDF = async (
   const gridRows = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86400000 + 1) / 7;
   // The compact table is about density, so it skips the mini calendar
   const showGlance = isExecutive && groups.length > 0 && gridRows <= 6;
-  const GLANCE_CELL_H = 12.5;
+  // Longer periods get shorter rows so the first cards still fit on page 1
+  const GLANCE_CELL_H = gridRows >= 5 ? 11 : 12.5;
   const glanceHeight = showGlance ? 7 + 5 + gridRows * GLANCE_CELL_H : 0;
 
   const drawGlance = (top: number) => {
@@ -656,12 +657,12 @@ export const generateEventsDigestPDF = async (
         const maxDots = 5;
         dayEvents.slice(0, maxDots).forEach((ev, idx) => {
           fill(getCategoryRgb(ev.category).accent);
-          doc.circle(x + 3 + idx * 2.5, y + 9.4, 0.85, 'F');
+          doc.circle(x + 3 + idx * 2.5, y + GLANCE_CELL_H - 3.1, 0.85, 'F');
         });
         font('semibold', 6);
         color(MUTED);
         const label = dayEvents.length === 1 ? '1 event' : `${dayEvents.length} events`;
-        doc.text(label, x + cellW - 2, y + 10.2, { align: 'right' });
+        doc.text(label, x + cellW - 2, y + GLANCE_CELL_H - 2.3, { align: 'right' });
       }
     }
 

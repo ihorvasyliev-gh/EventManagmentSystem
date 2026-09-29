@@ -7,7 +7,7 @@ import { getCategoryRgb, Rgb } from '../constants/categoryColors';
 import {
   groupDigestOccurrences,
   formatAlsoOnDates,
-  formatGroupOccurrence,
+  formatOccurrenceLabel,
   DigestEventGroup,
   monthShort,
   monthShortUpper
@@ -912,8 +912,24 @@ export const generateEventsDigestPDF = async (
     const descLines = fitLines(desc, mainW, 16);
     const DESC_LH = 3.85;
 
-    // "Also on" chips
-    const alsoOn = group.occurrences.slice(1).map((o) => txt(formatGroupOccurrence(o, ev, 28))).filter(Boolean);
+    // "Also on": chips when every date is at the same venue, otherwise a small
+    // date | venue table with each venue linking to Google Maps
+    const firstPlace = ev.location?.trim() ?? '';
+    const otherDates = group.occurrences.slice(1).map((o) => {
+      const place = o.location?.trim() ?? '';
+      return {
+        label: txt(formatOccurrenceLabel(o.date, ev.date)),
+        place: place && place !== firstPlace ? place : ''
+      };
+    }).filter((o) => o.label);
+    const alsoOnTable = otherDates.some((o) => o.place);
+    const alsoOn = alsoOnTable ? [] : otherDates.map((o) => o.label);
+    const ALSO_LABEL_H = 3.4;
+    const ALSO_ROW_H = 4.6;
+    const ALSO_PAD = 1.8;
+    font('semibold', 7);
+    const alsoDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.label))) + 4;
+    const alsoH = alsoOnTable ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1 : 0;
     const CHIP_H = 4.6;
     const chipRows: Array<Array<{ label: string; w: number }>> = [];
     if (alsoOn.length) {
@@ -946,6 +962,7 @@ export const generateEventsDigestPDF = async (
     if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
     if (contact) contentH += 2.4 + 3.3;
     if (chipRows.length) contentH += 3 + chipRows.length * (CHIP_H + 1.4) - 1.4;
+    if (alsoOnTable) contentH += 3 + alsoH;
 
     let flyerW = 0;
     let flyerH = 0;
@@ -1101,6 +1118,36 @@ export const generateEventsDigestPDF = async (
               doc.text(chip.label, x + 2.2, rowY + 3.15);
               x += chip.w + 1.5;
             });
+          });
+        }
+        if (alsoOnTable) {
+          const top = cy + 3;
+          const boxW = mainRight - mainX;
+          fill(BG);
+          stroke(BORDER, 0.2);
+          doc.roundedRect(mainX, top, boxW, alsoH, 1.6, 1.6, 'FD');
+          font('bold', 6.3);
+          color(RED);
+          spaced('ALSO ON', mainX + 2.5, top + ALSO_PAD + 2.3, 0.3);
+          const placeX = mainX + 2.5 + alsoDateW;
+          const placeW = mainX + boxW - 2.5 - placeX - 3.6;
+          otherDates.forEach((o, i) => {
+            const rowY = top + ALSO_PAD + ALSO_LABEL_H + i * ALSO_ROW_H + 3.1;
+            if (i > 0) {
+              stroke(BORDER, 0.15);
+              doc.line(mainX + 2.5, rowY - 3.4, mainX + boxW - 2.5, rowY - 3.4);
+            }
+            font('semibold', 7);
+            color(INK);
+            doc.text(o.label, mainX + 2.5, rowY);
+            const place = txt(o.place || firstPlace);
+            if (!place) return;
+            drawPin(placeX, rowY, LINK);
+            font('medium', 7);
+            color(o.place ? LINK : MUTED);
+            const shown = truncate(place, placeW);
+            doc.text(shown, placeX + 3.6, rowY);
+            doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place || firstPlace) });
           });
         }
 

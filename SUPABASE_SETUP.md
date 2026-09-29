@@ -56,7 +56,11 @@
 
 1. В Supabase Dashboard перейдите в **Authentication** → **Settings**
 2. Настройте **Email Auth:**
-   - Убедитесь, что **Enable Email Signup** включен
+   - ⚠️ **Отключите публичную регистрацию:** **Allow new users to sign up** → OFF.
+     Формы регистрации в приложении нет, а anon key публичный (он в JS-бандле) — с включённой
+     регистрацией любой человек из интернета может создать себе аккаунт через API.
+     Сотрудников добавляйте через **Authentication** → **Users** → **Add user** (см. `CREATE_ADMIN_USER.md`) —
+     это работает и при выключенной регистрации.
    - ⚠️ **КРИТИЧЕСКИ ВАЖНО: Отключите подтверждение email:**
      - Найдите опцию **"Confirm email"** 
      - **ОБЯЗАТЕЛЬНО отключите** её (переключите в положение OFF)
@@ -234,6 +238,9 @@ SET role = 'admin', full_name = 'CCP Administrator';
 - [ ] SQL скрипт `supabase-setup.sql` выполнен успешно
 - [ ] Все таблицы созданы и видны в Table Editor
 - [ ] RLS политики активны
+- [ ] Выполнены миграции: `submission-migration.sql`, `recurrence-exceptions-migration.sql`, `realtime-events-migration.sql`, `custom-dates-migration.sql`, `rsvp-occurrence-migration.sql`, `event-comments-occurrence-migration.sql`
+- [ ] **Выполнен `security-hardening-migration.sql`** (последним)
+- [ ] **Публичная регистрация отключена** (Authentication → Sign In / Providers → Allow new users to sign up: OFF)
 - [ ] Получены Project URL и anon key
 - [ ] Настроена аутентификация
 - [ ] **Подтверждение email отключено** (Authentication → Settings → Email Auth → Confirm email: OFF)

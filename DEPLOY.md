@@ -21,6 +21,9 @@
 
 📖 **Подробные инструкции:** См. файл `SUPABASE_SETUP.md`
 
+⚠️ **Перед релизом** выполните в SQL Editor миграции (`*-migration.sql`) и **последним** — `security-hardening-migration.sql`,
+а также отключите публичную регистрацию: **Authentication** → **Sign In / Providers** → **Allow new users to sign up: OFF**.
+
 ```sql
 -- Создание таблицы пользователей
 CREATE TABLE IF NOT EXISTS users (
@@ -169,6 +172,12 @@ git push -u origin main
    VITE_SUPABASE_ANON_KEY = your-anon-key-here
    VITE_CLOUDFLARE_R2_PUBLIC_URL = https://pub-xxxxx.r2.dev
    ```
+   Переменные нужны и для **Production**, и для **Preview** — без `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`
+   сборка на Cloudflare Pages намеренно падает (иначе задеплоился бы белый экран).
+   Те же значения читает функция `/api/calendar` во время выполнения.
+
+   **R2 binding:** Settings → Functions → R2 bucket bindings → `BUCKET` (см. `CLOUDFLARE_SETUP.md`),
+   иначе загрузка постеров и `/api/file/*` отвечают 500.
 
 4. **Деплой:**
    - Нажмите **Save and Deploy**
@@ -205,14 +214,9 @@ wrangler pages deploy dist \
   --compatibility-date=2024-01-01
 ```
 
-5. **Добавление переменных окружения:**
-```bash
-wrangler pages secret put VITE_SUPABASE_URL
-# Введите значение при запросе
-
-wrangler pages secret put VITE_SUPABASE_ANON_KEY
-wrangler pages secret put VITE_CLOUDFLARE_R2_PUBLIC_URL
-```
+5. **Переменные окружения:**
+   `VITE_*` переменные встраиваются в бандл **во время сборки** — задайте их в `.env.local`
+   (или в окружении) перед `npm run build`. `wrangler pages secret put` для них не подходит.
 
 ## Проверка после деплоя
 
@@ -233,14 +237,15 @@ git commit -m "Your changes"
 git push origin main
 ```
 
-2. Cloudflare Pages автоматически задеплоит новую версию
-3. Или вручную в Dashboard → **Retry deployment**
+2. GitHub Actions (`.github/workflows/ci.yml`) прогонит тесты и сборку
+3. Cloudflare Pages автоматически задеплоит новую версию
+4. Или вручную в Dashboard → **Retry deployment**
 
 ## Troubleshooting
 
 ### Ошибки сборки
 - Проверьте, что все зависимости установлены (`npm install`)
-- Убедитесь, что Node.js версия 18+
+- Убедитесь, что Node.js версия 24+ (задана в `.nvmrc`)
 - Проверьте логи сборки в Cloudflare Dashboard
 
 ### Ошибки переменных окружения

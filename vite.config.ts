@@ -11,6 +11,15 @@ export default defineConfig(({ mode }) => {
   // GEMINI_API_KEY загружаем отдельно, так как он без префикса VITE_
   const env = loadEnv(mode, '.', '');
 
+  // On Cloudflare Pages (CF_PAGES=1) a missing key would ship a bundle that throws on load:
+  // fail the build instead so the previous deployment stays live
+  if (process.env.CF_PAGES && mode === 'production') {
+    const missing = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'].filter((key) => !env[key]);
+    if (missing.length > 0) {
+      throw new Error(`Missing build environment variables: ${missing.join(', ')}`);
+    }
+  }
+
   return {
     server: {
       port: 3000,

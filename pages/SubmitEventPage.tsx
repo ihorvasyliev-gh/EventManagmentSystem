@@ -6,13 +6,16 @@ import {
 import { submitEvent, getEvents } from '../services/eventService';
 import { User as AuthUser, UserRole, Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
+import SessionPlaces from '../components/SessionPlaces';
 import {
-  PerDateTimes, TimeRange, buildOccurrences, buildSchedule, validateOccurrenceTimes, getTimesForDate, formatTimeRange
+  TimeRange, TimeSlot, SessionPlaces as SessionPlacesMap, ScheduleState, makeSlot, formatTimeRange,
+  compareByStartTime, getSlotsForDate
 } from '../utils/multiDateUtils';
-import { formatLocalDate } from '../utils/date';
+import { useEventSchedule } from '../hooks/useEventSchedule';
+import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
-import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 
@@ -37,11 +40,17 @@ interface SavedDraft {
   title: string;
   category: EventCategoryName;
   dates: string[];
-  startTime: string;
-  endTime: string;
+  /** Times used on every day (older drafts have one `startTime`/`endTime` instead) */
+  sharedTimes?: TimeSlot[];
+  startTime?: string;
+  endTime?: string;
   /** false when each date has its own time (older drafts don't have it) */
   sameTime?: boolean;
-  perDateTimes?: PerDateTimes;
+  /** Each date's own times (older drafts hold one time range per date) */
+  perDateTimes?: Record<string, TimeSlot[] | TimeRange>;
+  /** false when each date and time has its own address */
+  samePlace?: boolean;
+  places?: SessionPlacesMap;
   location: string;
   description: string;
   submitterName?: string;
@@ -52,7 +61,8 @@ const readDraft = (): SavedDraft | null => {
   try {
     const parsed = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY) || 'null');
     if (!parsed || typeof parsed !== 'object') return null;
-    const hasContent = [parsed.title, parsed.location, parsed.description].some((v) => typeof v === 'string' && v.trim());
+    const places = parsed.places && typeof parsed.places === 'object' ? Object.values(parsed.places) : [];
+    const hasContent = [parsed.title, parsed.location, parsed.description, ...places].some((v) => typeof v === 'string' && v.trim());
     return hasContent ? parsed as SavedDraft : null;
   } catch {
     return null;
@@ -105,6 +115,41 @@ const Section: React.FC<{ step: number; title: string; hint?: string; children: 
 
 const fmtChipDate = (d: Date) => formatOccurrenceLabel(d);
 
+const isSlot = (v: unknown): v is TimeRange =>
+  !!v && typeof v === 'object' && typeof (v as TimeRange).start === 'string' && typeof (v as TimeRange).end === 'string';
+
+/** Draft times, in the current shape */
+const readDraftSlots = (value: unknown): TimeSlot[] => {
+  const list = Array.isArray(value) ? value : [value];
+  return list.filter(isSlot).map((s, i) => makeSlot(s.start, s.end, typeof (s as TimeSlot).id === 'string' ? (s as TimeSlot).id : `t${i + 1}`));
+};
+
+const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date): ScheduleState => {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  // Dates that have passed since the draft was saved are dropped
+  const future = (draft?.dates || [])
+    .map((s) => new Date(s))
+    .filter((d) => !isNaN(d.getTime()) && d >= startOfToday);
+  const shared = readDraftSlots(draft?.sharedTimes);
+  const perDate: Record<string, TimeSlot[]> = {};
+  if (draft?.perDateTimes && typeof draft.perDateTimes === 'object') {
+    Object.entries(draft.perDateTimes).forEach(([key, value]) => {
+      const slots = readDraftSlots(value);
+      if (slots.length > 0) perDate[key] = slots;
+    });
+  }
+  return {
+    dates: future.length ? future : [defaultDate],
+    shared: shared.length ? shared : [makeSlot(draft?.startTime || '10:00', draft?.endTime ?? '11:30', 't1')],
+    sameTime: draft?.sameTime ?? true,
+    perDate,
+    samePlace: draft?.samePlace ?? true,
+    location: draft?.location ?? '',
+    places: draft?.places && typeof draft.places === 'object' ? draft.places : {},
+  };
+};
+
 const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
@@ -127,24 +172,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [category, setCategory] = useState<EventCategoryName>(
     restoredDraft && CATEGORIES.includes(restoredDraft.category) ? restoredDraft.category : CATEGORIES[0]
   );
-  const [selectedDates, setSelectedDates] = useState<Date[]>(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    // Dates that have passed since the draft was saved are dropped
-    const future = (restoredDraft?.dates || [])
-      .map((s) => new Date(s))
-      .filter((d) => !isNaN(d.getTime()) && d >= startOfToday);
-    return future.length ? future : [defaultDate];
-  });
-  const [startTimeStr, setStartTimeStr] = useState(restoredDraft?.startTime || '10:00');
-  const [endTimeStr, setEndTimeStr] = useState(restoredDraft?.endTime ?? '11:30');
-  const [sameTimeForAll, setSameTimeForAll] = useState(restoredDraft?.sameTime ?? true);
-  const [perDateTimes, setPerDateTimes] = useState<PerDateTimes>(
-    restoredDraft?.perDateTimes && typeof restoredDraft.perDateTimes === 'object' ? restoredDraft.perDateTimes : {}
-  );
-  const activePerDate = sameTimeForAll ? null : perDateTimes;
-  const sharedTimes: TimeRange = { start: startTimeStr, end: endTimeStr };
-  const [location, setLocation] = useState(restoredDraft?.location ?? '');
+  const scheduleControls = useEventSchedule(() => scheduleFromDraft(restoredDraft, defaultDate));
+  const { schedule, update: updateSchedule, sessions, occurrences, activePerDate } = scheduleControls;
+  const { dates: selectedDates, shared: sharedTimes, sameTime: sameTimeForAll, perDate: perDateTimes, samePlace, location, places } = schedule;
+  const setLocation = (value: string) => updateSchedule({ location: value });
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
   const [submitterName, setSubmitterName] = useState(() => currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
   const [submitterEmail, setSubmitterEmail] = useState(() => currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
@@ -169,15 +200,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [events]);
 
   const conflictInfo = useMemo(
-    () => detectMultiDateConflicts(
-      selectedDates, startTimeStr, endTimeStr, getOccurrencesAroundDates(activeEvents, selectedDates), undefined, activePerDate
-    ),
-    [selectedDates, startTimeStr, endTimeStr, activeEvents, activePerDate]
+    () => detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(activeEvents, selectedDates)),
+    [occurrences, selectedDates, activeEvents]
   );
 
   // Venues used before, offered as suggestions while typing
   const knownVenues = useMemo(
-    () => Array.from(new Set<string>(activeEvents.map((e) => e.location?.trim()).filter((l): l is string => !!l))).sort((a, b) => a.localeCompare(b)),
+    () => Array.from(new Set<string>(activeEvents.flatMap(getEventLocations))).sort((a, b) => a.localeCompare(b)),
     [activeEvents]
   );
 
@@ -192,6 +221,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{ title: string; dates: Date[]; time: string; perDateLines?: string[]; location: string } | null>(null);
+  const placeValues = samePlace ? [] : sessions.map((s) => places[s.key] ?? '');
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
   // Autosave the draft (text fields only — files can't be stored)
@@ -202,11 +232,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         const draft: SavedDraft = {
           title, category, location, description,
           dates: selectedDates.map((d) => d.toISOString()),
-          startTime: startTimeStr, endTime: endTimeStr,
+          sharedTimes,
           sameTime: sameTimeForAll, perDateTimes,
+          samePlace, places,
           submitterName, submitterEmail
         };
-        if ([title, location, description].some((v) => v.trim())) {
+        if ([title, location, description, ...placeValues].some((v) => v.trim())) {
           localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
         }
       } catch {
@@ -214,7 +245,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [title, category, location, description, selectedDates, startTimeStr, endTimeStr, sameTimeForAll, perDateTimes, submitterName, submitterEmail, submitted]);
+  }, [title, category, location, description, selectedDates, sharedTimes, sameTimeForAll, perDateTimes, samePlace, places, submitterName, submitterEmail, submitted]);
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -252,10 +283,15 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     if (!title.trim()) next.title = 'Please give the event a name.';
     if (sortedDates.length === 0) next.dates = 'Pick at least one date in the calendar.';
     else {
-      const timeError = validateOccurrenceTimes(sortedDates, sharedTimes, activePerDate);
+      const timeError = scheduleControls.validateTimes();
       if (timeError) next.dates = timeError;
     }
-    if (!location.trim()) next.location = 'Where is it happening? A room or address is fine.';
+    if (samePlace) {
+      if (!location.trim()) next.location = 'Where is it happening? A room or address is fine.';
+    } else {
+      const placeError = scheduleControls.validatePlaces();
+      if (placeError) next.location = placeError;
+    }
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
     if (!submitterName.trim()) next.name = 'Please enter your name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
@@ -276,10 +312,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       return;
     }
 
-    const occurrences = buildOccurrences(sortedDates, sharedTimes, activePerDate);
-    const { date: startDateTime, endDate: endDateTime, recurrence } = buildSchedule(occurrences, !!activePerDate);
-    const perDateLines = activePerDate
-      ? sortedDates.map((d) => `${fmtChipDate(d)} · ${formatTimeRange(getTimesForDate(activePerDate, d, sharedTimes))}`)
+    const { date: startDateTime, endDate: endDateTime, location: eventLocation, recurrence } = scheduleControls.build();
+    // Each date and time on its own line when they differ (times or places)
+    const perDateLines = activePerDate || sharedTimes.length > 1 || !samePlace
+      ? sessions.map((s) => [fmtChipDate(s.day), formatTimeRange(s.slot), ...(samePlace ? [] : [(places[s.key] ?? '').trim()])].join(' · '))
       : undefined;
 
     setIsSubmitting(true);
@@ -289,7 +325,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         description: description.trim(),
         date: startDateTime,
         endDate: endDateTime,
-        location: location.trim(),
+        location: eventLocation,
         category,
         submitterName: submitterName.trim(),
         submitterEmail: submitterEmail.trim(),
@@ -302,9 +338,9 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       setSubmitted({
         title: title.trim(),
         dates: sortedDates,
-        time: formatTimeRange(sharedTimes),
+        time: formatTimeRange(sharedTimes[0]),
         perDateLines,
-        location: location.trim()
+        location: samePlace ? location.trim() : ''
       });
       window.scrollTo({ top: 0 });
       if (!currentUser) {
@@ -330,14 +366,9 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setLocation('');
     setCategory(CATEGORIES[0]);
     handleRemovePoster();
-    setSelectedDates([defaultDate]);
-    setStartTimeStr('10:00');
-    setEndTimeStr('11:30');
-    setSameTimeForAll(true);
-    setPerDateTimes({});
+    scheduleControls.reset(scheduleFromDraft(null, defaultDate));
     setErrors({});
     setSubmitError(null);
   };
@@ -393,9 +424,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 </p>
               </>
             )}
-            <p className="mt-1 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> {submitted.location}
-            </p>
+            {submitted.location && (
+              <p className="mt-1 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> {submitted.location}
+              </p>
+            )}
             {!isAdmin && (
               <p className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Waiting for review
@@ -427,10 +460,16 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }
 
   // --- Form -------------------------------------------------------------------
+  const dayTimes = (slots: TimeSlot[]) => [...slots].sort(compareByStartTime).map(formatTimeRange).join(' & ');
   const timeLabel = (() => {
-    if (!activePerDate) return formatTimeRange(sharedTimes);
-    const labels = new Set(sortedDates.map((d) => formatTimeRange(getTimesForDate(activePerDate, d, sharedTimes))));
-    return labels.size <= 1 ? [...labels][0] ?? formatTimeRange(sharedTimes) : 'Different time each date';
+    if (!activePerDate) return dayTimes(sharedTimes);
+    const labels = new Set(sortedDates.map((d) => dayTimes(getSlotsForDate(activePerDate, d, sharedTimes))));
+    return labels.size <= 1 ? [...labels][0] ?? dayTimes(sharedTimes) : 'Different time each date';
+  })();
+  const placeLabel = (() => {
+    if (samePlace) return location.trim();
+    const distinct = Array.from(new Set(placeValues.map((p) => p.trim()).filter(Boolean)));
+    return distinct.length > 2 ? `${distinct.slice(0, 2).join(' · ')} +${distinct.length - 2} more` : distinct.join(' · ');
   })();
   const descLength = description.trim().length;
 
@@ -544,17 +583,15 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   <MultiDatePicker
                     selectedDates={selectedDates}
                     onChangeDates={(dates) => {
-                      setSelectedDates(dates);
+                      updateSchedule({ dates });
                       if (dates.length > 0) clearError('dates');
                     }}
-                    startTime={startTimeStr}
-                    onChangeStartTime={(t) => { setStartTimeStr(t); clearError('dates'); }}
-                    endTime={endTimeStr}
-                    onChangeEndTime={(t) => { setEndTimeStr(t); clearError('dates'); }}
+                    sharedTimes={sharedTimes}
+                    onChangeSharedTimes={(times) => { updateSchedule({ shared: times }); clearError('dates'); }}
                     sameTimeForAll={sameTimeForAll}
-                    onChangeSameTimeForAll={(same) => { setSameTimeForAll(same); clearError('dates'); }}
+                    onChangeSameTimeForAll={(same) => { updateSchedule({ sameTime: same }); clearError('dates'); }}
                     perDateTimes={perDateTimes}
-                    onChangePerDateTimes={(times) => { setPerDateTimes(times); clearError('dates'); }}
+                    onChangePerDateTimes={(times) => { updateSchedule({ perDate: times }); clearError('dates'); }}
                     error={errors.dates}
                   />
                 </div>
@@ -566,8 +603,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                       <span className="font-semibold block">Something else is on at the same time</span>
                       <ul className="mt-1 space-y-0.5 text-xs sm:text-sm">
                         {conflictInfo.conflicts.map((c) => (
-                          <li key={formatLocalDate(c.date)}>
-                            <span className="font-semibold">{fmtChipDate(c.date)}:</span>{' '}
+                          <li key={c.date.getTime()}>
+                            <span className="font-semibold">{formatConflictDate(c.date, occurrences, fmtChipDate)}:</span>{' '}
                             {c.conflictingEvents.slice(0, 2).map((ev) => `“${ev.title}”`).join(', ')}
                             {c.conflictingEvents.length > 2 && ` +${c.conflictingEvents.length - 2} more`}
                           </li>
@@ -581,29 +618,43 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
               {/* 3. Where & details */}
               <Section step={3} title="Where, and what’s it about?">
-                <div>
-                  <label htmlFor="field-location" className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                <div className="space-y-2">
+                  <label htmlFor="field-location" className="block text-sm font-semibold text-slate-800 dark:text-slate-200">
                     Venue / location <span className="text-red-500" aria-hidden="true">*</span>
                   </label>
-                  <div className="relative">
-                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="field-location"
-                      type="text"
-                      list="known-venues"
-                      value={location}
-                      onChange={(e) => { setLocation(e.target.value); clearError('location'); }}
-                      placeholder="e.g. Heron House, Room 4"
-                      autoComplete="off"
-                      aria-invalid={!!errors.location}
-                      aria-describedby={errors.location ? 'err-location' : undefined}
-                      className={`${inputClass(!!errors.location)} pl-10 pr-4 py-3`}
-                    />
-                    <datalist id="known-venues">
-                      {knownVenues.map((v) => <option key={v} value={v} />)}
-                    </datalist>
-                  </div>
-                  <FieldError id="err-location" message={errors.location} />
+                  {samePlace && (
+                    <div>
+                      <div className="relative">
+                        <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          id="field-location"
+                          type="text"
+                          list="known-venues"
+                          value={location}
+                          onChange={(e) => { setLocation(e.target.value); clearError('location'); }}
+                          placeholder="e.g. Heron House, Room 4"
+                          autoComplete="off"
+                          aria-invalid={!!errors.location}
+                          aria-describedby={errors.location ? 'err-location' : undefined}
+                          className={`${inputClass(!!errors.location)} pl-10 pr-4 py-3`}
+                        />
+                        <datalist id="known-venues">
+                          {knownVenues.map((v) => <option key={v} value={v} />)}
+                        </datalist>
+                      </div>
+                      <FieldError id="err-location" message={errors.location} />
+                    </div>
+                  )}
+                  <SessionPlaces
+                    id={samePlace ? undefined : 'field-location'}
+                    sessions={sessions}
+                    samePlace={samePlace}
+                    onChangeSamePlace={(same) => { scheduleControls.setSamePlace(same); clearError('location'); }}
+                    places={places}
+                    onChangePlaces={(next) => { updateSchedule({ places: next }); clearError('location'); }}
+                    suggestions={knownVenues}
+                    error={samePlace ? undefined : errors.location}
+                  />
                 </div>
 
                 <div>
@@ -807,7 +858,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 </p>
                 <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
                   <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                  <span className="break-words">{location.trim() || <span className="text-slate-300 dark:text-slate-600">Venue</span>}</span>
+                  <span className="break-words">{placeLabel || <span className="text-slate-300 dark:text-slate-600">Venue</span>}</span>
                 </p>
                 {description.trim() && (
                   <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-4 whitespace-pre-line">{description.trim()}</p>

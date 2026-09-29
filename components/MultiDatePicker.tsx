@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock, Plus } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { TimePickerInput } from './TimePickerInput';
 import {
@@ -12,23 +12,30 @@ import {
   removeDateSelection,
   calculateTimeDurationMinutes,
   addMinutesToTime,
-  calculatePreservedEndTime,
-  getTimesForDate,
+  getSlotsForDate,
+  compareByStartTime,
+  updateSlot,
+  addSlotAfter,
+  removeSlot,
+  copySlots,
   PerDateTimes,
   TimeRange,
+  TimeSlot,
 } from '../utils/multiDateUtils';
 import { formatLocalDate } from '../utils/date';
 
 export interface MultiDatePickerProps {
   selectedDates: Date[];
   onChangeDates: (dates: Date[]) => void;
-  startTime: string;
-  onChangeStartTime: (time: string) => void;
-  endTime: string;
-  onChangeEndTime: (time: string) => void;
   /**
-   * "Same time every day" toggle. Leave `onChangeSameTimeForAll` out to always use one
-   * shared time.
+   * Times the event runs at on every day: one, or several (e.g. morning and evening, each its
+   * own occurrence). Always at least one.
+   */
+  sharedTimes: TimeSlot[];
+  onChangeSharedTimes: (times: TimeSlot[]) => void;
+  /**
+   * "Same time every day" toggle. Leave `onChangeSameTimeForAll` out to always use the
+   * shared times.
    */
   sameTimeForAll?: boolean;
   onChangeSameTimeForAll?: (same: boolean) => void;
@@ -40,13 +47,76 @@ export interface MultiDatePickerProps {
   className?: string;
 }
 
+interface SlotFieldsProps {
+  slot: TimeSlot;
+  onChange: (patch: Partial<TimeRange>) => void;
+  onRemove?: () => void;
+  disabled: boolean;
+  compact?: boolean;
+}
+
+/** Start and end of one session, with a remove button when the day has more than one */
+const SlotFields: React.FC<SlotFieldsProps> = ({ slot, onChange, onRemove, disabled, compact }) => {
+  const endBeforeStart = !!slot.start && !!slot.end && slot.end < slot.start;
+  const labelClass = compact
+    ? 'block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1'
+    : 'block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1';
+  return (
+    <div>
+      <div className="flex items-end gap-2">
+        <div className={`grid flex-1 gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 sm:gap-3'}`}>
+          <div>
+            <label className={labelClass}>{compact ? 'Start' : 'Start Time'}</label>
+            <TimePickerInput value={slot.start} onChange={(v) => onChange({ start: v })} disabled={disabled} placeholder="09:00" />
+          </div>
+          <div>
+            <label className={labelClass}>{compact ? 'End' : 'End Time'}</label>
+            <TimePickerInput
+              value={slot.end}
+              onChange={(v) => onChange({ end: v })}
+              referenceStartTime={slot.start}
+              disabled={disabled}
+              placeholder="10:00"
+            />
+          </div>
+        </div>
+        {onRemove && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onRemove}
+            aria-label={`Remove the ${slot.start || 'new'} time`}
+            className="shrink-0 w-11 h-11 sm:w-9 sm:h-9 mb-0.5 rounded-xl inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-40"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {endBeforeStart && (
+        <p className="mt-1.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+          The end time is before the start time.
+        </p>
+      )}
+    </div>
+  );
+};
+
+const AddTimeButton: React.FC<{ onClick: () => void; disabled: boolean; label: string }> = ({ onClick, disabled, label }) => (
+  <button
+    type="button"
+    disabled={disabled}
+    onClick={onClick}
+    className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-40 min-h-[32px]"
+  >
+    <Plus className="w-3.5 h-3.5" /> {label}
+  </button>
+);
+
 export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
   selectedDates,
   onChangeDates,
-  startTime,
-  onChangeStartTime,
-  endTime,
-  onChangeEndTime,
+  sharedTimes,
+  onChangeSharedTimes,
   sameTimeForAll = true,
   onChangeSameTimeForAll,
   perDateTimes = {},
@@ -77,16 +147,16 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
     [viewYear, viewMonth]
   );
 
-  // Own time per date: offered once more than one day is picked (and kept visible if the
+  // Own times per date: offered once more than one day is picked (and kept visible if the
   // user switched to it and then removed days)
   const canSetPerDate = !!onChangeSameTimeForAll && !!onChangePerDateTimes;
   const showSameTimeToggle = canSetPerDate && (selectedDates.length > 1 || !sameTimeForAll);
   const usePerDate = canSetPerDate && !sameTimeForAll;
-  const sharedTimes: TimeRange = { start: startTime, end: endTime };
   const sortedDates = useMemo(
     () => [...selectedDates].sort((a, b) => a.getTime() - b.getTime()),
     [selectedDates]
   );
+  const sortedShared = useMemo(() => [...sharedTimes].sort(compareByStartTime), [sharedTimes]);
 
   // Month navigation handlers
   const handlePrevMonth = () => {
@@ -116,15 +186,17 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
     setViewMonth(now.getMonth());
   };
 
+  const slotsOf = (date: Date): TimeSlot[] => getSlotsForDate(perDateTimes, date, sharedTimes);
+
   // Date selection toggling
   const handleToggleDate = (date: Date) => {
     if (disabled) return;
-    const updated = toggleDateSelection(selectedDates, date, startTime);
-    // A day added while each date has its own time starts from the latest picked day's time
+    const updated = toggleDateSelection(selectedDates, date, sortedShared[0]?.start);
+    // A day added while each date has its own times starts from the latest picked day's times
     const key = formatLocalDate(date);
-    if (usePerDate && updated.length > selectedDates.length && !perDateTimes[key] && sortedDates.length > 0) {
-      const latest = getTimesForDate(perDateTimes, sortedDates[sortedDates.length - 1], sharedTimes);
-      onChangePerDateTimes?.({ ...perDateTimes, [key]: { ...latest } });
+    if (usePerDate && updated.length > selectedDates.length && !perDateTimes[key]?.length && sortedDates.length > 0) {
+      const latest = slotsOf(sortedDates[sortedDates.length - 1]);
+      onChangePerDateTimes?.({ ...perDateTimes, [key]: copySlots(latest) });
     }
     onChangeDates(updated);
   };
@@ -135,73 +207,49 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
     onChangeDates(updated);
   };
 
-  // Start time adjustment preserving selected duration
-  const handleStartTimeChange = (newStartTime: string) => {
-    if (disabled) return;
-    if (startTime && endTime) {
-      const adjustedEnd = calculatePreservedEndTime(newStartTime, startTime, endTime);
-      if (adjustedEnd !== endTime) {
-        onChangeEndTime(adjustedEnd);
-      }
-    }
-    onChangeStartTime(newStartTime);
-  };
-
-  // Quick duration click handler (+30m, +1h, etc.)
+  // Quick duration click handler (+30m, +1h, etc.) for the only shared time
   const handleDurationClick = (minutes: number) => {
     if (disabled) return;
-    const effectiveStart = startTime || '09:00';
-    if (!startTime) {
-      onChangeStartTime(effectiveStart);
-    }
-    const newEnd = addMinutesToTime(effectiveStart, minutes);
-    onChangeEndTime(newEnd);
+    const slot = sharedTimes[0];
+    const start = slot.start || '09:00';
+    onChangeSharedTimes(updateSlot(sharedTimes, slot.id, { start, end: addMinutesToTime(start, minutes) }));
   };
 
   const handleSameTimeToggle = (same: boolean) => {
     if (disabled || !onChangeSameTimeForAll || !onChangePerDateTimes) return;
     if (!same) {
-      // Every day starts from the shared time; the user then adjusts the ones that differ
+      // Every day starts from the shared times; the user then adjusts the ones that differ
       const seeded: PerDateTimes = {};
       sortedDates.forEach((d) => {
-        seeded[formatLocalDate(d)] = { ...sharedTimes };
+        seeded[formatLocalDate(d)] = copySlots(sharedTimes);
       });
       onChangePerDateTimes(seeded);
     } else if (sortedDates.length > 0) {
-      // Back to one time: keep the first day's time for every day
-      const first = getTimesForDate(perDateTimes, sortedDates[0], sharedTimes);
-      if (first.start) onChangeStartTime(first.start);
-      onChangeEndTime(first.end);
+      // Back to one set of times: keep the first day's for every day
+      onChangeSharedTimes(copySlots(slotsOf(sortedDates[0])));
     }
     onChangeSameTimeForAll(same);
   };
 
-  const updateDateTimes = (date: Date, patch: Partial<TimeRange>) => {
+  const setDateSlots = (date: Date, slots: TimeSlot[]) => {
     if (disabled || !onChangePerDateTimes) return;
-    const key = formatLocalDate(date);
-    const current = getTimesForDate(perDateTimes, date, sharedTimes);
-    let next: TimeRange = { ...current, ...patch };
-    // Moving the start keeps that day's duration, like the shared picker does
-    if (patch.start !== undefined && current.start && current.end) {
-      next = { ...next, end: calculatePreservedEndTime(patch.start, current.start, current.end) };
-    }
-    if (perDateTimes[key] && next.start === current.start && next.end === current.end) return;
-    onChangePerDateTimes({ ...perDateTimes, [key]: next });
+    onChangePerDateTimes({ ...perDateTimes, [formatLocalDate(date)]: slots });
   };
 
   const copyTimesToAll = (date: Date) => {
     if (disabled || !onChangePerDateTimes) return;
-    const source = getTimesForDate(perDateTimes, date, sharedTimes);
+    const source = slotsOf(date);
     const next: PerDateTimes = { ...perDateTimes };
     sortedDates.forEach((d) => {
-      next[formatLocalDate(d)] = { ...source };
+      next[formatLocalDate(d)] = copySlots(source);
     });
     onChangePerDateTimes(next);
   };
 
+  const onlyShared = sharedTimes.length === 1 ? sharedTimes[0] : null;
   const currentDuration = useMemo(
-    () => calculateTimeDurationMinutes(startTime, endTime),
-    [startTime, endTime]
+    () => (onlyShared ? calculateTimeDurationMinutes(onlyShared.start, onlyShared.end) : null),
+    [onlyShared]
   );
 
   return (
@@ -380,18 +428,18 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
         {usePerDate ? (
           <div className="space-y-2">
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Set the start and end time for each date.
+              Set the start and end time for each date. Add another time if it runs more than once that day.
             </p>
             <ul className="space-y-2">
               {sortedDates.map((d) => {
-                const times = getTimesForDate(perDateTimes, d, sharedTimes);
+                const slots = slotsOf(d);
                 const label = formatDateChipLabel(d);
-                const endBeforeStart = !!times.start && !!times.end && times.end < times.start;
+                const hasProblem = slots.some((s) => !!s.start && !!s.end && s.end < s.start);
                 return (
                   <li
                     key={formatLocalDate(d)}
                     className={`rounded-xl border p-2.5 sm:p-3 ${
-                      endBeforeStart
+                      hasProblem
                         ? 'border-rose-300 dark:border-rose-700 bg-rose-50/40 dark:bg-rose-950/20'
                         : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/30'
                     }`}
@@ -409,36 +457,23 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                          Start
-                        </label>
-                        <TimePickerInput
-                          value={times.start}
-                          onChange={(v) => updateDateTimes(d, { start: v })}
+                    <div className="space-y-2">
+                      {[...slots].sort(compareByStartTime).map((slot) => (
+                        <SlotFields
+                          key={slot.id}
+                          slot={slot}
+                          compact
                           disabled={disabled}
-                          placeholder="09:00"
+                          onChange={(patch) => setDateSlots(d, updateSlot(slots, slot.id, patch))}
+                          onRemove={slots.length > 1 ? () => setDateSlots(d, removeSlot(slots, slot.id)) : undefined}
                         />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                          End
-                        </label>
-                        <TimePickerInput
-                          value={times.end}
-                          onChange={(v) => updateDateTimes(d, { end: v })}
-                          referenceStartTime={times.start}
-                          disabled={disabled}
-                          placeholder="10:00"
-                        />
-                      </div>
+                      ))}
                     </div>
-                    {endBeforeStart && (
-                      <p className="mt-1.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-                        The end time is before the start time.
-                      </p>
-                    )}
+                    <AddTimeButton
+                      disabled={disabled}
+                      onClick={() => setDateSlots(d, addSlotAfter(slots))}
+                      label="Add another time"
+                    />
                   </li>
                 );
               })}
@@ -446,61 +481,60 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Start Time
-                </label>
-                <TimePickerInput
-                  value={startTime}
-                  onChange={handleStartTimeChange}
-                  disabled={disabled}
-                  placeholder="09:00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  End Time
-                </label>
-                <TimePickerInput
-                  value={endTime}
-                  onChange={onChangeEndTime}
-                  referenceStartTime={startTime}
-                  disabled={disabled}
-                  placeholder="10:00"
-                />
-              </div>
+            <div className="space-y-3">
+              {sortedShared.map((slot, i) => (
+                <div key={slot.id}>
+                  {sharedTimes.length > 1 && (
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                      Time {i + 1}
+                    </p>
+                  )}
+                  <SlotFields
+                    slot={slot}
+                    disabled={disabled}
+                    onChange={(patch) => onChangeSharedTimes(updateSlot(sharedTimes, slot.id, patch))}
+                    onRemove={sharedTimes.length > 1 ? () => onChangeSharedTimes(removeSlot(sharedTimes, slot.id)) : undefined}
+                  />
+                </div>
+              ))}
             </div>
 
             {/* Quick Duration Chips */}
-            <div className="flex items-center flex-wrap gap-1.5 pt-1">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
-                Duration:
-              </span>
-              {DURATION_PRESETS.map((preset) => {
-                const isActive = currentDuration === preset.minutes;
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => handleDurationClick(preset.minutes)}
-                    className={`
-                      px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[38px] sm:min-h-[36px] flex items-center justify-center
-                      disabled:opacity-40 disabled:cursor-not-allowed
-                      ${
-                        isActive
-                          ? 'bg-brand-500 text-white shadow-sm ring-1 ring-brand-600'
-                          : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
-                      }
-                    `}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
+            {onlyShared && (
+              <div className="flex items-center flex-wrap gap-1.5 pt-1">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                  Duration:
+                </span>
+                {DURATION_PRESETS.map((preset) => {
+                  const isActive = currentDuration === preset.minutes;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => handleDurationClick(preset.minutes)}
+                      className={`
+                        px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[38px] sm:min-h-[36px] flex items-center justify-center
+                        disabled:opacity-40 disabled:cursor-not-allowed
+                        ${
+                          isActive
+                            ? 'bg-brand-500 text-white shadow-sm ring-1 ring-brand-600'
+                            : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
+                        }
+                      `}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <AddTimeButton
+              disabled={disabled}
+              onClick={() => onChangeSharedTimes(addSlotAfter(sharedTimes))}
+              label={selectedDates.length > 1 ? 'Add another time each day (e.g. morning and evening)' : 'Add another time that day (e.g. morning and evening)'}
+            />
           </>
         )}
       </div>

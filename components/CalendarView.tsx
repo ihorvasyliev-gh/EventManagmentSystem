@@ -80,6 +80,8 @@ interface CalendarViewProps {
   onClearFilters?: () => void;
   /** Active date filter: occurrences of repeating events outside it are hidden too */
   dateRange?: { start?: Date; end?: Date };
+  /** Active place filter: occurrences of a series held elsewhere are hidden too */
+  location?: string;
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({
@@ -90,7 +92,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   userRole,
   hasActiveFilters = false,
   onClearFilters,
-  dateRange
+  dateRange,
+  location
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewModeState] = useState<ViewMode>(
@@ -311,9 +314,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Expand recurring events
   const displayEvents = useMemo(() => {
     const expanded = expandRecurringEvents(events, rangeStart, rangeEnd, recurrenceExceptions)
-      .filter(ev => (!dateRange?.start || ev.date >= dateRange.start) && (!dateRange?.end || ev.date < dateRange.end));
+      .filter(ev => (!dateRange?.start || ev.date >= dateRange.start) && (!dateRange?.end || ev.date < dateRange.end))
+      .filter(ev => !location || ev.location?.trim() === location);
     return expanded.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [events, rangeStart, rangeEnd, recurrenceExceptions, dateRange]);
+  }, [events, rangeStart, rangeEnd, recurrenceExceptions, dateRange, location]);
 
   const toDayKey = (d: Date): string => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

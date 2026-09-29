@@ -72,6 +72,21 @@ export const hasPerDateTimes = (rule?: RecurrenceRule): boolean =>
   !!rule.customDates && rule.customDates.length > 0 &&
   !!rule.customEndDates && rule.customEndDates.length === rule.customDates.length;
 
+/**
+ * True when a custom-dates series stores an address for every date (`customLocations`),
+ * i.e. it is held in different places.
+ */
+export const hasPerSessionPlaces = (rule?: RecurrenceRule): boolean =>
+  !!rule && rule.type === 'custom' &&
+  !!rule.customDates && rule.customDates.length > 0 &&
+  !!rule.customLocations && rule.customLocations.length === rule.customDates.length;
+
+/** Every address an event is held at: its own location plus, for a series in different places, each date's */
+export const getEventLocations = (event: Pick<Event, 'location' | 'recurrence'>): string[] => {
+  const all = [event.location, ...(hasPerSessionPlaces(event.recurrence) ? event.recurrence!.customLocations! : [])];
+  return Array.from(new Set(all.map(l => l?.trim()).filter((l): l is string => !!l)));
+};
+
 /** Instance overlaps [rangeStart, rangeEnd] (multi-day events that started earlier still count). */
 const overlapsRange = (start: Date, end: Date | undefined, rangeStart: Date, rangeEnd: Date): boolean => {
   const effectiveEnd = end && end > start ? end : start;
@@ -115,19 +130,22 @@ export const expandRecurringEvents = (
       : null;
     const isExcluded = (d: Date) => excludedDays?.has(toDayKey(d)) ?? false;
 
-    const pushInstance = (start: Date, end: Date | undefined) => {
+    const pushInstance = (start: Date, end: Date | undefined, location = event.location) => {
       expandedEvents.push({
         ...event,
         instanceKey: `${event.id}_${start.getTime()}`,
         date: start,
         endDate: end,
+        location,
       });
     };
 
     // 2. Custom dates (manually picked): each date takes the time of day of the original event,
-    //    or its own start/end when the series has per-date times
+    //    or its own start/end when the series has per-date times, and its own address when the
+    //    series is held in different places
     if (rule.type === 'custom') {
       const perDate = hasPerDateTimes(rule);
+      const places = hasPerSessionPlaces(rule) ? rule.customLocations! : null;
       const customDates = rule.customDates && rule.customDates.length > 0 ? rule.customDates : [baseStart];
       customDates.forEach((customDate, i) => {
         const d = new Date(customDate);
@@ -141,7 +159,7 @@ export const expandRecurringEvents = (
         }
         if (isNaN(d.getTime()) || isExcluded(d)) return;
         if (overlapsRange(d, end, rangeStart, rangeEnd)) {
-          pushInstance(d, end);
+          pushInstance(d, end, places?.[i]?.trim() || event.location);
         }
       });
       return;

@@ -1,5 +1,7 @@
 import { expandRecurringEvents } from './recurrence.ts';
-import { formatDateChipLabel, getTimesForDate, type PerDateTimes } from './multiDateUtils.ts';
+import {
+  buildOccurrences, formatDateChipLabel, isSameLocalDay, makeSlot, toTimeString, type Occurrence, type PerDateTimes
+} from './multiDateUtils.ts';
 import type { Event } from '../types.ts';
 
 export interface ConflictEvent {
@@ -69,48 +71,24 @@ export interface MultiDateConflictResult {
 }
 
 /**
- * Checks each picked date against existing events. Every date uses the shared start/end
- * times, or its own entry in `perDateTimes` when the event runs at different times per day.
+ * Checks each occurrence (a picked date at one of its times) against existing events.
+ * Occurrences without an end time are not checked.
  */
-export function detectMultiDateConflicts(
-  dates: Date[],
-  startTimeStr: string,
-  endTimeStr: string,
+export function detectOccurrenceConflicts(
+  occurrences: Occurrence[],
   existingEvents: ConflictEvent[],
-  excludeEventId?: string,
-  perDateTimes?: PerDateTimes | null
+  excludeEventId?: string
 ): MultiDateConflictResult {
-  const none: MultiDateConflictResult = { hasConflict: false, conflicts: [], summaryMessage: '' };
-  if (!dates || dates.length === 0) return none;
-
   const conflicts: MultiDateConflictItem[] = [];
 
-  for (const date of dates) {
-    if (!(date instanceof Date) || isNaN(date.getTime())) {
-      continue;
-    }
-
-    const times = getTimesForDate(perDateTimes, date, { start: startTimeStr, end: endTimeStr });
-    if (!times.start || !times.end) continue;
-    const [startH, startM = 0, startS = 0] = times.start.split(':').map(Number);
-    const [endH, endM = 0, endS = 0] = times.end.split(':').map(Number);
-    if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) continue;
-
-    const startDateTime = new Date(date);
-    startDateTime.setHours(startH, startM, startS, 0);
-
-    const endDateTime = new Date(date);
-    endDateTime.setHours(endH, endM, endS, 0);
-
-    if (endDateTime.getTime() <= startDateTime.getTime()) {
+  for (const { start, end } of occurrences) {
+    if (!(start instanceof Date) || isNaN(start.getTime()) || !end || isNaN(end.getTime())) continue;
+    const endDateTime = new Date(end);
+    if (endDateTime.getTime() <= start.getTime()) {
       endDateTime.setDate(endDateTime.getDate() + 1);
     }
 
-    const conflictInfo = detectConflicts(
-      { date: startDateTime, endDate: endDateTime },
-      existingEvents,
-      excludeEventId
-    );
+    const conflictInfo = detectConflicts({ date: start, endDate: endDateTime }, existingEvents, excludeEventId);
 
     if (conflictInfo.hasConflict && conflictInfo.conflictingEvents.length > 0) {
       const count = conflictInfo.conflictingEvents.length;
@@ -119,7 +97,7 @@ export function detectMultiDateConflicts(
         : `At this time: ${count} events (e.g. "${conflictInfo.conflictingEvents[0].title}")`;
 
       conflicts.push({
-        date,
+        date: start,
         conflictingEvents: conflictInfo.conflictingEvents,
         message
       });
@@ -129,7 +107,7 @@ export function detectMultiDateConflicts(
   const summaryMessage = conflicts.length === 0
     ? ''
     : conflicts
-        .map(item => `Conflict on ${formatDateChipLabel(item.date)}: ${item.message}`)
+        .map(item => `Conflict on ${formatConflictDate(item.date, occurrences)}: ${item.message}`)
         .join('; ');
 
   return {
@@ -139,6 +117,33 @@ export function detectMultiDateConflicts(
   };
 }
 
+/** "Fri, 2 Oct", plus the time when the event runs more than once that day */
+export function formatConflictDate(
+  date: Date,
+  occurrences: Pick<Occurrence, 'start'>[],
+  formatDay: (d: Date) => string = formatDateChipLabel
+): string {
+  const label = formatDay(date);
+  const sameDay = occurrences.filter(o => isSameLocalDay(o.start, date)).length;
+  return sameDay > 1 ? `${label}, ${toTimeString(date)}` : label;
+}
+
+/**
+ * Checks each picked date against existing events. Every date uses the shared start/end
+ * times, or its own sessions in `perDateTimes` when the event runs at different times per day.
+ */
+export function detectMultiDateConflicts(
+  dates: Date[],
+  startTimeStr: string,
+  endTimeStr: string,
+  existingEvents: ConflictEvent[],
+  excludeEventId?: string,
+  perDateTimes?: PerDateTimes | null
+): MultiDateConflictResult {
+  const valid = (dates ?? []).filter(d => d instanceof Date && !isNaN(d.getTime()));
+  const occurrences = buildOccurrences(valid, [makeSlot(startTimeStr, endTimeStr)], perDateTimes ?? null);
+  return detectOccurrenceConflicts(occurrences, existingEvents, excludeEventId);
+}
 
 /**
  * Occurrences of `events` around the given days, with recurring series expanded,

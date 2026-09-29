@@ -6,7 +6,7 @@ import { Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { groupDigestOccurrences, formatOccurrenceLabel } from '../utils/digestGrouping';
+import { groupDigestOccurrences, formatAlsoOnDates } from '../utils/digestGrouping';
 import { useToast } from '../contexts/ToastContext';
 import { getCategoryDotColor } from './WeekView';
 import ModalShell from './ModalShell';
@@ -381,7 +381,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{g.event.title}</p>
                       {g.occurrences.length > 1 && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                          Also on {g.occurrences.slice(1).map((o) => formatOccurrenceLabel(o.date, g.event.date)).join(', ')}
+                          Also on {formatAlsoOnDates(g, ', ')}
                         </p>
                       )}
                     </div>

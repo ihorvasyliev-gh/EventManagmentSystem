@@ -6,7 +6,7 @@ import { getCategoryRgb, Rgb } from '../constants/categoryColors';
 import {
   groupDigestOccurrences,
   formatAlsoOnDates,
-  formatOccurrenceLabel,
+  formatGroupOccurrence,
   DigestEventGroup,
   monthShort,
   monthShortUpper
@@ -493,7 +493,7 @@ export const generateEventsDigestPDF = async (
       eventsByDay.set(key, list);
     }
   }
-  const venues = new Set(groups.map((g) => g.event.location?.trim().toLowerCase()).filter(Boolean));
+  const venues = new Set(groups.flatMap((g) => g.occurrences.map((o) => o.location?.trim().toLowerCase())).filter(Boolean));
   const eventDays = new Set(groups.flatMap((g) => g.occurrences.map((o) => dayKeyOf(toDate(o.date)!))));
   const categories = Array.from(new Set(groups.map((g) => g.event.category || 'Other')));
 
@@ -895,7 +895,7 @@ export const generateEventsDigestPDF = async (
     const DESC_LH = 3.85;
 
     // "Also on" chips
-    const alsoOn = group.occurrences.slice(1).map((o) => formatOccurrenceLabel(o.date, ev.date)).filter(Boolean);
+    const alsoOn = group.occurrences.slice(1).map((o) => txt(formatGroupOccurrence(o, ev, 28))).filter(Boolean);
     const CHIP_H = 4.6;
     const chipRows: Array<Array<{ label: string; w: number }>> = [];
     if (alsoOn.length) {
@@ -1144,7 +1144,7 @@ export const generateEventsDigestPDF = async (
     font('regular', 7);
     const descLine = truncate(txt(ev.description || ''), eventW);
     font('semibold', 6.6);
-    const alsoOn = formatAlsoOnDates(group, ', ');
+    const alsoOn = txt(formatAlsoOnDates(group, ', '));
     const alsoLines: string[] = alsoOn ? doc.splitTextToSize(`Also on ${alsoOn}`, eventW) : [];
     font('regular', 7.3);
     const venueLines = fitLines(txt(ev.location), venueW, 3);
@@ -1386,7 +1386,7 @@ export const generateWhatsAppSummary = (
     const timeStr = cleanWa(formatEventTime(ev.date, ev.endDate));
     const titleStr = cleanWa(ev.title);
     text += `⏰ ${timeStr} | ${titleStr}\n`;
-    const alsoOn = formatAlsoOnDates(group, '; ');
+    const alsoOn = cleanWa(formatAlsoOnDates(group, '; '));
     if (alsoOn) {
       text += `🔁 Also on: ${alsoOn}\n`;
     }

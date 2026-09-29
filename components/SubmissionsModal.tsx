@@ -5,9 +5,8 @@ import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
 import { getCategoryDotColor } from './WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
-import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
-import { readScheduleFromEvent, getTimesForDate, formatTimeRange } from '../utils/multiDateUtils';
-import { formatLocalDate } from '../utils/date';
+import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { readScheduleFromEvent, formatTimeRange, listSessions, buildOccurrences } from '../utils/multiDateUtils';
 
 interface SubmissionsModalProps {
   isOpen: boolean;
@@ -20,9 +19,6 @@ interface SubmissionsModalProps {
   onReject: (eventId: string) => Promise<void>;
   onApproveAll?: () => Promise<void>;
 }
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-const clock = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
 const submittedAgo = (d?: Date): string => {
   if (!d || isNaN(d.getTime())) return '';
@@ -128,18 +124,17 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const isProcessing = processingId === event.id;
               const isConfirmingReject = rejectConfirmId === event.id;
               const imgUrl = event.posterUrl || event.attachments?.find((a) => a.type === 'image')?.url;
-              const schedule = readScheduleFromEvent(event);
-              const dates = [...schedule.dates].sort((a, b) => a.getTime() - b.getTime());
+              const schedule = readScheduleFromEvent(event, null);
+              const dates = schedule.dates;
               const perDate = schedule.sameTime ? null : schedule.perDate;
-              const sharedTimes = { start: clock(event.date), end: event.endDate ? clock(event.endDate) : '' };
-              const conflict = detectMultiDateConflicts(
-                dates,
-                sharedTimes.start,
-                sharedTimes.end,
-                getOccurrencesAroundDates(published, dates),
-                undefined,
-                perDate
+              const places = schedule.samePlace ? null : schedule.places;
+              const sessions = listSessions(dates, schedule.shared, perDate);
+              const conflict = detectOccurrenceConflicts(
+                buildOccurrences(dates, schedule.shared, perDate),
+                getOccurrencesAroundDates(published, dates)
               );
+              // Each date and time on its own line when times or places differ
+              const listEach = !!perDate || schedule.shared.length > 1 || !!places;
 
               return (
                 <li key={event.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden">
@@ -152,15 +147,21 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                       <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug break-words">{event.title}</h3>
 
                       <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
-                        {perDate ? (
+                        {listEach ? (
                           <div className="flex items-start gap-2">
                             <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                            <ul className="space-y-0.5">
-                              {dates.map((d) => (
-                                <li key={formatLocalDate(d)}>
-                                  {formatOccurrenceLabel(d)}{' '}
+                            <ul className="space-y-0.5 min-w-0">
+                              {sessions.map((s) => (
+                                <li key={s.key} className="break-words">
+                                  {formatOccurrenceLabel(s.day)}{' '}
                                   <span className="text-slate-400 dark:text-slate-500">·</span>{' '}
-                                  {formatTimeRange(getTimesForDate(perDate, d, sharedTimes))}
+                                  {formatTimeRange(s.slot)}
+                                  {places && (
+                                    <>
+                                      {' '}<span className="text-slate-400 dark:text-slate-500">·</span>{' '}
+                                      {places[s.key]}
+                                    </>
+                                  )}
                                 </li>
                               ))}
                             </ul>
@@ -173,11 +174,11 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                             </p>
                             <p className="flex items-center gap-2">
                               <Clock className="w-4 h-4 shrink-0 text-slate-400" />
-                              {formatTimeRange(sharedTimes)}
+                              {formatTimeRange(schedule.shared[0])}
                             </p>
                           </>
                         )}
-                        {event.location && (
+                        {!places && event.location && (
                           <p className="flex items-start gap-2">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
                             <span className="break-words">{event.location}</span>

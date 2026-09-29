@@ -65,11 +65,28 @@ export const formatOccurrenceLabel = (occurrence: Date | string, first?: Date | 
   return label;
 };
 
+/**
+ * Label for an extra occurrence of a group, e.g. "Sat 26 Sep, 14:00". A series held in
+ * different places adds the address when it differs from the first occurrence's
+ * ("Sat 26 Sep at Mahon Library"), cut to `maxPlaceLength` characters.
+ */
+export const formatGroupOccurrence = (
+  occurrence: Pick<Event, 'date' | 'location'>,
+  first: Pick<Event, 'date' | 'location'>,
+  maxPlaceLength = Infinity
+): string => {
+  const label = formatOccurrenceLabel(occurrence.date, first.date);
+  const place = occurrence.location?.trim() ?? '';
+  if (!label || !place || place === (first.location?.trim() ?? '')) return label;
+  const shortPlace = place.length > maxPlaceLength ? `${place.slice(0, Math.max(1, maxPlaceLength - 1)).trimEnd()}…` : place;
+  return `${label} at ${shortPlace}`;
+};
+
 /** "Also on" line for a group, or '' when the event occurs only once in the period */
 export const formatAlsoOnDates = (group: DigestEventGroup, separator = '  ·  '): string =>
   group.occurrences
     .slice(1)
-    .map((occ) => formatOccurrenceLabel(occ.date, group.event.date))
+    .map((occ) => formatGroupOccurrence(occ, group.event))
     .filter(Boolean)
     .join(separator);
 

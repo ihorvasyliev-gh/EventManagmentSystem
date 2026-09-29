@@ -4,6 +4,7 @@ import {
   groupDigestOccurrences,
   formatAlsoOnDates,
   formatOccurrenceLabel,
+  formatGroupOccurrence,
 } from '../utils/digestGrouping.ts';
 import type { Event } from '../types.ts';
 
@@ -67,4 +68,14 @@ test('formatAlsoOnDates accepts a custom separator', () => {
     makeEvent('a', new Date(2026, 9, 1, 10, 0)),
   ]);
   assert.equal(formatAlsoOnDates(group, '; '), 'Sat 26 Sep, 14:00; Thu 1 Oct');
+});
+
+test('"Also on" names the place when a series moves between venues', () => {
+  const [group] = groupDigestOccurrences([
+    makeEvent('a', new Date(2026, 9, 1, 10, 0), { location: 'Heron House' }),
+    makeEvent('a', new Date(2026, 9, 1, 18, 0), { location: 'Mahon Community Centre' }),
+    makeEvent('a', new Date(2026, 9, 2, 10, 0), { location: 'Heron House' }),
+  ]);
+  assert.equal(formatAlsoOnDates(group, '; '), 'Thu 1 Oct, 18:00 at Mahon Community Centre; Fri 2 Oct');
+  assert.equal(formatGroupOccurrence(group.occurrences[1], group.event, 10), 'Thu 1 Oct, 18:00 at Mahon Com…');
 });

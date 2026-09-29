@@ -1,5 +1,5 @@
 import { Event, EventFilters, UserRole } from '../types.ts';
-import { expandRecurringEvents } from './recurrence.ts';
+import { expandRecurringEvents, getEventLocations } from './recurrence.ts';
 
 // Open-ended date filters still need a finite window to look for occurrences in
 const OPEN_RANGE_YEARS = 5;
@@ -13,7 +13,7 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     filtered = filtered.filter(event =>
       event.title.toLowerCase().includes(searchLower) ||
       (event.description || '').toLowerCase().includes(searchLower) ||
-      (event.location || '').toLowerCase().includes(searchLower) ||
+      getEventLocations(event).some(l => l.toLowerCase().includes(searchLower)) ||
       (event.category || '').toLowerCase().includes(searchLower) ||
       (event.submitterName || '').toLowerCase().includes(searchLower) ||
       event.tags?.some(tag => tag.toLowerCase().includes(searchLower))
@@ -61,9 +61,9 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     });
   }
 
-  // Location filter
+  // Location filter (a series held in different places matches any of its addresses)
   if (filters.location) {
-    filtered = filtered.filter(event => event.location === filters.location);
+    filtered = filtered.filter(event => getEventLocations(event).includes(filters.location!));
   }
 
   // Creator filter

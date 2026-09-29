@@ -77,7 +77,8 @@ Set up the database in the Supabase SQL Editor. Run `supabase-setup.sql` first, 
 | `event-comments-occurrence-migration.sql` | Comments per occurrence |
 | `submission-migration.sql` | Anonymous `/submit` drafts |
 | `realtime-events-migration.sql` | Live updates without refreshing |
-| `add-custom-end-dates-migration.sql` | A different time on each date of a multi-date event |
+| `add-custom-end-dates-migration.sql` | A different time on each date of a multi-date event (and several times on one date) |
+| `add-custom-locations-migration.sql` | A different address on each date / time of a multi-date event |
 | `fix-category-constraint.sql`, `update-categories-to-standard.sql` | The standard CCP category list |
 
 Start the dev server:

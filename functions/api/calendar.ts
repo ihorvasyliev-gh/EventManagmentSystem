@@ -33,6 +33,7 @@ interface SupabaseEvent {
     recurrence_days_of_week: number[] | null;
     recurrence_custom_dates: string[] | null;
     recurrence_custom_end_dates?: string[] | null;
+    recurrence_custom_locations?: (string | null)[] | null;
     created_at: string;
 }
 
@@ -114,7 +115,7 @@ function expandRecurring(
         const durationMs = baseEnd && baseEnd >= baseStart ? baseEnd.getTime() - baseStart.getTime() : null;
         const type = ev.recurrence_type;
 
-        const pushInstance = (start: Date, ownEnd?: Date | null) => {
+        const pushInstance = (start: Date, ownEnd?: Date | null, location: string | null = ev.location) => {
             if (start < rangeStart || start > rangeEnd) return;
             if (exceptions.get(ev.id)?.has(wallDayKey(start))) return;
             const end = ownEnd !== undefined
@@ -125,6 +126,7 @@ function expandRecurring(
                 id: `${ev.id}_${start.getTime()}`,
                 date: start.toISOString(),
                 end_date: end ? end.toISOString() : null,
+                location,
             });
         };
 
@@ -136,22 +138,26 @@ function expandRecurring(
         const base = toWall(baseStart);
 
         // Custom dates: each picked day at the original time of day, or at its own
-        // start/end when the series stores per-date times
+        // start/end when the series stores per-date times, and at its own address when
+        // the series is held in different places
         if (type === 'custom') {
             const dates = ev.recurrence_custom_dates && ev.recurrence_custom_dates.length > 0
                 ? ev.recurrence_custom_dates
                 : [ev.date];
             const ends = ev.recurrence_custom_end_dates;
             const perDate = !!ends && ends.length === dates.length;
+            const places = ev.recurrence_custom_locations;
+            const perPlace = !!places && places.length === dates.length;
             dates.forEach((iso, i) => {
                 const day = new Date(iso);
                 if (isNaN(day.getTime())) return;
+                const location = (perPlace && places![i]?.trim()) || ev.location;
                 if (perDate) {
                     const end = new Date(ends![i]);
-                    pushInstance(day, end.getTime() > day.getTime() ? end : null);
+                    pushInstance(day, end.getTime() > day.getTime() ? end : null, location);
                 } else {
                     const w = toWall(day);
-                    pushInstance(fromWall(w.y, w.m, w.d, base.h, base.mi, base.s));
+                    pushInstance(fromWall(w.y, w.m, w.d, base.h, base.mi, base.s), undefined, location);
                 }
             });
             continue;
@@ -384,6 +390,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                                     const originalEnd = new Date(ev.end_date).getTime();
                                     const duration = Math.max(30 * 60 * 1000, originalEnd - originalStart);
                                     ev.end_date = new Date(parsed.getTime() + duration).toISOString();
+                                }
+                                // Series in different places: that date's own address
+                                const places = ev.recurrence_custom_locations;
+                                const placeIdx = places && ev.recurrence_custom_dates?.length === places.length
+                                    ? ev.recurrence_custom_dates.findIndex(d => new Date(d).getTime() === parsed.getTime())
+                                    : -1;
+                                if (placeIdx >= 0 && places![placeIdx]?.trim()) {
+                                    ev.location = places![placeIdx]!.trim();
                                 }
                                 ev.date = parsed.toISOString();
                             }

@@ -35,6 +35,11 @@ export interface RecurrenceRule {
    * own start (the time stored in `customDates`) and end time instead of the series time.
    */
   customEndDates?: Date[];
+  /**
+   * Address of each `customDates` entry, for a series held in different places. An empty
+   * entry means the event's own `location`.
+   */
+  customLocations?: string[];
 }
 
 export interface Attachment {

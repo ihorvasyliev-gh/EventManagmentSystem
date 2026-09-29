@@ -14,7 +14,7 @@ import { logout as logoutService, getCurrentUser } from './services/authService'
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
-import { expandRecurringEvents } from './utils/recurrence';
+import { expandRecurringEvents, getEventLocations } from './utils/recurrence';
 import { getCachedUser, cacheUser, clearUserCache } from './utils/sessionCache';
 import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions } from './utils/eventsCache';
 import { isSameDay } from './utils/date';
@@ -699,7 +699,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       try {
         if (schedule) {
           await saveCustomSchedule(eventId, schedule, user.id, user.fullName, instanceDate);
-          showToast('Date removed from the event', 'success');
+          showToast('Removed from the event', 'success');
         } else {
           await deleteEvent(eventId, user.id, user.fullName);
           showToast('That was the last date, so the event was deleted', 'success');
@@ -893,7 +893,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   // Extract unique values for filters
   const availableLocations = useMemo(() => {
-    return Array.from(new Set<string>(events.map(e => e.location?.trim()).filter((l): l is string => !!l)))
+    return Array.from(new Set<string>(events.flatMap(getEventLocations)))
       .sort((a, b) => a.localeCompare(b));
   }, [events]);
 
@@ -1086,6 +1086,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearAllFilters}
             dateRange={filters.dateRange}
+            location={filters.location}
           />
         )}
       </main>

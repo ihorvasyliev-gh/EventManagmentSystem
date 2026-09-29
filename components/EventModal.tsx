@@ -13,10 +13,13 @@ import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
 import PosterLightbox, { PosterDownloadButton } from './PosterLightbox';
 import MultiDatePicker from './MultiDatePicker';
-import { PerDateTimes, buildOccurrences, buildSchedule, validateOccurrenceTimes, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
+import SessionPlaces from './SessionPlaces';
+import { makeSlot, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
+import { useEventSchedule } from '../hooks/useEventSchedule';
+import { getEventLocations } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
-import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { useToast } from '../contexts/ToastContext';
 import { exportToICal, downloadFile } from '../utils/export';
 
@@ -90,18 +93,18 @@ const EventModal: React.FC<EventModalProps> = ({
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedDates, setSelectedDates] = useState<Date[]>(() => {
-    if (event?.recurrence?.type === 'custom' && event.recurrence.customDates && event.recurrence.customDates.length > 0) {
-      return event.recurrence.customDates.map(d => new Date(d));
-    }
-    return [event?.date ? new Date(event.date) : new Date()];
-  });
-  const [startTimeStr, setStartTimeStr] = useState('10:00');
-  const [endTimeStr, setEndTimeStr] = useState('11:30');
-  const [sameTimeForAll, setSameTimeForAll] = useState(true);
-  const [perDateTimes, setPerDateTimes] = useState<PerDateTimes>({});
-  const activePerDate = sameTimeForAll ? null : perDateTimes;
-  const [location, setLocation] = useState('');
+  // Dates, times and places (filled from the event when the form opens)
+  const scheduleControls = useEventSchedule(() => ({
+    dates: [event?.date ? new Date(event.date) : new Date()],
+    shared: [makeSlot('10:00', '11:30', 't1')],
+    sameTime: true,
+    perDate: {},
+    samePlace: true,
+    location: '',
+    places: {},
+  }));
+  const { schedule, update: updateSchedule, sessions, occurrences } = scheduleControls;
+  const { dates: selectedDates, shared: sharedTimes, sameTime: sameTimeForAll, perDate: perDateTimes, samePlace, location, places } = schedule;
   const [category, setCategory] = useState<EventCategory | ''>('');
   const [status, setStatus] = useState<EventStatus>('published');
   const [tags, setTags] = useState<string>('');
@@ -186,9 +189,14 @@ const EventModal: React.FC<EventModalProps> = ({
     if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0) {
       return { hasConflict: false, conflicts: [], summaryMessage: '' };
     }
-    const occurrences = getOccurrencesAroundDates(events || [], selectedDates);
-    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id, activePerDate);
-  }, [selectedDates, startTimeStr, endTimeStr, activePerDate, events, event?.id, isOpen, showForm]);
+    return detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(events || [], selectedDates), event?.id);
+  }, [selectedDates, occurrences, events, event?.id, isOpen, showForm]);
+
+  // Addresses used before, offered while typing a per-date address
+  const knownVenues = useMemo(
+    () => Array.from(new Set<string>((events || []).flatMap(getEventLocations))).sort((a, b) => a.localeCompare(b)),
+    [events]
+  );
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
@@ -215,7 +223,6 @@ const EventModal: React.FC<EventModalProps> = ({
 
         setTitle(event.title);
         setDescription(event.description);
-        setLocation(event.location);
         setCategory(event.category || '');
         setStatus(autoApproveOnSave ? 'published' : (event.status || 'published'));
         setTags(event.tags?.join(', ') || '');
@@ -245,12 +252,7 @@ const EventModal: React.FC<EventModalProps> = ({
 
         // Days deleted earlier ("Delete only this occurrence") are left out of hand-picked dates
         const remaining = materializeCustomSchedule(source, exceptionsRef.current?.get(source.id));
-        const schedule = readScheduleFromEvent(remaining ? { ...source, ...remaining } : source);
-        setSelectedDates(schedule.dates);
-        setStartTimeStr(schedule.shared.start);
-        setEndTimeStr(schedule.shared.end);
-        setSameTimeForAll(schedule.sameTime);
-        setPerDateTimes(schedule.perDate);
+        scheduleControls.reset(readScheduleFromEvent(remaining ? { ...source, ...remaining } : source));
 
         setPosterFile(null);
 
@@ -306,7 +308,6 @@ const EventModal: React.FC<EventModalProps> = ({
     draftAppliedRef.current = true;
     setTitle(draft.title || '');
     setDescription(draft.description || '');
-    setLocation(draft.location || '');
     setCategory(draft.category || '');
     setStatus(draft.status || 'published');
     setTags(draft.tags?.join(', ') || '');
@@ -316,12 +317,7 @@ const EventModal: React.FC<EventModalProps> = ({
     setMaxAttendees(draft.maxAttendees || '');
     setPreviewUrl(draft.posterUrl || null);
     setAttachments(draft.attachments || []);
-    const draftSchedule = readScheduleFromEvent(draft);
-    setSelectedDates(draftSchedule.dates);
-    setStartTimeStr(draftSchedule.shared.start);
-    setEndTimeStr(draftSchedule.shared.end);
-    setSameTimeForAll(draftSchedule.sameTime);
-    setPerDateTimes(draftSchedule.perDate);
+    scheduleControls.reset(readScheduleFromEvent({ ...draft, location: draft.location || '' }));
     if (draft.recurrence && draft.recurrence.type !== 'custom') {
       setRecurrenceType(draft.recurrence.type);
       setRecurrenceInterval(draft.recurrence.interval || 1);
@@ -332,9 +328,8 @@ const EventModal: React.FC<EventModalProps> = ({
 
   // Unsaved-changes tracking: snapshot of the form right after it was initialised
   const formSnapshot = JSON.stringify([
-    title, description, location, category, status, tags, submitterName, submitterEmail,
-    rsvpEnabled, maxAttendees, selectedDates.map(d => formatLocalDate(d)), startTimeStr, endTimeStr,
-    sameTimeForAll, sameTimeForAll ? null : selectedDates.map(d => perDateTimes[formatLocalDate(d)] ?? null),
+    title, description, category, status, tags, submitterName, submitterEmail,
+    rsvpEnabled, maxAttendees, scheduleControls.snapshot,
     recurrenceType, recurrenceInterval, recurrenceEndDate, previewUrl, posterFile?.name ?? null
   ]);
   const baselineRef = useRef<string | null>(null);
@@ -444,26 +439,27 @@ const EventModal: React.FC<EventModalProps> = ({
       setFieldErrors(prev => ({ ...prev, date: 'Please select at least one date' }));
       return;
     }
-    const sharedTimes = { start: startTimeStr, end: endTimeStr };
-    const timeError = validateOccurrenceTimes(selectedDates, sharedTimes, activePerDate);
+    const timeError = scheduleControls.validateTimes();
     if (timeError) {
       setFieldErrors(prev => ({ ...prev, date: timeError }));
       return;
     }
 
-    const occurrences = buildOccurrences(selectedDates, sharedTimes, activePerDate);
     if (occurrences.length === 0) {
       setFieldErrors(prev => ({ ...prev, date: 'Invalid start date or time.' }));
       return;
     }
-    const schedule = buildSchedule(occurrences, !!activePerDate);
-    const startDateTime = schedule.date;
-    const endDateTime = schedule.endDate;
 
-    if (!location.trim()) {
-      setFieldErrors(prev => ({ ...prev, location: 'Please specify the venue/location.' }));
+    const placeError = samePlace
+      ? (!location.trim() ? 'Please specify the venue/location.' : null)
+      : scheduleControls.validatePlaces();
+    if (placeError) {
+      setFieldErrors(prev => ({ ...prev, location: placeError }));
       return;
     }
+    const builtSchedule = scheduleControls.build();
+    const startDateTime = builtSchedule.date;
+    const endDateTime = builtSchedule.endDate;
     if (!description.trim()) {
       setFieldErrors(prev => ({ ...prev, description: 'Please provide a description.' }));
       return;
@@ -472,8 +468,8 @@ const EventModal: React.FC<EventModalProps> = ({
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     let recurrence: Event['recurrence'] = undefined;
-    if (schedule.recurrence) {
-      recurrence = schedule.recurrence;
+    if (builtSchedule.recurrence) {
+      recurrence = builtSchedule.recurrence;
     } else if (['daily', 'weekly', 'monthly', 'yearly'].includes(recurrenceType)) {
       recurrence = {
         type: recurrenceType as 'daily' | 'weekly' | 'monthly' | 'yearly',
@@ -485,7 +481,7 @@ const EventModal: React.FC<EventModalProps> = ({
     const eventDataToValidate = {
       title: title.trim(),
       description: description.trim(),
-      location: location.trim(),
+      location: builtSchedule.location,
       date: startDateTime,
       endDate: endDateTime,
       category: category || undefined,
@@ -544,7 +540,7 @@ const EventModal: React.FC<EventModalProps> = ({
       const fullEventData = {
         title: title.trim(),
         description: description.trim(),
-        location: location.trim(),
+        location: builtSchedule.location,
         date: startDateTime,
         endDate: endDateTime,
         posterUrl: finalPosterUrl,
@@ -1126,27 +1122,22 @@ const EventModal: React.FC<EventModalProps> = ({
                   <MultiDatePicker
                     selectedDates={selectedDates}
                     onChangeDates={(dates) => {
-                      setSelectedDates(dates);
+                      updateSchedule({ dates });
                       if (dates.length > 0) clearFieldError('date');
                     }}
-                    startTime={startTimeStr}
-                    onChangeStartTime={(t) => {
-                      setStartTimeStr(t);
-                      clearFieldError('date');
-                    }}
-                    endTime={endTimeStr}
-                    onChangeEndTime={(t) => {
-                      setEndTimeStr(t);
+                    sharedTimes={sharedTimes}
+                    onChangeSharedTimes={(times) => {
+                      updateSchedule({ shared: times });
                       clearFieldError('date');
                     }}
                     sameTimeForAll={sameTimeForAll}
                     onChangeSameTimeForAll={(same) => {
-                      setSameTimeForAll(same);
+                      updateSchedule({ sameTime: same });
                       clearFieldError('date');
                     }}
                     perDateTimes={perDateTimes}
                     onChangePerDateTimes={(times) => {
-                      setPerDateTimes(times);
+                      updateSchedule({ perDate: times });
                       clearFieldError('date');
                     }}
                     error={fieldErrors.date}
@@ -1168,18 +1159,34 @@ const EventModal: React.FC<EventModalProps> = ({
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                     Location / Venue <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 sm:top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      required
-                      type="text"
-                      value={location}
-                      onChange={(e) => { setLocation(e.target.value); clearFieldError('location'); }}
-                      className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
-                      placeholder="e.g. Heron House, Room 4 / Mahon Community Centre"
+                  {samePlace && (
+                    <>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-3 sm:top-2.5 h-4 w-4 text-slate-400" />
+                        <input
+                          required
+                          type="text"
+                          value={location}
+                          onChange={(e) => { updateSchedule({ location: e.target.value }); clearFieldError('location'); }}
+                          className={`block w-full pl-9 rounded-lg bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 ${fieldErrors.location ? 'border-2 border-red-500 dark:border-red-500' : 'border border-slate-200 dark:border-slate-700 focus:border-brand-500'}`}
+                          placeholder="e.g. Heron House, Room 4 / Mahon Community Centre"
+                        />
+                      </div>
+                      {fieldErrors.location && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.location}</p>}
+                    </>
+                  )}
+                  <div className={samePlace ? 'mt-1.5' : ''}>
+                    <SessionPlaces
+                      id="event-session-places"
+                      sessions={sessions}
+                      samePlace={samePlace}
+                      onChangeSamePlace={(same) => { scheduleControls.setSamePlace(same); clearFieldError('location'); }}
+                      places={places}
+                      onChangePlaces={(next) => { updateSchedule({ places: next }); clearFieldError('location'); }}
+                      suggestions={knownVenues}
+                      error={samePlace ? undefined : fieldErrors.location}
                     />
                   </div>
-                  {fieldErrors.location && <p className="text-red-500 dark:text-red-400 text-xs mt-1" role="alert">{fieldErrors.location}</p>}
                 </div>
 
                 {/* 5. Short Description */}
@@ -1295,13 +1302,13 @@ const EventModal: React.FC<EventModalProps> = ({
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">RECURRENCE</h4>
                   <div className="space-y-4">
-                    <div className={selectedDates.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : ''}>
+                    <div className={sessions.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : ''}>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Repeat</label>
                         <select
-                          value={selectedDates.length > 1 ? 'custom' : recurrenceType}
+                          value={sessions.length > 1 ? 'custom' : recurrenceType}
                           onChange={(e) => setRecurrenceType(e.target.value as any)}
-                          disabled={selectedDates.length > 1}
+                          disabled={sessions.length > 1}
                           className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-2.5 py-2.5 sm:py-1.5 text-sm focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[44px] sm:min-h-0 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="none">None</option>
@@ -1313,7 +1320,7 @@ const EventModal: React.FC<EventModalProps> = ({
                         </select>
                       </div>
 
-                      {selectedDates.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' && (
+                      {sessions.length <= 1 && recurrenceType !== 'none' && recurrenceType !== 'custom' && (
                         <>
                           <div>
                             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Interval (Every X)</label>
@@ -1338,12 +1345,13 @@ const EventModal: React.FC<EventModalProps> = ({
                       )}
                     </div>
 
-                    {selectedDates.length > 1 && (
+                    {sessions.length > 1 && (
                       <p className="text-xs text-brand-600 dark:text-brand-400 font-medium">
-                        Multi-day custom schedule active ({selectedDates.length} dates selected above).
+                        Multi-day custom schedule active ({selectedDates.length} {selectedDates.length === 1 ? 'date' : 'dates'}
+                        {sessions.length > selectedDates.length ? `, ${sessions.length} times` : ''} selected above).
                       </p>
                     )}
-                    {selectedDates.length <= 1 && recurrenceType === 'custom' && (
+                    {sessions.length <= 1 && recurrenceType === 'custom' && (
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         Select additional dates on the calendar above to set custom recurring dates.
                       </p>

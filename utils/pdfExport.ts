@@ -1,5 +1,6 @@
 import type jsPDF from 'jspdf';
 import { createScreenOnlyLayer } from './pdfScreenOnly.ts';
+import { type LayoutBlock, paginate, pickLayout } from './pdfLayout.ts';
 import { Event } from '../types';
 import { formatLocalDate, isMultiDayEvent } from './date';
 import { getCategoryRgb, Rgb } from '../constants/categoryColors';
@@ -347,15 +348,30 @@ const GOOGLE_BG: Rgb = [241, 245, 249];
 // Digest generator
 // ---------------------------------------------------------------------------
 
-interface Block {
-  h: number;
-  /** Must stay on the same page as the next block (headers) */
-  keepWithNext?: boolean;
-  /** Day the block belongs to (cards), used to repeat the day header after a page break */
-  dayKey?: string;
-  isDayHeader?: boolean;
+interface Block extends LayoutBlock {
   draw: (y: number) => void;
 }
+
+/**
+ * Spacing presets for the executive digest, from roomiest to tightest. The tighter ones
+ * are only used when they stop an event from being pushed to the next page for want of
+ * a few millimetres, leaving a large empty gap behind it.
+ */
+interface Density {
+  /** "At a glance" row height (null: by number of weeks) */
+  glanceCellH: number | null;
+  weekBannerH: number;
+  dayHeaderH: number;
+  cardPadY: number;
+  cardGap: number;
+  flyerMaxH: number;
+}
+
+const DENSITIES: Density[] = [
+  { glanceCellH: null, weekBannerH: 11, dayHeaderH: 15, cardPadY: 4.6, cardGap: 3.2, flyerMaxH: 42 },
+  { glanceCellH: 10.5, weekBannerH: 10, dayHeaderH: 14, cardPadY: 4.1, cardGap: 2.7, flyerMaxH: 37 },
+  { glanceCellH: 10, weekBannerH: 9.5, dayHeaderH: 13.5, cardPadY: 3.7, cardGap: 2.3, flyerMaxH: 32 }
+];
 
 /**
  * Generate the Upcoming Events Digest PDF.
@@ -594,10 +610,10 @@ export const generateEventsDigestPDF = async (
   // The compact table is about density, so it skips the mini calendar
   const showGlance = isExecutive && groups.length > 0 && gridRows <= 6;
   // Longer periods get shorter rows so the first cards still fit on page 1
-  const GLANCE_CELL_H = gridRows >= 5 ? 11 : 12.5;
-  const glanceHeight = showGlance ? 7 + 5 + gridRows * GLANCE_CELL_H : 0;
+  const glanceCellH = (d: Density) => d.glanceCellH ?? (gridRows >= 5 ? 11 : 12.5);
+  const glanceHeight = (d: Density) => showGlance ? 7 + 5 + gridRows * glanceCellH(d) : 0;
 
-  const drawGlance = (top: number) => {
+  const drawGlance = (top: number, cellH: number) => {
     font('semibold', 7);
     color(MUTED);
     spaced('AT A GLANCE', M, top + 3, 0.5);
@@ -609,7 +625,7 @@ export const generateEventsDigestPDF = async (
     WEEKDAY_HEADERS.forEach((d, i) => spaced(d, M + i * cellW + cellW / 2, gy + 3, 0.3, 'center'));
 
     const rowsTop = gy + 5;
-    const gridH = gridRows * GLANCE_CELL_H;
+    const gridH = gridRows * cellH;
     fill(WHITE);
     doc.roundedRect(M, rowsTop, CW, gridH, 2, 2, 'F');
 
@@ -618,7 +634,7 @@ export const generateEventsDigestPDF = async (
       const col = i % 7;
       const row = Math.floor(i / 7);
       const x = M + col * cellW;
-      const y = rowsTop + row * GLANCE_CELL_H;
+      const y = rowsTop + row * cellH;
       const inRange = d >= startOfLocalDay(periodStart) && d <= startOfLocalDay(periodEnd);
       const key = dayKeyOf(d);
       const dayEvents = inRange ? eventsByDay.get(key) || [] : [];
@@ -626,20 +642,22 @@ export const generateEventsDigestPDF = async (
 
       if (!inRange) {
         fill(BG);
-        doc.rect(x, y, cellW, GLANCE_CELL_H, 'F');
+        doc.rect(x, y, cellW, cellH, 'F');
       } else if (dayEvents.length > 0) {
         fill([255, 250, 250]);
-        doc.rect(x, y, cellW, GLANCE_CELL_H, 'F');
+        doc.rect(x, y, cellW, cellH, 'F');
       }
 
       // Day number (with month on the 1st and on the first cell)
       const showMonth = d.getDate() === 1 || i === 0;
       if (isToday) {
+        // A smaller, higher circle in short rows keeps clear of the event dots
+        const short = cellH < 11;
         fill(RED);
-        doc.circle(x + 4.3, y + 3.9, 2.55, 'F');
+        doc.circle(x + 4.3, y + (short ? 3.5 : 3.9), short ? 2.3 : 2.55, 'F');
         font('bold', 7.5);
         color(WHITE);
-        doc.text(String(d.getDate()), x + 4.3, y + 4.95, { align: 'center' });
+        doc.text(String(d.getDate()), x + 4.3, y + (short ? 4.55 : 4.95), { align: 'center' });
       } else {
         font(dayEvents.length ? 'bold' : 'medium', 7.5);
         color(inRange ? (dayEvents.length ? INK : MUTED) : FAINT);
@@ -657,19 +675,19 @@ export const generateEventsDigestPDF = async (
         const maxDots = 5;
         dayEvents.slice(0, maxDots).forEach((ev, idx) => {
           fill(getCategoryRgb(ev.category).accent);
-          doc.circle(x + 3 + idx * 2.5, y + GLANCE_CELL_H - 3.1, 0.85, 'F');
+          doc.circle(x + 3 + idx * 2.5, y + cellH - 3.1, 0.85, 'F');
         });
         font('semibold', 6);
         color(MUTED);
         const label = dayEvents.length === 1 ? '1 event' : `${dayEvents.length} events`;
-        doc.text(label, x + cellW - 2, y + GLANCE_CELL_H - 2.3, { align: 'right' });
+        doc.text(label, x + cellW - 2, y + cellH - 2.3, { align: 'right' });
       }
     }
 
     // Grid lines
     stroke(BORDER, 0.2);
     for (let c = 1; c < 7; c++) doc.line(M + c * cellW, rowsTop, M + c * cellW, rowsTop + gridH);
-    for (let r = 1; r < gridRows; r++) doc.line(M, rowsTop + r * GLANCE_CELL_H, M + CW, rowsTop + r * GLANCE_CELL_H);
+    for (let r = 1; r < gridRows; r++) doc.line(M, rowsTop + r * cellH, M + CW, rowsTop + r * cellH);
     stroke(BORDER, 0.3);
     doc.roundedRect(M, rowsTop, CW, gridH, 2, 2, 'S');
   };
@@ -734,7 +752,7 @@ export const generateEventsDigestPDF = async (
   const weekIndexOf = (d: Date) =>
     Math.floor((startOfLocalDay(d).getTime() - periodDayStart.getTime()) / (7 * 86400000));
 
-  const weekBanner = (weekIndex: number): Block => {
+  const weekBanner = (weekIndex: number, h: number): Block => {
     const wStart = addDays(periodDayStart, weekIndex * 7);
     const wEndRaw = addDays(wStart, 6);
     const wEnd = wEndRaw > periodEnd ? startOfLocalDay(periodEnd) : wEndRaw;
@@ -742,7 +760,7 @@ export const generateEventsDigestPDF = async (
       ? `${wStart.getDate()} – ${wEnd.getDate()} ${MONTHS_LONG[wEnd.getMonth()]}`
       : `${wStart.getDate()} ${monthShort(wStart)} – ${wEnd.getDate()} ${monthShort(wEnd)}`;
     return {
-      h: 11,
+      h,
       keepWithNext: true,
       draw: (y) => {
         const label = `WEEK ${weekIndex + 1}`;
@@ -768,11 +786,11 @@ export const generateEventsDigestPDF = async (
     return null;
   };
 
-  const dayHeader = (day: Date, count: number): Block => {
+  const dayHeader = (day: Date, count: number, execH: number): Block => {
     const key = dayKeyOf(day);
     const isToday = day.getTime() === today.getTime();
     return {
-      h: isExecutive ? 15 : 8.5,
+      h: isExecutive ? execH : 8.5,
       keepWithNext: true,
       isDayHeader: true,
       dayKey: key,
@@ -860,7 +878,7 @@ export const generateEventsDigestPDF = async (
   };
 
   /** Measures and returns the executive card for one event group */
-  const executiveCard = (group: DigestEventGroup, dayKey: string): Block => {
+  const executiveCard = (group: DigestEventGroup, dayKey: string, density: Density): Block => {
     const ev = group.event;
     const cat = getCategoryRgb(ev.category);
     const flyer = flyers.get(ev.id);
@@ -869,7 +887,7 @@ export const generateEventsDigestPDF = async (
     const multi = !!end && isMultiDayEvent(start, end);
 
     const ACCENT = 1.4;
-    const PAD_Y = 4.6;
+    const PAD_Y = density.cardPadY;
     const timeX = M + ACCENT + 4;
     const dividerX = M + 30;
     const mainX = dividerX + 4.5;
@@ -934,8 +952,8 @@ export const generateEventsDigestPDF = async (
     if (flyer) {
       flyerW = FLYER_W;
       flyerH = flyerW / flyer.aspectRatio;
-      if (flyerH > 42) {
-        flyerH = 42;
+      if (flyerH > density.flyerMaxH) {
+        flyerH = density.flyerMaxH;
         flyerW = flyerH * flyer.aspectRatio;
       }
     }
@@ -943,7 +961,7 @@ export const generateEventsDigestPDF = async (
     const h = Math.max(19 + multiH, PAD_Y * 2 + contentH, flyer ? flyerH + PAD_Y * 2 : 0);
 
     return {
-      h: h + 3.2,
+      h: h + density.cardGap,
       dayKey,
       draw: (y) => {
         const r = 2.4;
@@ -1227,41 +1245,65 @@ export const generateEventsDigestPDF = async (
     };
   };
 
-  const blocks: Block[] = [];
-  let lastWeek = -1;
-  let lastDay = '';
-  groups.forEach((group) => {
-    const d = toDate(group.event.date) || periodStart;
-    const day = startOfLocalDay(d);
-    const key = dayKeyOf(day);
-    if (showWeekBanners) {
-      const wi = weekIndexOf(day);
-      if (wi !== lastWeek) {
-        lastWeek = wi;
-        blocks.push(weekBanner(wi));
+  const buildBlocks = (density: Density): Block[] => {
+    const blocks: Block[] = [];
+    let lastWeek = -1;
+    let lastDay = '';
+    groups.forEach((group) => {
+      const d = toDate(group.event.date) || periodStart;
+      const day = startOfLocalDay(d);
+      const key = dayKeyOf(day);
+      if (showWeekBanners) {
+        const wi = weekIndexOf(day);
+        if (wi !== lastWeek) {
+          lastWeek = wi;
+          blocks.push(weekBanner(wi, density.weekBannerH));
+        }
       }
-    }
-    if (key !== lastDay) {
-      lastDay = key;
-      const count = groups.filter((g) => dayKeyOf(startOfLocalDay(toDate(g.event.date) || periodStart)) === key).length;
-      blocks.push(dayHeader(day, count));
-    }
-    blocks.push(isExecutive ? executiveCard(group, key) : compactRow(group, key));
-  });
+      if (key !== lastDay) {
+        lastDay = key;
+        const count = groups.filter((g) => dayKeyOf(startOfLocalDay(toDate(g.event.date) || periodStart)) === key).length;
+        blocks.push(dayHeader(day, count, density.dayHeaderH));
+      }
+      blocks.push(isExecutive ? executiveCard(group, key, density) : compactRow(group, key));
+    });
+    return blocks;
+  };
 
   // --- Render ------------------------------------------------------------
+  const HERO_BOTTOM = 57;
+  const listTop = (density: Density) =>
+    showGlance ? HERO_BOTTOM + glanceHeight(density) + 2 + LEGEND_H + 5 : HERO_BOTTOM;
+  const tableHeadSpace = isExecutive ? 0 : TABLE_HEAD_H + 1;
+
+  const layoutFor = (density: Density) => paginate(buildBlocks(density), {
+    firstTop: listTop(density) + tableHeadSpace,
+    pageTop: PAGE_TOP + tableHeadSpace,
+    pageBottom: PAGE_BOTTOM,
+    gapAfter: (block, next) => {
+      if (!next?.isDayHeader) return 0;
+      if (isExecutive) return 2;
+      return block.dayKey && !block.isDayHeader ? 1.5 : 0;
+    },
+    continued: continuedHeader
+  });
+
+  // The compact table has short rows, so it never leaves much of a gap
+  const candidates = isExecutive ? DENSITIES : DENSITIES.slice(0, 1);
+  const layouts = candidates.map(layoutFor);
+  const chosen = pickLayout(layouts);
+  const density = candidates[chosen];
+  const { pages } = layouts[chosen];
+
   drawHero();
   drawStats();
-  let y = 57;
   if (showGlance) {
-    drawGlance(y);
-    y += glanceHeight + 2;
-    drawLegend(y);
-    y += LEGEND_H + 5;
+    drawGlance(HERO_BOTTOM, glanceCellH(density));
+    drawLegend(HERO_BOTTOM + glanceHeight(density) + 2);
   }
 
   if (groups.length === 0) {
-    const boxY = y + 4;
+    const boxY = listTop(density) + 4;
     fill(BG);
     stroke(BORDER, 0.3);
     doc.setLineDashPattern([1.2, 1.2], 0);
@@ -1273,40 +1315,15 @@ export const generateEventsDigestPDF = async (
     font('regular', 8.5);
     color(MUTED);
     doc.text('New events submitted to the calendar will appear in the next digest.', W / 2, boxY + 21.5, { align: 'center' });
-  }
-
-  const startListPage = (top: number): number => {
-    if (isExecutive) return top;
-    drawTableHead(top);
-    return top + TABLE_HEAD_H + 1;
-  };
-
-  if (groups.length > 0) {
-    y = startListPage(y);
-  }
-  let currentDay = '';
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    // Height that must fit together (headers stay with the first card that follows)
-    let needed = block.h;
-    for (let j = i; blocks[j]?.keepWithNext && j + 1 < blocks.length; j++) needed += blocks[j + 1].h;
-
-    if (y + needed > PAGE_BOTTOM) {
-      doc.addPage();
-      drawPageHeader();
-      y = startListPage(PAGE_TOP);
-      // A day that continues onto this page gets its header repeated
-      if (!block.isDayHeader && block.dayKey && block.dayKey === currentDay) {
-        const cont = continuedHeader(block.dayKey);
-        cont.draw(y);
-        y += cont.h;
+  } else {
+    pages.forEach((placements, p) => {
+      if (p > 0) {
+        doc.addPage();
+        drawPageHeader();
       }
-    }
-    if (block.isDayHeader && block.dayKey) currentDay = block.dayKey;
-    block.draw(y);
-    y += block.h;
-    if (!isExecutive && block.dayKey && !block.isDayHeader && blocks[i + 1]?.isDayHeader) y += 1.5;
-    if (isExecutive && blocks[i + 1]?.isDayHeader) y += 2;
+      if (!isExecutive) drawTableHead(p === 0 ? listTop(density) : PAGE_TOP);
+      placements.forEach(({ block, y }) => block.draw(y));
+    });
   }
 
   drawFooters();

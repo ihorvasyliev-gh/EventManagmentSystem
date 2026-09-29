@@ -18,6 +18,7 @@ import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
 import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
+import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../components/SubmitReview';
 
 const CATEGORIES = EVENT_CATEGORIES;
 const DESCRIPTION_SOFT_LIMIT = 600;
@@ -216,7 +217,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState<{ title: string; dates: Date[]; time: string; perDateLines?: string[]; location: string } | null>(null);
+  const [submitted, setSubmitted] = useState<SubmissionSummary | null>(null);
+  // Staff see what they entered before it is sent; admins publish straight away
+  const [reviewing, setReviewing] = useState(false);
+  const [focusField, setFocusField] = useState<ReviewField | 'top' | null>(null);
   const placeValues = samePlace ? [] : sessions.map((s) => places[s.key] ?? '');
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
@@ -308,12 +312,63 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       return;
     }
 
-    const { date: startDateTime, endDate: endDateTime, location: eventLocation, recurrence } = scheduleControls.build();
-    // Each date and time on its own line when they differ (times or places)
-    const perDateLines = activePerDate || sharedTimes.length > 1 || !samePlace
-      ? sessions.map((s) => [fmtChipDate(s.day), formatTimeRange(s.slot), ...(samePlace ? [] : [(places[s.key] ?? '').trim()])].join(' · '))
-      : undefined;
+    if (isAdmin) {
+      void sendEvent();
+      return;
+    }
+    setReviewing(true);
+    window.scrollTo({ top: 0 });
+  };
 
+  /** Everything entered, grouped for showing back on the review and thank-you screens */
+  const buildSummary = (): SubmissionSummary => {
+    const days: SubmissionSummary['days'] = [];
+    sessions.forEach((s) => {
+      const key = s.key.split('#')[0];
+      let day = days.find((d) => d.key === key);
+      if (!day) {
+        day = { key, date: fmtChipDate(s.day), sessions: [] };
+        days.push(day);
+      }
+      day.sessions.push({ key: s.key, time: formatTimeRange(s.slot), place: samePlace ? '' : (places[s.key] ?? '').trim() });
+    });
+    return {
+      title: title.trim(),
+      category,
+      days,
+      location: samePlace ? location.trim() : '',
+      description: description.trim(),
+      posterUrl: posterPreview,
+      name: submitterName.trim(),
+      email: submitterEmail.trim()
+    };
+  };
+
+  const handleEditFromReview = (field?: ReviewField) => {
+    setReviewing(false);
+    setSubmitError(null);
+    setFocusField(field ?? 'top');
+  };
+
+  // Back on the form: jump to the part the user asked to change
+  useEffect(() => {
+    if (reviewing || !focusField) return;
+    const frame = requestAnimationFrame(() => {
+      if (focusField === 'top') {
+        window.scrollTo({ top: 0 });
+      } else {
+        const el = document.getElementById(`field-${focusField}`);
+        el?.scrollIntoView({ block: 'center' });
+        el?.focus({ preventScroll: true });
+      }
+      setFocusField(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reviewing, focusField]);
+
+  const sendEvent = async () => {
+    const { date: startDateTime, endDate: endDateTime, location: eventLocation, recurrence } = scheduleControls.build();
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       await submitEvent({
@@ -331,13 +386,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       });
 
       clearDraft();
-      setSubmitted({
-        title: title.trim(),
-        dates: sortedDates,
-        time: formatTimeRange(sharedTimes[0]),
-        perDateLines,
-        location: samePlace ? location.trim() : ''
-      });
+      setSubmitted(buildSummary());
+      setReviewing(false);
       window.scrollTo({ top: 0 });
       if (!currentUser) {
         try {
@@ -378,65 +428,89 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const handleSubmitAnother = () => {
     resetForm();
     setSubmitted(null);
+    window.scrollTo({ top: 0 });
   };
 
   const backLabel = currentUser ? 'Back to calendar' : 'Staff login';
 
   // --- Success screen ---------------------------------------------------------
   if (submitted) {
+    const steps: Array<[string, string, 'done' | 'current' | 'next']> = isAdmin
+      ? [['Published', 'Live on the calendar now', 'done'], ['Upcoming Events Digest', 'Included in the next issue', 'next']]
+      : [
+          ['Sent', 'We have your event', 'done'],
+          ['Review', 'Elizabeth checks the details', 'current'],
+          ['On the calendar', "And in Friday's Upcoming Events Digest", 'next']
+        ];
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-6 sm:p-8 text-center border border-slate-200 dark:border-slate-700 animate-scale-in">
-          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-5">
-            <CheckCircle2 className="w-9 h-9" />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
+        <div className="max-w-lg w-full animate-scale-in">
+          <div className="text-center mb-6">
+            <div className="relative w-16 h-16 mx-auto mb-4">
+              <span className="absolute inset-0 rounded-full bg-emerald-400/30 animate-ping [animation-iteration-count:2]" aria-hidden="true" />
+              <span className="relative w-16 h-16 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <CheckCircle2 className="w-9 h-9" />
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+              {isAdmin ? 'Event published' : 'Thank you — event sent!'}
+            </h1>
+            <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300">
+              {isAdmin
+                ? 'It is live on the calendar and will appear in the next Upcoming Events Digest.'
+                : `We'll let you know at ${submitted.email} if anything needs changing.`}
+            </p>
           </div>
 
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-            {isAdmin ? 'Event published' : 'Thank you — event sent!'}
-          </h1>
-          <p className="text-slate-600 dark:text-slate-300 text-sm mb-6">
-            {isAdmin
-              ? 'It is live on the calendar and will appear in the next Upcoming Events Digest.'
-              : "Elizabeth will review it shortly. Once approved it appears on the calendar and in Friday's Upcoming Events Digest."}
-          </p>
-
-          <div className="text-left rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 mb-6">
-            <p className="font-semibold text-slate-900 dark:text-white">{submitted.title}</p>
-            {submitted.perDateLines ? (
-              <div className="mt-1.5 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                <ul className="space-y-0.5">
-                  {submitted.perDateLines.map((line) => <li key={line}>{line}</li>)}
-                </ul>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="flex gap-4 p-4 sm:p-5">
+              {submitted.posterUrl && (
+                <img src={submitted.posterUrl} alt="" className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 object-cover rounded-xl border border-slate-200 dark:border-slate-700" />
+              )}
+              <div className="min-w-0 flex-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(submitted.category)}`} /> {submitted.category}
+                </span>
+                <p className="mt-1 text-lg font-bold leading-snug text-slate-900 dark:text-white break-words">{submitted.title}</p>
+                {submitted.location && (
+                  <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+                    <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> <span className="break-words">{submitted.location}</span>
+                  </p>
+                )}
+                {!isAdmin && (
+                  <p className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Waiting for review
+                  </p>
+                )}
               </div>
-            ) : (
-              <>
-                <p className="mt-1.5 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                  {submitted.dates.map(fmtChipDate).join(', ')}
-                </p>
-                <p className="mt-1 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <Clock className="w-4 h-4 shrink-0 text-slate-400" /> {submitted.time}
-                </p>
-              </>
-            )}
-            {submitted.location && (
-              <p className="mt-1 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> {submitted.location}
-              </p>
-            )}
-            {!isAdmin && (
-              <p className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Waiting for review
-              </p>
-            )}
+            </div>
+            <div className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 text-sm">
+              <ScheduleList days={submitted.days} compact />
+            </div>
+            <ol className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 space-y-3">
+              {steps.map(([label, hint, state], i) => (
+                <li key={label} className="flex items-start gap-3">
+                  <span className={`mt-0.5 w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                    state === 'done' ? 'bg-emerald-500 text-white'
+                      : state === 'current' ? 'bg-amber-400 text-amber-950'
+                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
+                  }`}>
+                    {state === 'done' ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900 dark:text-white">{label}</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">{hint}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
 
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col sm:flex-row gap-2.5 mt-5">
             <button
               type="button"
               onClick={handleSubmitAnother}
-              className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-sm transition-colors text-sm"
+              className="flex-1 h-12 px-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-sm transition-colors text-sm"
             >
               {isAdmin ? 'Create another event' : 'Submit another event'}
             </button>
@@ -444,7 +518,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               <button
                 type="button"
                 onClick={onBackToLogin}
-                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors text-sm"
+                className="flex-1 h-12 px-4 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors text-sm"
               >
                 {currentUser ? 'Back to calendar' : 'Go to staff login'}
               </button>
@@ -452,6 +526,23 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           </div>
         </div>
       </div>
+    );
+  }
+
+  // --- Review screen ----------------------------------------------------------
+  if (reviewing) {
+    return (
+      <SubmitReview
+        summary={buildSummary()}
+        conflicts={conflictInfo.conflicts.map((c) => ({
+          label: formatConflictDate(c.date, occurrences, fmtChipDate),
+          titles: c.conflictingEvents.map((ev) => ev.title)
+        }))}
+        isSubmitting={isSubmitting}
+        submitError={submitError}
+        onEdit={handleEditFromReview}
+        onSend={() => void sendEvent()}
+      />
     );
   }
 
@@ -683,7 +774,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   )}
                 </div>
 
-                <div>
+                <div id="field-poster" tabIndex={-1} className="outline-none scroll-mt-24">
                   <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
                     Poster or flyer <span className="font-normal text-slate-400">(optional)</span>
                   </span>
@@ -909,7 +1000,7 @@ const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; full?: b
     ) : (
       <>
         <Send className="w-4 h-4" />
-        {isAdmin ? 'Publish event' : 'Submit for review'}
+        {isAdmin ? 'Publish event' : 'Check & submit'}
       </>
     )}
   </button>

@@ -1118,8 +1118,8 @@ export const generateEventsDigestPDF = async (
             }
             screenOnly(() => {
               const icons: Array<{ letter: string; url: string; fg: Rgb; bg: Rgb }> = [
-                { letter: 'G', url: createGoogleCalendarUrl(o.calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG },
-                { letter: 'O', url: createOutlookWebUrl(o.calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG }
+                { letter: 'O', url: createOutlookWebUrl(o.calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
+                { letter: 'G', url: createGoogleCalendarUrl(o.calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
               ];
               font('bold', 6);
               icons.forEach((ic, k) => {

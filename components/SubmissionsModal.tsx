@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { X, Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, AlertTriangle } from 'lucide-react';
+import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, AlertTriangle } from 'lucide-react';
 import { Event } from '../types';
 import ModalShell from './ModalShell';
+import PosterLightbox from './PosterLightbox';
 import { getCategoryDotColor } from './WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { readScheduleFromEvent, getTimesForDate, formatTimeRange } from '../utils/multiDateUtils';
+import { formatLocalDate } from '../utils/date';
 
 interface SubmissionsModalProps {
   isOpen: boolean;
@@ -44,7 +47,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [rejectConfirmId, setRejectConfirmId] = useState<string | null>(null);
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ url: string; title: string } | null>(null);
 
   const handleSingleApprove = async (event: Event) => {
     setProcessingId(event.id);
@@ -125,14 +128,17 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const isProcessing = processingId === event.id;
               const isConfirmingReject = rejectConfirmId === event.id;
               const imgUrl = event.posterUrl || event.attachments?.find((a) => a.type === 'image')?.url;
-              const dates = event.recurrence?.type === 'custom' && event.recurrence.customDates?.length
-                ? [...event.recurrence.customDates].sort((a, b) => a.getTime() - b.getTime())
-                : [event.date];
+              const schedule = readScheduleFromEvent(event);
+              const dates = [...schedule.dates].sort((a, b) => a.getTime() - b.getTime());
+              const perDate = schedule.sameTime ? null : schedule.perDate;
+              const sharedTimes = { start: clock(event.date), end: event.endDate ? clock(event.endDate) : '' };
               const conflict = detectMultiDateConflicts(
                 dates,
-                clock(event.date),
-                event.endDate ? clock(event.endDate) : '',
-                getOccurrencesAroundDates(published, dates)
+                sharedTimes.start,
+                sharedTimes.end,
+                getOccurrencesAroundDates(published, dates),
+                undefined,
+                perDate
               );
 
               return (
@@ -146,14 +152,31 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                       <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug break-words">{event.title}</h3>
 
                       <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
-                        <p className="flex items-start gap-2">
-                          <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                          <span>{dates.map((d) => formatOccurrenceLabel(d)).join(', ')}</span>
-                        </p>
-                        <p className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 shrink-0 text-slate-400" />
-                          {clock(event.date)}{event.endDate ? ` – ${clock(event.endDate)}` : ''}
-                        </p>
+                        {perDate ? (
+                          <div className="flex items-start gap-2">
+                            <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                            <ul className="space-y-0.5">
+                              {dates.map((d) => (
+                                <li key={formatLocalDate(d)}>
+                                  {formatOccurrenceLabel(d)}{' '}
+                                  <span className="text-slate-400 dark:text-slate-500">·</span>{' '}
+                                  {formatTimeRange(getTimesForDate(perDate, d, sharedTimes))}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="flex items-start gap-2">
+                              <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                              <span>{dates.map((d) => formatOccurrenceLabel(d)).join(', ')}</span>
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 shrink-0 text-slate-400" />
+                              {formatTimeRange(sharedTimes)}
+                            </p>
+                          </>
+                        )}
                         {event.location && (
                           <p className="flex items-start gap-2">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
@@ -187,7 +210,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                     {imgUrl && (
                       <button
                         type="button"
-                        onClick={() => setExpandedImage(imgUrl)}
+                        onClick={() => setExpandedImage({ url: imgUrl, title: event.title })}
                         className="shrink-0 self-start group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 w-20 h-24 sm:w-28 sm:h-36 bg-slate-100 dark:bg-slate-700"
                         aria-label="View poster"
                       >
@@ -261,21 +284,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
       </ModalShell>
 
       {expandedImage && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/85 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
-          role="presentation"
-        >
-          <img src={expandedImage} alt="Poster" className="max-w-full max-h-[88vh] object-contain rounded-xl shadow-2xl" />
-          <button
-            type="button"
-            onClick={() => setExpandedImage(null)}
-            aria-label="Close poster"
-            className="absolute top-4 right-4 p-2 bg-white/15 text-white rounded-full hover:bg-white/25"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        <PosterLightbox src={expandedImage.url} title={expandedImage.title} onClose={() => setExpandedImage(null)} />
       )}
     </>
   );

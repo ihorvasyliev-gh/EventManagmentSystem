@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry } from '../types';
-import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat } from 'lucide-react';
+import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
 import { formatDate, formatTime, isSameDay, formatLocalDate } from '../utils/date';
 import { uploadPosterToR2, addComment, deleteComment, fetchEventDetails } from '../services/eventService';
 import { rsvpToEvent, cancelRsvp } from '../services/rsvpService';
@@ -11,7 +11,9 @@ import { validateEvent } from '../utils/validation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import LazyImage from './LazyImage';
+import PosterLightbox, { PosterDownloadButton } from './PosterLightbox';
 import MultiDatePicker from './MultiDatePicker';
+import { PerDateTimes, buildOccurrences, buildSchedule, validateOccurrenceTimes, readScheduleFromEvent } from '../utils/multiDateUtils';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
@@ -26,23 +28,12 @@ const parseLocalDateInput = (value: string): Date | undefined => {
   return new Date(y, m - 1, d);
 };
 
-const toTimeInputValue = (date: Date): string =>
-  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-
 /** Event end for calendar invites: the real end time, or 1 hour when none is set */
 const getEventEnd = (ev: Event): Date =>
   ev.endDate && ev.endDate > ev.date ? ev.endDate : new Date(ev.date.getTime() + 60 * 60 * 1000);
 
 const isRecurringEvent = (ev?: Event | null): boolean =>
   !!ev?.recurrence && ev.recurrence.type !== 'none';
-
-// Convert minutes to "HH:mm"
-const minutesToTime = (totalMinutes: number): string => {
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
-  const h = Math.floor(normalized / 60);
-  const m = normalized % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
 
 interface EventModalProps {
   isOpen: boolean;
@@ -102,6 +93,9 @@ const EventModal: React.FC<EventModalProps> = ({
   });
   const [startTimeStr, setStartTimeStr] = useState('10:00');
   const [endTimeStr, setEndTimeStr] = useState('11:30');
+  const [sameTimeForAll, setSameTimeForAll] = useState(true);
+  const [perDateTimes, setPerDateTimes] = useState<PerDateTimes>({});
+  const activePerDate = sameTimeForAll ? null : perDateTimes;
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState<EventCategory | ''>('');
   const [status, setStatus] = useState<EventStatus>('published');
@@ -127,6 +121,7 @@ const EventModal: React.FC<EventModalProps> = ({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [showCalendarDropdown, setShowCalendarDropdown] = useState(false);
+  const [showPosterPreview, setShowPosterPreview] = useState(false);
 
   // Available categories: standard EVENT_CATEGORIES, current event's category, plus any custom
   const availableCategories = useMemo(() => {
@@ -183,12 +178,12 @@ const EventModal: React.FC<EventModalProps> = ({
   }, [isOpen, showForm, showDeleteDialog, role]);
 
   const conflictInfo = useMemo(() => {
-    if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0 || !startTimeStr || !endTimeStr) {
+    if (!isOpen || !showForm || !selectedDates || selectedDates.length === 0) {
       return { hasConflict: false, conflicts: [], summaryMessage: '' };
     }
     const occurrences = getOccurrencesAroundDates(events || [], selectedDates);
-    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id);
-  }, [selectedDates, startTimeStr, endTimeStr, events, event?.id, isOpen, showForm]);
+    return detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, occurrences, event?.id, activePerDate);
+  }, [selectedDates, startTimeStr, endTimeStr, activePerDate, events, event?.id, isOpen, showForm]);
 
   const hasInteractedWithRsvp = useRef(false);
   const prevEventId = useRef<string | null>(null);
@@ -198,6 +193,7 @@ const EventModal: React.FC<EventModalProps> = ({
 
   // Initialize form state when opening or switching modes
   useEffect(() => {
+    setShowPosterPreview(false);
     if (isOpen) {
       // Re-capture the unsaved-changes baseline once this initialisation has rendered
       setBaselineTick(t => t + 1);
@@ -242,21 +238,12 @@ const EventModal: React.FC<EventModalProps> = ({
           ? (eventsRef.current.find(e => e.id === event.id) ?? event)
           : event;
 
-        if (source.recurrence?.type === 'custom' && source.recurrence.customDates && source.recurrence.customDates.length > 0) {
-          setSelectedDates(source.recurrence.customDates.map(d => new Date(d)));
-        } else if (source.date) {
-          setSelectedDates([new Date(source.date)]);
-        } else {
-          setSelectedDates([new Date()]);
-        }
-
-        setStartTimeStr(toTimeInputValue(source.date));
-        if (source.endDate) {
-          setEndTimeStr(toTimeInputValue(source.endDate));
-        } else {
-          const startM = source.date.getHours() * 60 + source.date.getMinutes();
-          setEndTimeStr(minutesToTime(startM + 90));
-        }
+        const schedule = readScheduleFromEvent(source);
+        setSelectedDates(schedule.dates);
+        setStartTimeStr(schedule.shared.start);
+        setEndTimeStr(schedule.shared.end);
+        setSameTimeForAll(schedule.sameTime);
+        setPerDateTimes(schedule.perDate);
 
         setPosterFile(null);
 
@@ -322,13 +309,12 @@ const EventModal: React.FC<EventModalProps> = ({
     setMaxAttendees(draft.maxAttendees || '');
     setPreviewUrl(draft.posterUrl || null);
     setAttachments(draft.attachments || []);
-    setSelectedDates(
-      draft.recurrence?.type === 'custom' && draft.recurrence.customDates?.length
-        ? draft.recurrence.customDates.map(d => new Date(d))
-        : [new Date(draft.date)]
-    );
-    setStartTimeStr(toTimeInputValue(draft.date));
-    if (draft.endDate) setEndTimeStr(toTimeInputValue(draft.endDate));
+    const draftSchedule = readScheduleFromEvent(draft);
+    setSelectedDates(draftSchedule.dates);
+    setStartTimeStr(draftSchedule.shared.start);
+    setEndTimeStr(draftSchedule.shared.end);
+    setSameTimeForAll(draftSchedule.sameTime);
+    setPerDateTimes(draftSchedule.perDate);
     if (draft.recurrence && draft.recurrence.type !== 'custom') {
       setRecurrenceType(draft.recurrence.type);
       setRecurrenceInterval(draft.recurrence.interval || 1);
@@ -341,6 +327,7 @@ const EventModal: React.FC<EventModalProps> = ({
   const formSnapshot = JSON.stringify([
     title, description, location, category, status, tags, submitterName, submitterEmail,
     rsvpEnabled, maxAttendees, selectedDates.map(d => formatLocalDate(d)), startTimeStr, endTimeStr,
+    sameTimeForAll, sameTimeForAll ? null : selectedDates.map(d => perDateTimes[formatLocalDate(d)] ?? null),
     recurrenceType, recurrenceInterval, recurrenceEndDate, previewUrl, posterFile?.name ?? null
   ]);
   const baselineRef = useRef<string | null>(null);
@@ -355,6 +342,10 @@ const EventModal: React.FC<EventModalProps> = ({
 
   requestCloseRef.current = () => {
     // Close the innermost layer first
+    if (showPosterPreview) {
+      setShowPosterPreview(false);
+      return;
+    }
     if (showDeleteDialog) {
       if (!isDeleting) setShowDeleteDialog(false);
       return;
@@ -446,37 +437,21 @@ const EventModal: React.FC<EventModalProps> = ({
       setFieldErrors(prev => ({ ...prev, date: 'Please select at least one date' }));
       return;
     }
-    if (!startTimeStr) {
-      setFieldErrors(prev => ({ ...prev, date: 'Please select a start time.' }));
+    const sharedTimes = { start: startTimeStr, end: endTimeStr };
+    const timeError = validateOccurrenceTimes(selectedDates, sharedTimes, activePerDate);
+    if (timeError) {
+      setFieldErrors(prev => ({ ...prev, date: timeError }));
       return;
     }
 
-    const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
-
-    const [startH, startM = 0] = startTimeStr.split(':').map(Number);
-    const startDateTime = new Date(sortedDates[0]);
-    startDateTime.setHours(startH, startM, 0, 0);
-
-    if (isNaN(startDateTime.getTime())) {
+    const occurrences = buildOccurrences(selectedDates, sharedTimes, activePerDate);
+    if (occurrences.length === 0) {
       setFieldErrors(prev => ({ ...prev, date: 'Invalid start date or time.' }));
       return;
     }
-
-    let endDateTime: Date | undefined = undefined;
-    if (endTimeStr) {
-      const [endH, endM = 0] = endTimeStr.split(':').map(Number);
-      const end = new Date(sortedDates[0]);
-      end.setHours(endH, endM, 0, 0);
-      if (isNaN(end.getTime())) {
-        setFieldErrors(prev => ({ ...prev, date: 'Invalid end date or time.' }));
-        return;
-      }
-      if (end < startDateTime) {
-        setFieldErrors(prev => ({ ...prev, date: 'End Date & Time cannot be earlier than Start Date & Time.' }));
-        return;
-      }
-      endDateTime = end;
-    }
+    const schedule = buildSchedule(occurrences, !!activePerDate);
+    const startDateTime = schedule.date;
+    const endDateTime = schedule.endDate;
 
     if (!location.trim()) {
       setFieldErrors(prev => ({ ...prev, location: 'Please specify the venue/location.' }));
@@ -490,11 +465,8 @@ const EventModal: React.FC<EventModalProps> = ({
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     let recurrence: Event['recurrence'] = undefined;
-    if (sortedDates.length > 1) {
-      recurrence = {
-        type: 'custom',
-        customDates: sortedDates,
-      };
+    if (schedule.recurrence) {
+      recurrence = schedule.recurrence;
     } else if (['daily', 'weekly', 'monthly', 'yearly'].includes(recurrenceType)) {
       recurrence = {
         type: recurrenceType as 'daily' | 'weekly' | 'monthly' | 'yearly',
@@ -782,6 +754,9 @@ const EventModal: React.FC<EventModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      {showPosterPreview && event?.posterUrl && (
+        <PosterLightbox src={event.posterUrl} title={event.title} onClose={() => setShowPosterPreview(false)} />
+      )}
       <div className="flex items-end justify-center min-h-screen pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
 
         {/* Transparent Backdrop */}
@@ -856,14 +831,29 @@ const EventModal: React.FC<EventModalProps> = ({
                   <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
                     {event.posterUrl && (
                       <div className="relative group">
-                        <LazyImage
-                          src={event.posterUrl}
-                          alt={event.title}
-                          className="w-full h-56"
+                        <button
+                          type="button"
+                          onClick={() => setShowPosterPreview(true)}
+                          className="block w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                          aria-label="Open full poster"
+                          title="Open full poster"
+                        >
+                          <LazyImage
+                            src={event.posterUrl}
+                            alt={event.title}
+                            className="w-full h-56"
+                          />
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors">
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                              <Maximize2 className="h-3.5 w-3.5" /> View full poster
+                            </span>
+                          </span>
+                        </button>
+                        <PosterDownloadButton
+                          url={event.posterUrl}
+                          title={event.title}
+                          className="absolute bottom-3 right-3 p-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-all text-slate-700 dark:text-slate-200 hover:scale-105"
                         />
-                        <a href={event.posterUrl} download className="absolute bottom-3 right-3 p-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all text-slate-700 dark:text-slate-200 hover:scale-105">
-                          <Download className="h-4 w-4" />
-                        </a>
                       </div>
                     )}
                     {attachments.length > 0 && (
@@ -1136,6 +1126,16 @@ const EventModal: React.FC<EventModalProps> = ({
                     endTime={endTimeStr}
                     onChangeEndTime={(t) => {
                       setEndTimeStr(t);
+                      clearFieldError('date');
+                    }}
+                    sameTimeForAll={sameTimeForAll}
+                    onChangeSameTimeForAll={(same) => {
+                      setSameTimeForAll(same);
+                      clearFieldError('date');
+                    }}
+                    perDateTimes={perDateTimes}
+                    onChangePerDateTimes={(times) => {
+                      setPerDateTimes(times);
                       clearFieldError('date');
                     }}
                     error={fieldErrors.date}

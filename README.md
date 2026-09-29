@@ -23,7 +23,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp summary** | One click copies a formatted, emoji-friendly text version of the digest. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
-| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates. You can delete a single occurrence. |
+| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. You can delete a single occurrence. |
 | ✅ **RSVPs & comments** | Both are tracked per occurrence. The browser reminds you the day before an event you've joined. |
 | 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
 | 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar. |
@@ -77,6 +77,7 @@ Set up the database in the Supabase SQL Editor. Run `supabase-setup.sql` first, 
 | `event-comments-occurrence-migration.sql` | Comments per occurrence |
 | `submission-migration.sql` | Anonymous `/submit` drafts |
 | `realtime-events-migration.sql` | Live updates without refreshing |
+| `add-custom-end-dates-migration.sql` | A different time on each date of a multi-date event |
 | `fix-category-constraint.sql`, `update-categories-to-standard.sql` | The standard CCP category list |
 
 Start the dev server:
@@ -164,6 +165,10 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 | Files | Cloudflare R2 |
 | Hosting | Cloudflare Pages and Pages Functions |
 | Documents | jsPDF (digest), ExcelJS (`.xlsx`) |
+
+## Support
+
+If something in the app breaks, email [ivasyliev@partnershipcork.ie](mailto:ivasyliev@partnershipcork.ie). Error messages in the app show the same address, with a link that fills in the error details.
 
 ## More docs
 

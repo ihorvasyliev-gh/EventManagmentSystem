@@ -32,6 +32,7 @@ interface SupabaseEvent {
     recurrence_occurrences: number | null;
     recurrence_days_of_week: number[] | null;
     recurrence_custom_dates: string[] | null;
+    recurrence_custom_end_dates?: string[] | null;
     created_at: string;
 }
 
@@ -113,14 +114,17 @@ function expandRecurring(
         const durationMs = baseEnd && baseEnd >= baseStart ? baseEnd.getTime() - baseStart.getTime() : null;
         const type = ev.recurrence_type;
 
-        const pushInstance = (start: Date) => {
+        const pushInstance = (start: Date, ownEnd?: Date | null) => {
             if (start < rangeStart || start > rangeEnd) return;
             if (exceptions.get(ev.id)?.has(wallDayKey(start))) return;
+            const end = ownEnd !== undefined
+                ? ownEnd
+                : durationMs !== null ? new Date(start.getTime() + durationMs) : null;
             result.push({
                 ...ev,
                 id: `${ev.id}_${start.getTime()}`,
                 date: start.toISOString(),
-                end_date: durationMs !== null ? new Date(start.getTime() + durationMs).toISOString() : null,
+                end_date: end ? end.toISOString() : null,
             });
         };
 
@@ -131,17 +135,25 @@ function expandRecurring(
 
         const base = toWall(baseStart);
 
-        // Custom dates: each picked day at the original time of day
+        // Custom dates: each picked day at the original time of day, or at its own
+        // start/end when the series stores per-date times
         if (type === 'custom') {
             const dates = ev.recurrence_custom_dates && ev.recurrence_custom_dates.length > 0
                 ? ev.recurrence_custom_dates
                 : [ev.date];
-            for (const iso of dates) {
+            const ends = ev.recurrence_custom_end_dates;
+            const perDate = !!ends && ends.length === dates.length;
+            dates.forEach((iso, i) => {
                 const day = new Date(iso);
-                if (isNaN(day.getTime())) continue;
-                const w = toWall(day);
-                pushInstance(fromWall(w.y, w.m, w.d, base.h, base.mi, base.s));
-            }
+                if (isNaN(day.getTime())) return;
+                if (perDate) {
+                    const end = new Date(ends![i]);
+                    pushInstance(day, end.getTime() > day.getTime() ? end : null);
+                } else {
+                    const w = toWall(day);
+                    pushInstance(fromWall(w.y, w.m, w.d, base.h, base.mi, base.s));
+                }
+            });
             continue;
         }
 
@@ -359,7 +371,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                         if (specificDate) {
                             const parsed = new Date(specificDate);
                             if (!isNaN(parsed.getTime())) {
-                                if (ev.end_date) {
+                                // Series with per-date times: use that date's own end
+                                const ends = ev.recurrence_custom_end_dates;
+                                const idx = ends && ev.recurrence_custom_dates?.length === ends.length
+                                    ? ev.recurrence_custom_dates.findIndex(d => new Date(d).getTime() === parsed.getTime())
+                                    : -1;
+                                if (idx >= 0) {
+                                    const ownEnd = new Date(ends![idx]);
+                                    ev.end_date = ownEnd.getTime() > parsed.getTime() ? ownEnd.toISOString() : null;
+                                } else if (ev.end_date) {
                                     const originalStart = new Date(ev.date).getTime();
                                     const originalEnd = new Date(ev.end_date).getTime();
                                     const duration = Math.max(30 * 60 * 1000, originalEnd - originalStart);

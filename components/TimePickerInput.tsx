@@ -67,8 +67,9 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
     const handlePointerDown = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
-        // Normalize typed value on close
-        commitTypedValue(inputValue);
+        // Normalize a typed value on close. Untouched pickers stay quiet, so several pickers
+        // sharing one state object don't overwrite each other with stale copies.
+        if (inputValue !== value) commitTypedValue(inputValue);
       }
     };
     document.addEventListener('mousedown', handlePointerDown);

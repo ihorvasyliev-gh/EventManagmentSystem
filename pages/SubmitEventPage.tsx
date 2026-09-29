@@ -4,8 +4,13 @@ import {
   ImageIcon, Info, RotateCcw, Sparkles
 } from 'lucide-react';
 import { submitEvent, getEvents } from '../services/eventService';
-import { User as AuthUser, UserRole, Event, RecurrenceRule } from '../types';
+import { User as AuthUser, UserRole, Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
+import {
+  PerDateTimes, TimeRange, buildOccurrences, buildSchedule, validateOccurrenceTimes, getTimesForDate, formatTimeRange
+} from '../utils/multiDateUtils';
+import { formatLocalDate } from '../utils/date';
+import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
 import { detectMultiDateConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { getCategoryDotColor } from '../components/WeekView';
@@ -34,6 +39,9 @@ interface SavedDraft {
   dates: string[];
   startTime: string;
   endTime: string;
+  /** false when each date has its own time (older drafts don't have it) */
+  sameTime?: boolean;
+  perDateTimes?: PerDateTimes;
   location: string;
   description: string;
   submitterName?: string;
@@ -130,6 +138,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   });
   const [startTimeStr, setStartTimeStr] = useState(restoredDraft?.startTime || '10:00');
   const [endTimeStr, setEndTimeStr] = useState(restoredDraft?.endTime ?? '11:30');
+  const [sameTimeForAll, setSameTimeForAll] = useState(restoredDraft?.sameTime ?? true);
+  const [perDateTimes, setPerDateTimes] = useState<PerDateTimes>(
+    restoredDraft?.perDateTimes && typeof restoredDraft.perDateTimes === 'object' ? restoredDraft.perDateTimes : {}
+  );
+  const activePerDate = sameTimeForAll ? null : perDateTimes;
+  const sharedTimes: TimeRange = { start: startTimeStr, end: endTimeStr };
   const [location, setLocation] = useState(restoredDraft?.location ?? '');
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
   const [submitterName, setSubmitterName] = useState(() => currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
@@ -155,8 +169,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [events]);
 
   const conflictInfo = useMemo(
-    () => detectMultiDateConflicts(selectedDates, startTimeStr, endTimeStr, getOccurrencesAroundDates(activeEvents, selectedDates)),
-    [selectedDates, startTimeStr, endTimeStr, activeEvents]
+    () => detectMultiDateConflicts(
+      selectedDates, startTimeStr, endTimeStr, getOccurrencesAroundDates(activeEvents, selectedDates), undefined, activePerDate
+    ),
+    [selectedDates, startTimeStr, endTimeStr, activeEvents, activePerDate]
   );
 
   // Venues used before, offered as suggestions while typing
@@ -175,7 +191,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState<{ title: string; dates: Date[]; time: string; location: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ title: string; dates: Date[]; time: string; perDateLines?: string[]; location: string } | null>(null);
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
   // Autosave the draft (text fields only — files can't be stored)
@@ -187,6 +203,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           title, category, location, description,
           dates: selectedDates.map((d) => d.toISOString()),
           startTime: startTimeStr, endTime: endTimeStr,
+          sameTime: sameTimeForAll, perDateTimes,
           submitterName, submitterEmail
         };
         if ([title, location, description].some((v) => v.trim())) {
@@ -197,7 +214,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [title, category, location, description, selectedDates, startTimeStr, endTimeStr, submitterName, submitterEmail, submitted]);
+  }, [title, category, location, description, selectedDates, startTimeStr, endTimeStr, sameTimeForAll, perDateTimes, submitterName, submitterEmail, submitted]);
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -234,8 +251,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     const next: Partial<Record<FieldName, string>> = {};
     if (!title.trim()) next.title = 'Please give the event a name.';
     if (sortedDates.length === 0) next.dates = 'Pick at least one date in the calendar.';
-    else if (!startTimeStr) next.dates = 'Please choose a start time.';
-    else if (endTimeStr && endTimeStr < startTimeStr) next.dates = 'The end time is before the start time.';
+    else {
+      const timeError = validateOccurrenceTimes(sortedDates, sharedTimes, activePerDate);
+      if (timeError) next.dates = timeError;
+    }
     if (!location.trim()) next.location = 'Where is it happening? A room or address is fine.';
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
     if (!submitterName.trim()) next.name = 'Please enter your name.';
@@ -257,19 +276,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       return;
     }
 
-    const [startH, startM = 0] = startTimeStr.split(':').map(Number);
-    const startDateTime = new Date(sortedDates[0]);
-    startDateTime.setHours(startH, startM, 0, 0);
-
-    let endDateTime: Date | undefined;
-    if (endTimeStr) {
-      const [endH, endM = 0] = endTimeStr.split(':').map(Number);
-      endDateTime = new Date(sortedDates[0]);
-      endDateTime.setHours(endH, endM, 0, 0);
-    }
-
-    const recurrence: RecurrenceRule | undefined = sortedDates.length > 1
-      ? { type: 'custom', customDates: sortedDates }
+    const occurrences = buildOccurrences(sortedDates, sharedTimes, activePerDate);
+    const { date: startDateTime, endDate: endDateTime, recurrence } = buildSchedule(occurrences, !!activePerDate);
+    const perDateLines = activePerDate
+      ? sortedDates.map((d) => `${fmtChipDate(d)} · ${formatTimeRange(getTimesForDate(activePerDate, d, sharedTimes))}`)
       : undefined;
 
     setIsSubmitting(true);
@@ -292,7 +302,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       setSubmitted({
         title: title.trim(),
         dates: sortedDates,
-        time: endTimeStr ? `${startTimeStr} – ${endTimeStr}` : startTimeStr,
+        time: formatTimeRange(sharedTimes),
+        perDateLines,
         location: location.trim()
       });
       window.scrollTo({ top: 0 });
@@ -306,7 +317,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     } catch (err: unknown) {
       console.error('Submission error:', err);
       const message = err instanceof Error && err.message ? err.message : '';
-      setSubmitError(message || 'The event could not be sent. Please check your connection and try again — your details are saved.');
+      setSubmitError(
+        message
+          ? `The event could not be sent (${message}). Your details are saved — please try again.`
+          : 'The event could not be sent. Please check your connection and try again — your details are saved.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -321,6 +336,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setSelectedDates([defaultDate]);
     setStartTimeStr('10:00');
     setEndTimeStr('11:30');
+    setSameTimeForAll(true);
+    setPerDateTimes({});
     setErrors({});
     setSubmitError(null);
   };
@@ -358,13 +375,24 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
           <div className="text-left rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 mb-6">
             <p className="font-semibold text-slate-900 dark:text-white">{submitted.title}</p>
-            <p className="mt-1.5 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-              {submitted.dates.map(fmtChipDate).join(', ')}
-            </p>
-            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <Clock className="w-4 h-4 shrink-0 text-slate-400" /> {submitted.time}
-            </p>
+            {submitted.perDateLines ? (
+              <div className="mt-1.5 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                <ul className="space-y-0.5">
+                  {submitted.perDateLines.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <>
+                <p className="mt-1.5 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                  {submitted.dates.map(fmtChipDate).join(', ')}
+                </p>
+                <p className="mt-1 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <Clock className="w-4 h-4 shrink-0 text-slate-400" /> {submitted.time}
+                </p>
+              </>
+            )}
             <p className="mt-1 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
               <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> {submitted.location}
             </p>
@@ -399,7 +427,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }
 
   // --- Form -------------------------------------------------------------------
-  const timeLabel = endTimeStr ? `${startTimeStr} – ${endTimeStr}` : startTimeStr;
+  const timeLabel = (() => {
+    if (!activePerDate) return formatTimeRange(sharedTimes);
+    const labels = new Set(sortedDates.map((d) => formatTimeRange(getTimesForDate(activePerDate, d, sharedTimes))));
+    return labels.size <= 1 ? [...labels][0] ?? formatTimeRange(sharedTimes) : 'Different time each date';
+  })();
   const descLength = description.trim().length;
 
   return (
@@ -519,6 +551,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     onChangeStartTime={(t) => { setStartTimeStr(t); clearError('dates'); }}
                     endTime={endTimeStr}
                     onChangeEndTime={(t) => { setEndTimeStr(t); clearError('dates'); }}
+                    sameTimeForAll={sameTimeForAll}
+                    onChangeSameTimeForAll={(same) => { setSameTimeForAll(same); clearError('dates'); }}
+                    perDateTimes={perDateTimes}
+                    onChangePerDateTimes={(times) => { setPerDateTimes(times); clearError('dates'); }}
                     error={errors.dates}
                   />
                 </div>
@@ -526,9 +562,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 {conflictInfo.hasConflict && (
                   <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3.5 flex items-start gap-3 text-sm text-amber-900 dark:text-amber-200 animate-fade-in">
                     <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-semibold block">Something else is on at the same time</span>
-                      <span className="text-xs sm:text-sm">{conflictInfo.summaryMessage} You can still submit — this is just a heads-up.</span>
+                      <ul className="mt-1 space-y-0.5 text-xs sm:text-sm">
+                        {conflictInfo.conflicts.map((c) => (
+                          <li key={formatLocalDate(c.date)}>
+                            <span className="font-semibold">{fmtChipDate(c.date)}:</span>{' '}
+                            {c.conflictingEvents.slice(0, 2).map((ev) => `“${ev.title}”`).join(', ')}
+                            {c.conflictingEvents.length > 2 && ` +${c.conflictingEvents.length - 2} more`}
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="mt-1 block text-xs text-amber-800/80 dark:text-amber-200/80">You can still submit — this is just a heads-up.</span>
                     </div>
                   </div>
                 )}
@@ -707,7 +752,16 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {submitError && (
                 <div ref={submitErrorRef} role="alert" className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300">{submitError}</p>
+                  <div className="text-sm text-red-700 dark:text-red-300 space-y-1.5">
+                    <p>{submitError}</p>
+                    <p>
+                      Still not working? Email{' '}
+                      <a href={buildSupportMailto(submitError)} className="font-semibold underline underline-offset-2 break-all">
+                        {CONTACT_EMAIL}
+                      </a>{' '}
+                      and we’ll sort it out.
+                    </p>
+                  </div>
                 </div>
               )}
 

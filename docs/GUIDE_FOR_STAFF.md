@@ -62,7 +62,7 @@ Please submit any activity, session, or milestone happening in your project area
 |-------|-----------------------------|
 | **Event Title** | Clear and recognizable. <br>*Example:* "Northside Enterprise Network Breakfast" or "Knocknaheeny Family Fun Day" |
 | **Category** | Select the best fit (*Enterprise & Employment*, *Community & Family*, *Education & Training*, etc.) to color-code your event in the digest. |
-| **Date & Time** | Choose the event date, start time, and estimated finish time. |
+| **Date & Time** | Tap every date the event runs on, then set the start and estimated finish time. <br>If the times differ from day to day, untick **Same time every day** and set a start and finish time for each date. |
 | **Venue / Location** | Be specific with the venue name, room number, or address. <br>*Example:* "Hollyhill Library, Meeting Room 2, Harbour View Rd, Knocknaheeny, Cork" *(This automatically links to Google Maps on the PDF!)* |
 | **Short Description** | **A few lines explaining what the event is about:** <br>• Who is it for? <br>• What will happen? <br>• Do attendees need to book or register in advance? |
 | **Event Poster / Flyer** *(Optional)* | Upload a clear image of your event flyer or poster (PNG, JPG, or WEBP up to 10MB). This will be embedded as a thumbnail directly into the Board's digest! |
@@ -87,6 +87,7 @@ Please submit any activity, session, or milestone happening in your project area
 * **Keep Descriptions Concise:** 2 to 4 sentences are ideal for an executive digest. Focus on *what*, *who*, and *where*.
 * **Include Booking Details:** If places are limited, specify how people can register (e.g., *"Contact Mary at Mary@partnershipcork.ie or 021-4302310 to book"*).
 * **Changes & Cancellations:** If an event is rescheduled, moved, or cancelled, please email Elizabeth as soon as possible so the calendar can be updated.
+* **Something not working?** If the form shows an error or won't send, email [ivasyliev@partnershipcork.ie](mailto:ivasyliev@partnershipcork.ie) and say what you were doing.
 
 ---
 

@@ -68,6 +68,9 @@ function deserialize(json: string): Event[] {
         endDate: e.recurrence.endDate ? new Date(e.recurrence.endDate) : undefined,
         customDates: Array.isArray(e.recurrence.customDates)
           ? e.recurrence.customDates.map((d: string) => new Date(d))
+          : undefined,
+        customEndDates: Array.isArray(e.recurrence.customEndDates)
+          ? e.recurrence.customEndDates.map((d: string) => new Date(d))
           : undefined
       }
       : undefined

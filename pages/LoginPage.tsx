@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { login } from '../services/authService';
 import { User } from '../types';
 import { Lock, Loader2, Mail, Eye, EyeOff, AlertCircle, CalendarPlus, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
@@ -114,7 +115,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             {error && (
               <div role="alert" className="flex items-start gap-2.5 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm p-3 rounded-xl border border-red-100 dark:border-red-800">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
+                <span>
+                  {error}
+                  <span className="block mt-1 text-xs">
+                    Still can’t sign in? Email{' '}
+                    <a href={buildSupportMailto(error)} className="font-semibold underline underline-offset-2 break-all">{CONTACT_EMAIL}</a>
+                  </span>
+                </span>
               </div>
             )}
 
@@ -182,8 +189,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
 
             <p className="text-center text-xs text-slate-500 dark:text-slate-400">
               Need an account? Contact{' '}
-              <a href="mailto:ivasyliev@partnershipcork.ie" className="text-brand-600 dark:text-brand-400 hover:underline font-medium">
-                ivasyliev@partnershipcork.ie
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand-600 dark:text-brand-400 hover:underline font-medium">
+                {CONTACT_EMAIL}
               </a>
             </p>
           </form>

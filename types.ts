@@ -30,6 +30,11 @@ export interface RecurrenceRule {
   occurrences?: number;
   daysOfWeek?: number[]; // 0-6, Sunday-Saturday
   customDates?: Date[]; // For 'custom' type: manually picked dates
+  /**
+   * Per-date end times, one per `customDates` entry. When set, every picked date keeps its
+   * own start (the time stored in `customDates`) and end time instead of the series time.
+   */
+  customEndDates?: Date[];
 }
 
 export interface Attachment {

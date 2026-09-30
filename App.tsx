@@ -43,6 +43,7 @@ const ExportModal = lazy(() => import('./components/ExportModal'));
 const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
 const FortnightlyBulletinModal = lazy(() => import('./components/FortnightlyBulletinModal'));
 const SubmitEventPage = lazy(() => import('./pages/SubmitEventPage'));
+const AddStaffModal = lazy(() => import('./components/AddStaffModal'));
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -88,6 +89,7 @@ const AppContent: React.FC = () => {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
+  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [pendingSubmissions, setPendingSubmissions] = useState<Event[]>([]);
   const [isSubmitPageOpen, setIsSubmitPageOpen] = useState(() => typeof window !== 'undefined' && isSubmitUrl());
   // Date pre-filled when an admin adds an event from a calendar day
@@ -978,6 +980,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         pendingSubmissionsCount={pendingSubmissions.length}
         onOpenSubmissions={() => setIsSubmissionsModalOpen(true)}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
+        onOpenAddStaff={() => setIsAddStaffOpen(true)}
       />
 
       <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
@@ -1122,6 +1125,12 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             events={filteredEvents}
             onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
           />
+        </Suspense>
+      )}
+
+      {isAddStaffOpen && user.role === UserRole.ADMIN && (
+        <Suspense fallback={null}>
+          <AddStaffModal isOpen={isAddStaffOpen} onClose={() => setIsAddStaffOpen(false)} />
         </Suspense>
       )}
 

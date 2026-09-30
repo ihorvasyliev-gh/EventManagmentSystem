@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, UserPlus } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -15,6 +15,7 @@ interface NavbarProps {
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
   onOpenSubmitEvent?: () => void;
+  onOpenAddStaff?: () => void;
 }
 
 const initialsOf = (name: string): string =>
@@ -39,7 +40,8 @@ const Navbar: React.FC<NavbarProps> = ({
   pendingSubmissionsCount = 0,
   onOpenSubmissions,
   onOpenFortnightlyBulletin,
-  onOpenSubmitEvent
+  onOpenSubmitEvent,
+  onOpenAddStaff
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -240,6 +242,12 @@ const Navbar: React.FC<NavbarProps> = ({
                     <FileText className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Events digest</span>
                     <span className="text-xs text-slate-400">PDF · WhatsApp</span>
+                  </button>
+                )}
+                {isAdmin && onOpenAddStaff && (
+                  <button type="button" onClick={closeMenuAnd(onOpenAddStaff)} className={menuItem}>
+                    <UserPlus className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Add staff account</span>
                   </button>
                 )}
                 {onExportClick && (

@@ -34,3 +34,14 @@ npx wrangler pages dev . --r2=BUCKET
 ## 4. Troubleshooting
 -   **"R2 Bucket binding 'BUCKET' not found"**: Ensure you added the binding in the Cloudflare Dashboard with the exact variable name `BUCKET`.
 -   **CORS Errors**: R2 buckets might need CORS configuration if accessing directly, but since we are proxying through Cloudflare Pages Functions (`/api/upload`), standard Pages CORS rules apply.
+
+## 5. Staff accounts (admin "Add staff account")
+Admins create staff accounts from the app menu. The request goes to the `/api/staff` Pages Function, which checks that the caller is an admin and creates the user with Supabase's service role key.
+
+1.  In Supabase: **Project Settings** > **API** > copy the **service_role** key (keep it secret — it bypasses all security rules).
+2.  In Cloudflare: **Workers & Pages** > your project > **Settings** > **Variables and Secrets**.
+3.  Add `SUPABASE_SERVICE_ROLE_KEY` as an **encrypted secret** (Production and Preview).
+4.  Make sure `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or the `VITE_` versions) are set too.
+5.  Redeploy.
+
+New accounts are always created with the **staff** role (the `handle_new_user` trigger from `security-hardening-migration.sql` enforces it). To make someone an admin, change `role` in the `users` table in Supabase.

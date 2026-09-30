@@ -199,6 +199,11 @@ const loadFontData = (): Promise<Record<Weight, string> | null> => {
   return fontDataPromise;
 };
 
+const LINKISH_GLOBAL = /(?:https?:\/\/|www\.)[^\s<>"]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+const trimLinkPunctuation = (s: string) => s.replace(/[.,;:!?)\]'"…]+$/, '');
+const linkUrl = (target: string) =>
+  target.includes('@') && !/^https?:/i.test(target) ? `mailto:${target}` : /^www\./i.test(target) ? `https://${target}` : target;
+
 // Supported Windows-1252 characters above 255 that jsPDF maps properly
 const WINANSI_SUPPORTED_EXTRA = new Set([
   338, 339, 352, 353, 376, 381, 382, 402, 710, 732,
@@ -443,6 +448,53 @@ export const generateEventsDigestPDF = async (
   };
 
   const truncate = (text: string, width: number): string => fitLines(text, width, 1)[0] || '';
+
+  /**
+   * Draws wrapped text with web addresses and emails shown as underlined links.
+   * `source` is the unwrapped text, used to rebuild an address split across lines.
+   */
+  const drawLinkedLines = (lines: string[], source: string, x: number, y: number, lineH: number, base: Rgb) => {
+    const full = (source.match(LINKISH_GLOBAL) || []).map(trimLinkPunctuation);
+    let carry: string | null = null;
+    lines.forEach((line, i) => {
+      const ly = y + i * lineH;
+      const parts: Array<{ text: string; target: string | null }> = [];
+      let rest = line;
+      // The tail of an address that wrapped from the previous line
+      if (carry) {
+        const head = rest.match(/^\S+/)?.[0] ?? '';
+        if (head && carry.includes(trimLinkPunctuation(head))) {
+          parts.push({ text: head, target: carry });
+          rest = rest.slice(head.length);
+        }
+        carry = null;
+      }
+      let last = 0;
+      for (const m of rest.matchAll(LINKISH_GLOBAL)) {
+        const raw = trimLinkPunctuation(m[0]);
+        const at = m.index ?? 0;
+        if (at > last) parts.push({ text: rest.slice(last, at), target: null });
+        const whole = full.find((u) => u.startsWith(raw)) ?? raw;
+        parts.push({ text: raw, target: whole });
+        last = at + raw.length;
+        if (last === rest.trimEnd().length && whole.length > raw.length) carry = whole;
+      }
+      if (last < rest.length) parts.push({ text: rest.slice(last), target: null });
+
+      let cx = x;
+      parts.forEach((part) => {
+        const w = doc.getTextWidth(part.text);
+        color(part.target ? LINK : base);
+        doc.text(part.text, cx, ly);
+        if (part.target) {
+          stroke(LINK, 0.15);
+          doc.line(cx, ly + 0.6, cx + w, ly + 0.6);
+          doc.link(cx, ly - 2.6, w, 3.4, { url: linkUrl(part.target) });
+        }
+        cx += w;
+      });
+    });
+  };
 
   const pill = (x: number, y: number, w: number, h: number, bg: Rgb, border?: Rgb) => {
     fill(bg);
@@ -1096,8 +1148,7 @@ export const generateEventsDigestPDF = async (
         if (descLines.length) {
           cy += 3 + DESC_LH;
           font('regular', 8.3);
-          color(BODY);
-          doc.text(descLines, mainX, cy, { lineHeightFactor: 1.33 });
+          drawLinkedLines(descLines, desc, mainX, cy, DESC_LH, BODY);
           cy += (descLines.length - 1) * DESC_LH;
         }
 
@@ -1109,12 +1160,7 @@ export const generateEventsDigestPDF = async (
           doc.text('Contact', mainX, cy);
           const lw = doc.getTextWidth('Contact') + 1.8;
           font('regular', 7);
-          color(BODY);
-          const shown = truncate(contact, mainW - lw);
-          doc.text(shown, mainX + lw, cy);
-          if (ev.submitterEmail) {
-            doc.link(mainX + lw, cy - 2.6, doc.getTextWidth(shown), 3.4, { url: `mailto:${ev.submitterEmail}` });
-          }
+          drawLinkedLines([truncate(contact, mainW - lw)], contact, mainX + lw, cy, 0, BODY);
         }
 
         // Also on
@@ -1260,8 +1306,7 @@ export const generateEventsDigestPDF = async (
         if (descLine) {
           ly += 3.4;
           font('regular', 7);
-          color(MUTED);
-          doc.text(descLine, COL.event, ly);
+          drawLinkedLines([descLine], txt(ev.description || ''), COL.event, ly, 0, MUTED);
         }
         ly += 3.5;
         screenOnly(() => {

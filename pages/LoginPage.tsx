@@ -3,6 +3,7 @@ import { login } from '../services/authService';
 import { User } from '../types';
 import { Lock, Loader2, Mail, Eye, EyeOff, AlertCircle, CalendarPlus, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
+import ThemeToggle from '../components/ThemeToggle';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
@@ -74,7 +75,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   };
 
   return (
-    <div className="min-h-[100dvh] bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4 sm:p-6">
+    <div className="relative min-h-[100dvh] bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4 pt-16 sm:p-6">
+      <ThemeToggle className="absolute top-3 right-3 z-10 bg-white/80 dark:bg-slate-800/80 shadow-sm" />
       <div className="w-full max-w-md lg:max-w-4xl grid lg:grid-cols-2 bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden border border-slate-200/70 dark:border-slate-700">
         {/* Brand panel */}
         <div className="relative overflow-hidden bg-gradient-to-br from-brand-600 to-brand-800 px-6 py-7 sm:px-8 lg:p-10 text-white flex flex-col">

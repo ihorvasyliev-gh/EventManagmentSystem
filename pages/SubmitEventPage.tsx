@@ -18,6 +18,7 @@ import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
 import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
+import ThemeToggle from '../components/ThemeToggle';
 import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../components/SubmitReview';
 
 const CATEGORIES = EVENT_CATEGORIES;
@@ -443,7 +444,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           ['On the calendar', "And in Friday's Upcoming Events Digest", 'next']
         ];
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
+      <div className="relative min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
+        <ThemeToggle className="absolute top-3 right-3 pt-[env(safe-area-inset-top)] box-content" />
         <div className="max-w-lg w-full animate-scale-in">
           <div className="text-center mb-6">
             <div className="relative w-16 h-16 mx-auto mb-4">
@@ -575,7 +577,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               <span className="hidden min-[340px]:inline">{backLabel}</span>
             </button>
           )}
-          <span className="ml-auto bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+          <ThemeToggle className="ml-auto" />
+          <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
             <img src="/assets/ccp-logo.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
           </span>
         </div>

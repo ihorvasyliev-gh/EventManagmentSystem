@@ -3,6 +3,7 @@ import {
   ArrowLeft, CalendarDays, CheckCircle2, Clock, ImageIcon, Info, Mail, MapPin, Pencil, Send, User, AlertCircle
 } from 'lucide-react';
 import { getCategoryDotColor } from './WeekView';
+import ThemeToggle from './ThemeToggle';
 
 /** What the submitter entered, ready to show back to them */
 export interface SubmissionSummary {
@@ -108,7 +109,8 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, conflicts, isSubmi
           >
             <ArrowLeft className="w-5 h-5" /> Back to form
           </button>
-          <span className="ml-auto bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+          <ThemeToggle className="ml-auto" />
+          <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
             <img src="/assets/ccp-logo.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
           </span>
         </div>

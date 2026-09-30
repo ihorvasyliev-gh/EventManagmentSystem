@@ -28,7 +28,8 @@ const json = (body: unknown, status = 200) =>
 
 const fail = (error: string, status: number) => json({ error }, status);
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+// Typed by hand (not PagesFunction) so the app's type check and tests can import it
+export const onRequestPost = async ({ request, env }: { request: Request; env: Env }): Promise<Response> => {
   const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
   const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;

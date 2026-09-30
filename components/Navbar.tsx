@@ -115,6 +115,17 @@ const Navbar: React.FC<NavbarProps> = ({
                   <span>Export</span>
                 </button>
               )}
+              {isAdmin && onOpenAddStaff && (
+                <button
+                  type="button"
+                  onClick={onOpenAddStaff}
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  title="Create a staff account"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>Add staff</span>
+                </button>
+              )}
               {isAdmin && onOpenSubmissions && (
                 <button
                   type="button"

@@ -16,7 +16,7 @@ const run = async (role: string | null, body: unknown, token: string | null = 't
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const request = new Request('https://app.test/api/staff', { method: 'POST', headers, body: JSON.stringify(body) });
-  const res = await (onRequestPost as any)({ request, env });
+  const res = await onRequestPost({ request, env });
   return { res, calls, json: await res.json() };
 };
 

@@ -99,7 +99,7 @@ interface SubmitReviewProps {
 const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, conflicts, isSubmitting, submitError, onEdit, onSend }) => {
   const dateCount = summary.days.length;
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
       <header className="sticky top-0 z-30 bg-white/85 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800 pt-[env(safe-area-inset-top)]">
         <div className="max-w-2xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center gap-3">
           <button

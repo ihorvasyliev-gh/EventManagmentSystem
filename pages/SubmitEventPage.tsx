@@ -444,7 +444,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           ['On the calendar', "And in Friday's Upcoming Events Digest", 'next']
         ];
     return (
-      <div className="relative min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
+      <div className="relative min-h-[100dvh] bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
         <ThemeToggle className="absolute top-3 right-3 pt-[env(safe-area-inset-top)] box-content" />
         <div className="max-w-lg w-full animate-scale-in">
           <div className="text-center mb-6">
@@ -563,7 +563,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const descLength = description.trim().length;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
       {/* Top bar */}
       <header className="sticky top-0 z-30 bg-white/85 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800 pt-[env(safe-area-inset-top)]">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center gap-3">

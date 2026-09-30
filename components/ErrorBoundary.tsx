@@ -34,7 +34,7 @@ class ErrorBoundary extends Component<Props, State> {
 
       const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
       return (
-        <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+        <div className={`min-h-[100dvh] flex items-center justify-center p-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
           <div className={`max-w-md w-full rounded-lg shadow-lg p-6 ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
             <div className="flex items-center space-x-3 mb-4">
               <AlertCircle className="h-8 w-8 text-red-500" />

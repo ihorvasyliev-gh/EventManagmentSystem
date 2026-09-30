@@ -760,7 +760,7 @@ const EventModal: React.FC<EventModalProps> = ({
       {showPosterPreview && event?.posterUrl && (
         <PosterLightbox src={event.posterUrl} title={event.title} onClose={() => setShowPosterPreview(false)} />
       )}
-      <div className="flex items-end justify-center min-h-screen pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
+      <div className="flex items-end justify-center min-h-[100dvh] pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
 
         {/* Transparent Backdrop */}
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-fade-in" aria-hidden="true" onClick={requestClose}></div>
@@ -1462,7 +1462,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     />
                   </div>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="bg-slate-50 dark:bg-slate-800/50 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={handleAddCategory}
@@ -1488,7 +1488,7 @@ const EventModal: React.FC<EventModalProps> = ({
           )}
 
           {/* Footer */}
-          <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+          <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
             {showForm ? (
               <>
                 <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">

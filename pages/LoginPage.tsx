@@ -96,7 +96,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Event Calendar</h1>
             <p className="text-brand-100 text-sm mt-1">Staff portal for Cork City Partnership events</p>
             <ul className="hidden lg:block mt-6 space-y-2.5 text-sm text-white/90">
-              {['See every upcoming event in one calendar', 'Get the fortnightly digest as a branded PDF', 'Subscribe from Outlook, Google or Apple Calendar'].map((line) => (
+              {['See every upcoming event in one calendar', 'Get the events digest as a branded PDF', 'Subscribe from Outlook, Google or Apple Calendar'].map((line) => (
                 <li key={line} className="flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-white/80" />
                   {line}
@@ -209,7 +209,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-semibold text-slate-900 dark:text-white">Submit an event</span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">No login needed — for the fortnightly digest</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">No login needed — for the events digest</span>
                 </span>
                 <ArrowRight className="w-5 h-5 shrink-0 text-slate-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all" />
               </button>

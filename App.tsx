@@ -935,7 +935,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   if (isSubmitPageOpen) {
     return (
-      <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600"></div></div>}>
+      <Suspense fallback={<div className="flex items-center justify-center min-h-[100dvh]"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600"></div></div>}>
         <SubmitEventPage
           currentUser={user}
           events={events}
@@ -948,7 +948,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
 
   if (isSessionLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900 gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-slate-50 dark:bg-slate-900 gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600"></div>
         <p className="text-sm text-slate-500 dark:text-slate-400">Restoring session…</p>
       </div>
@@ -965,7 +965,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col font-sans">
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 flex flex-col font-sans">
       <Navbar
         user={user}
         onLogout={handleLogout}

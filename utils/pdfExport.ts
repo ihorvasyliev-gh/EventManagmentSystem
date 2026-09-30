@@ -204,6 +204,18 @@ const trimLinkPunctuation = (s: string) => s.replace(/[.,;:!?)\]'"…]+$/, '');
 const linkUrl = (target: string) =>
   target.includes('@') && !/^https?:/i.test(target) ? `mailto:${target}` : /^www\./i.test(target) ? `https://${target}` : target;
 
+// Second cue besides colour for each category (see categoryMark)
+type CategoryShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'triangleDown' | 'hexagon' | 'ring';
+const CATEGORY_SHAPE: Record<string, CategoryShape> = {
+  'Enterprise & Employment': 'circle',
+  'Community & Family': 'square',
+  'Education & Training': 'triangle',
+  'Special Visits & Celebrations': 'diamond',
+  'Public Information Session': 'triangleDown',
+  'Health & Wellbeing': 'hexagon',
+  Other: 'ring'
+};
+
 // Supported Windows-1252 characters above 255 that jsPDF maps properly
 const WINANSI_SUPPORTED_EXTRA = new Set([
   338, 339, 352, 353, 376, 381, 382, 402, 710, 732,
@@ -342,6 +354,7 @@ const BG: Rgb = [248, 250, 252];         // slate-50
 const WHITE: Rgb = [255, 255, 255];
 const LINK: Rgb = [3, 105, 161];         // sky-700
 const RED_TINT: Rgb = [254, 242, 242];
+const DAY_WITH_EVENTS: Rgb = [241, 245, 249]; // slate-100: neutral, so it doesn't read as a holiday
 const RED_TINT_BORDER: Rgb = [254, 202, 202];
 const OUTLOOK_BLUE: Rgb = [0, 99, 177];
 const OUTLOOK_BG: Rgb = [235, 244, 255];
@@ -515,6 +528,47 @@ export const generateEventsDigestPDF = async (
     doc.triangle(cx - r * 0.86, cy + 0.35, cx + r * 0.86, cy + 0.35, cx, y + 0.45, 'F');
     fill(WHITE);
     doc.circle(cx, cy, 0.38, 'F');
+  };
+
+  /**
+   * Category marker: each category has its own shape as well as its colour,
+   * so they can be told apart in black-and-white print and with colour blindness.
+   */
+  const categoryMark = (category: string | undefined, cx: number, cy: number, r: number, rim = true) => {
+    const shape = CATEGORY_SHAPE[category || ''] ?? 'ring';
+    const accent = getCategoryRgb(category).accent;
+    fill(shape === 'ring' ? WHITE : accent);
+    stroke(shape === 'ring' ? accent : INK, shape === 'ring' ? r * 0.45 : 0.15);
+    const style = shape === 'ring' || rim ? 'FD' : 'F';
+    const poly = (pts: Array<[number, number]>) => {
+      const rel = pts.slice(1).map(([px, py], i) => [px - pts[i][0], py - pts[i][1]]);
+      doc.lines(rel, pts[0][0], pts[0][1], [1, 1], style, true);
+    };
+    switch (shape) {
+      case 'square':
+        doc.rect(cx - r * 0.85, cy - r * 0.85, r * 1.7, r * 1.7, style);
+        break;
+      case 'triangle':
+        poly([[cx, cy - r * 1.05], [cx + r * 1.05, cy + r * 0.8], [cx - r * 1.05, cy + r * 0.8]]);
+        break;
+      case 'diamond':
+        poly([[cx, cy - r * 1.15], [cx + r * 1.15, cy], [cx, cy + r * 1.15], [cx - r * 1.15, cy]]);
+        break;
+      case 'triangleDown':
+        poly([[cx - r * 1.05, cy - r * 0.8], [cx + r * 1.05, cy - r * 0.8], [cx, cy + r * 1.05]]);
+        break;
+      case 'hexagon':
+        poly(Array.from({ length: 6 }, (_, k) => {
+          const a = Math.PI / 6 + (k * Math.PI) / 3;
+          return [cx + r * 1.05 * Math.cos(a), cy + r * 1.05 * Math.sin(a)] as [number, number];
+        }));
+        break;
+      case 'ring':
+        doc.circle(cx, cy, r * 0.8, style);
+        break;
+      default:
+        doc.circle(cx, cy, r, style);
+    }
   };
 
   // --- Data ----------------------------------------------------------------
@@ -697,7 +751,7 @@ export const generateEventsDigestPDF = async (
         fill(BG);
         doc.rect(x, y, cellW, cellH, 'F');
       } else if (dayEvents.length > 0) {
-        fill([255, 250, 250]);
+        fill(DAY_WITH_EVENTS);
         doc.rect(x, y, cellW, cellH, 'F');
       }
 
@@ -706,7 +760,7 @@ export const generateEventsDigestPDF = async (
       if (isToday) {
         // A smaller, higher circle in short rows keeps clear of the event dots
         const short = cellH < 11;
-        fill(RED);
+        fill(INK);
         doc.circle(x + 4.3, y + (short ? 3.5 : 3.9), short ? 2.3 : 2.55, 'F');
         font('bold', 7.5);
         color(WHITE);
@@ -719,18 +773,15 @@ export const generateEventsDigestPDF = async (
       if (showMonth) {
         const numW = isToday ? 7 : doc.getTextWidth(String(d.getDate())) + 3.2;
         font('semibold', 5.8);
-        color(inRange ? RED : FAINT);
+        color(inRange ? INK : FAINT);
         doc.text(monthShortUpper(d), x + (isToday ? 1.8 : 2.3) + numW, y + 4.9);
       }
 
       if (dayEvents.length > 0) {
-        // One dot per event (by category), then a count
-        // Large enough, with a dark rim, to tell the colours apart on paper
+        // One marker per event (category shape and colour), then a count
         const maxDots = 4;
         dayEvents.slice(0, maxDots).forEach((ev, idx) => {
-          fill(getCategoryRgb(ev.category).accent);
-          stroke(INK, 0.15);
-          doc.circle(x + 3.3 + idx * 3.2, y + cellH - 3, 1.25, 'FD');
+          categoryMark(ev.category, x + 3.3 + idx * 3.3, y + cellH - 3, 1.3);
         });
         font('semibold', 6);
         color(MUTED);
@@ -759,9 +810,7 @@ export const generateEventsDigestPDF = async (
         x = M;
         y += 4.5;
       }
-      fill(getCategoryRgb(cat).accent);
-      stroke(INK, 0.15);
-      doc.circle(x + 1.3, y - 1.05, 1.25, 'FD');
+      categoryMark(cat, x + 1.3, y - 1.05, 1.25);
       color(BODY);
       doc.text(label, x + 3.2, y);
       x += w;
@@ -860,12 +909,13 @@ export const generateEventsDigestPDF = async (
           // Date tile (outlined — no solid ink block)
           const tile = 11.5;
           const ty = y + 1.5;
-          const tileColor = isToday ? RED : INK;
-          fill(isToday ? RED_TINT : WHITE);
-          stroke(isToday ? RED : BORDER, isToday ? 0.45 : 0.35);
+          // Today is marked in ink, not red (red reads as a weekend or holiday)
+          const tileColor = isToday ? WHITE : INK;
+          fill(isToday ? INK : WHITE);
+          stroke(isToday ? INK : BORDER, 0.35);
           doc.roundedRect(M, ty, tile, tile, 2.2, 2.2, 'FD');
           font('semibold', 5.2);
-          color(isToday ? RED : MUTED);
+          color(isToday ? WHITE : MUTED);
           spaced(monthShortUpper(day), M + tile / 2, ty + 3.7, 0.3, 'center');
           font('bold', 12);
           color(tileColor);
@@ -879,8 +929,8 @@ export const generateEventsDigestPDF = async (
           if (rel) {
             font('bold', 5.8);
             const cw = doc.getTextWidth(rel) + 0.3 * (rel.length - 1) + 4.4;
-            pill(afterX, y + 2.6, cw, 4.4, RED_TINT, RED_TINT_BORDER);
-            color(RED);
+            pill(afterX, y + 2.6, cw, 4.4, BG, BORDER);
+            color(INK);
             spaced(rel, afterX + 2.2, y + 5.75, 0.3);
             afterX += cw;
           }
@@ -892,8 +942,8 @@ export const generateEventsDigestPDF = async (
         } else {
           fill(BG);
           doc.rect(M, y, CW, 7, 'F');
-          fill(isToday ? RED : INK);
-          doc.rect(M, y, 0.9, 7, 'F');
+          fill(INK);
+          doc.rect(M, y, isToday ? 1.6 : 0.9, 7, 'F');
           font('bold', 8);
           color(INK);
           const label = `${WEEKDAYS_LONG[day.getDay()]} ${day.getDate()} ${MONTHS_LONG[day.getMonth()]}`;
@@ -901,7 +951,7 @@ export const generateEventsDigestPDF = async (
           if (rel) {
             const lx = M + 3 + doc.getTextWidth(label) + 2.5;
             font('bold', 5.8);
-            color(RED);
+            color(INK);
             spaced(rel, lx, y + 4.6, 0.3);
           }
           font('medium', 7);
@@ -1110,8 +1160,7 @@ export const generateEventsDigestPDF = async (
           doc.link(bx, cy - 3.45, bw, BTN_H, { url: b.url });
           buttonsLeft = bx - 1.5;
         }));
-        fill(cat.accent);
-        doc.circle(mainX + 1, cy - 1, 1, 'F');
+        categoryMark(ev.category, mainX + 1, cy - 1.1, 1, false);
         font('bold', 6.3);
         color(cat.accent);
         const catW = spaced(truncate(catLabel, buttonsLeft - mainX - 20), mainX + 3.1, cy, 0.35);
@@ -1366,8 +1415,7 @@ export const generateEventsDigestPDF = async (
         const catText = truncate(txt(ev.category || 'Event'), M + CW - COL.category - 7);
         const cw = doc.getTextWidth(catText) + 6.2;
         pill(COL.category, y + 2.8, cw, 4.6, cat.tint);
-        fill(cat.accent);
-        doc.circle(COL.category + 2.1, y + 5.1, 0.8, 'F');
+        categoryMark(ev.category, COL.category + 2.1, y + 5.1, 0.85, false);
         color(cat.accent);
         doc.text(catText, COL.category + 3.6, y + 6.05);
       }

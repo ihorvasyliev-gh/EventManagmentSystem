@@ -1166,6 +1166,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             }}
             onReject={handleRejectSubmission}
             onApproveAll={handleApproveAllSubmissions}
+            onOpenEvent={handleEventClick}
           />
         </Suspense>
       )}

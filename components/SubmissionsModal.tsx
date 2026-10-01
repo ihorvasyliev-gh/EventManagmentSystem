@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, AlertTriangle } from 'lucide-react';
+import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy } from 'lucide-react';
 import { Event } from '../types';
 import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
 import { getCategoryDotColor } from './WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
+import { groupOverlaps, type OverlapEntry } from '../utils/duplicateDetection';
+import OverlapList from './OverlapList';
 import { readScheduleFromEvent, formatTimeRange, listSessions, buildOccurrences } from '../utils/multiDateUtils';
 
 interface SubmissionsModalProps {
@@ -18,6 +20,8 @@ interface SubmissionsModalProps {
   onEdit: (event: Event) => void;
   onReject: (eventId: string) => Promise<void>;
   onApproveAll?: () => Promise<void>;
+  /** Opens an existing event in full (to compare with a submission) */
+  onOpenEvent?: (event: Event) => void;
 }
 
 const submittedAgo = (d?: Date): string => {
@@ -38,11 +42,15 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
   onApprove,
   onEdit,
   onReject,
-  onApproveAll
+  onApproveAll,
+  onOpenEvent
 }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [rejectConfirmId, setRejectConfirmId] = useState<string | null>(null);
+  // Approving something that looks like an existing event needs a second click
+  const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null);
+  const [confirmApproveAll, setConfirmApproveAll] = useState(false);
   const [expandedImage, setExpandedImage] = useState<{ url: string; title: string } | null>(null);
 
   const handleSingleApprove = async (event: Event) => {
@@ -76,15 +84,46 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
 
   const published = events.filter((e) => e.status !== 'draft');
 
+  /** Events at the same time as a submission, likely duplicates first */
+  const overlapsOf = (event: Event): OverlapEntry[] => {
+    const schedule = readScheduleFromEvent(event, null);
+    const perDate = schedule.sameTime ? null : schedule.perDate;
+    const conflict = detectOccurrenceConflicts(
+      buildOccurrences(schedule.dates, schedule.shared, perDate),
+      getOccurrencesAroundDates(published, schedule.dates)
+    );
+    return groupOverlaps(conflict.conflicts, { id: event.id, title: event.title, location: event.location });
+  };
+  const overlapsById = new Map(submissions.map((s) => [s.id, overlapsOf(s)]));
+  const duplicateOf = (id: string) => overlapsById.get(id)?.find((o) => o.duplicate === 'title');
+  const duplicateCount = submissions.filter((s) => duplicateOf(s.id)).length;
+
   const footer = (
     <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2 sm:gap-4">
       <p className="text-xs text-slate-500 dark:text-slate-400 sm:flex-1">
         Approved events appear on the calendar and in the next digest straight away.
       </p>
-      {submissions.length > 1 && onApproveAll && (
+      {submissions.length > 1 && onApproveAll && confirmApproveAll && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-sm text-red-700 dark:text-red-300 font-medium">
+            {duplicateCount === 1 ? '1 submission looks' : `${duplicateCount} submissions look`} like a duplicate. Approve all anyway?
+          </span>
+          <button type="button" onClick={() => setConfirmApproveAll(false)} className="px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => { setConfirmApproveAll(false); void handleBatchApprove(); }}
+            className="px-3 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700"
+          >
+            Approve all
+          </button>
+        </div>
+      )}
+      {submissions.length > 1 && onApproveAll && !confirmApproveAll && (
         <button
           type="button"
-          onClick={handleBatchApprove}
+          onClick={() => (duplicateCount > 0 ? setConfirmApproveAll(true) : handleBatchApprove())}
           disabled={isApprovingAll || processingId !== null}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
         >
@@ -129,10 +168,9 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const perDate = schedule.sameTime ? null : schedule.perDate;
               const places = schedule.samePlace ? null : schedule.places;
               const sessions = listSessions(dates, schedule.shared, perDate);
-              const conflict = detectOccurrenceConflicts(
-                buildOccurrences(dates, schedule.shared, perDate),
-                getOccurrencesAroundDates(published, dates)
-              );
+              const overlaps = overlapsById.get(event.id) ?? [];
+              const duplicate = duplicateOf(event.id);
+              const isConfirmingApprove = approveConfirmId === event.id;
               // Each date and time on its own line when times or places differ
               const listEach = !!perDate || schedule.shared.length > 1 || !!places;
 
@@ -190,12 +228,11 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         <p className="text-sm text-slate-500 dark:text-slate-400 whitespace-pre-line line-clamp-4">{event.description}</p>
                       )}
 
-                      {conflict.hasConflict && (
-                        <p className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-2.5 py-2">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          {conflict.summaryMessage}
-                        </p>
-                      )}
+                      <OverlapList
+                        entries={overlaps}
+                        formatWhen={(d) => formatOccurrenceLabel(d)}
+                        onOpenEvent={onOpenEvent ? (ev) => { onOpenEvent(ev as Event); onClose(); } : undefined}
+                      />
 
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 pt-1">
                         <span className="font-medium text-slate-700 dark:text-slate-300">{event.submitterName || 'Staff member'}</span>
@@ -222,7 +259,29 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
 
                   {/* Actions */}
                   <div className="px-4 sm:px-5 py-3 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700">
-                    {isConfirmingReject ? (
+                    {isConfirmingApprove && duplicate ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <span className="text-sm text-red-700 dark:text-red-300 font-medium mr-auto inline-flex items-start gap-1.5">
+                          <Copy className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>Looks like a duplicate of “{duplicate.event.title}”. Approve anyway?</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setApproveConfirmId(null)}
+                          className="px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setApproveConfirmId(null); void handleSingleApprove(event); }}
+                          disabled={isProcessing}
+                          className="px-3 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Approve anyway
+                        </button>
+                      </div>
+                    ) : isConfirmingReject ? (
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <span className="text-sm text-red-700 dark:text-red-300 font-medium mr-auto">Decline and delete this submission?</span>
                         <button
@@ -267,7 +326,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSingleApprove(event)}
+                          onClick={() => (duplicate ? setApproveConfirmId(event.id) : handleSingleApprove(event))}
                           disabled={isProcessing || isApprovingAll}
                           className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-50"
                         >

@@ -4,6 +4,8 @@ import {
 } from 'lucide-react';
 import { getCategoryDotColor } from './WeekView';
 import ThemeToggle from './ThemeToggle';
+import OverlapList from './OverlapList';
+import type { OverlapEntry } from '../utils/duplicateDetection';
 
 /** What the submitter entered, ready to show back to them */
 export interface SubmissionSummary {
@@ -21,10 +23,6 @@ export interface SubmissionSummary {
 
 export type ReviewField = 'title' | 'dates' | 'location' | 'description' | 'poster' | 'name';
 
-export interface ReviewConflict {
-  label: string;
-  titles: string[];
-}
 
 const mapsUrl = (place: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 
@@ -88,7 +86,9 @@ export const ScheduleList: React.FC<{ days: SubmissionSummary['days']; compact?:
 
 interface SubmitReviewProps {
   summary: SubmissionSummary;
-  conflicts: ReviewConflict[];
+  /** Events already on at the same time */
+  overlaps: OverlapEntry[];
+  formatWhen: (d: Date) => string;
   isSubmitting: boolean;
   submitError: string | null;
   onEdit: (field?: ReviewField) => void;
@@ -96,7 +96,7 @@ interface SubmitReviewProps {
 }
 
 /** Shown after "Submit": the event as it will look, to check before it is sent */
-const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, conflicts, isSubmitting, submitError, onEdit, onSend }) => {
+const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWhen, isSubmitting, submitError, onEdit, onSend }) => {
   const dateCount = summary.days.length;
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -137,24 +137,21 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, conflicts, isSubmi
           This is how it will appear on the calendar. Tap <span className="font-semibold">Edit</span> next to anything that needs changing.
         </p>
 
-        {conflicts.length > 0 && (
-          <div className="mt-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-4 flex items-start gap-3 text-sm text-amber-900 dark:text-amber-200">
-            <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <span className="font-semibold block">Something else is on at the same time</span>
-              <ul className="mt-1 space-y-0.5 text-xs sm:text-sm">
-                {conflicts.map((c) => (
-                  <li key={c.label}>
-                    <span className="font-semibold">{c.label}:</span> {c.titles.slice(0, 2).map((t) => `“${t}”`).join(', ')}
-                    {c.titles.length > 2 && ` +${c.titles.length - 2} more`}
-                  </li>
-                ))}
-              </ul>
-              <span className="mt-1 block text-xs text-amber-800/80 dark:text-amber-200/80">You can still send it — this is just a heads-up.</span>
-            </div>
-            <button type="button" onClick={() => onEdit('dates')} className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline">
-              Change dates
-            </button>
+        {overlaps.length > 0 && (
+          <div className="mt-5">
+            <OverlapList
+              entries={overlaps}
+              formatWhen={formatWhen}
+              forSubmitter
+              note={
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  You can still send it — this is just a heads-up.
+                  <button type="button" onClick={() => onEdit('dates')} className="font-semibold underline underline-offset-2 hover:no-underline">
+                    Change dates
+                  </button>
+                </span>
+              }
+            />
           </div>
         )}
 

@@ -19,6 +19,8 @@ import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDate
 import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import ThemeToggle from '../components/ThemeToggle';
+import OverlapList from '../components/OverlapList';
+import { groupOverlaps } from '../utils/duplicateDetection';
 import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../components/SubmitReview';
 
 const CATEGORIES = EVENT_CATEGORIES;
@@ -200,6 +202,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const conflictInfo = useMemo(
     () => detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(activeEvents, selectedDates)),
     [occurrences, selectedDates, activeEvents]
+  );
+  // Same-time events, with likely duplicates (similar name or same venue) first
+  const overlaps = useMemo(
+    () => groupOverlaps(conflictInfo.conflicts, { title, location: samePlace ? location : '' }),
+    [conflictInfo, title, location, samePlace]
   );
 
   // Venues used before, offered as suggestions while typing
@@ -536,10 +543,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     return (
       <SubmitReview
         summary={buildSummary()}
-        conflicts={conflictInfo.conflicts.map((c) => ({
-          label: formatConflictDate(c.date, occurrences, fmtChipDate),
-          titles: c.conflictingEvents.map((ev) => ev.title)
-        }))}
+        overlaps={overlaps}
+        formatWhen={(d) => formatConflictDate(d, occurrences, fmtChipDate)}
         isSubmitting={isSubmitting}
         submitError={submitError}
         onEdit={handleEditFromReview}
@@ -686,24 +691,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   />
                 </div>
 
-                {conflictInfo.hasConflict && (
-                  <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-3.5 flex items-start gap-3 text-sm text-amber-900 dark:text-amber-200 animate-fade-in">
-                    <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <span className="font-semibold block">Something else is on at the same time</span>
-                      <ul className="mt-1 space-y-0.5 text-xs sm:text-sm">
-                        {conflictInfo.conflicts.map((c) => (
-                          <li key={c.date.getTime()}>
-                            <span className="font-semibold">{formatConflictDate(c.date, occurrences, fmtChipDate)}:</span>{' '}
-                            {c.conflictingEvents.slice(0, 2).map((ev) => `“${ev.title}”`).join(', ')}
-                            {c.conflictingEvents.length > 2 && ` +${c.conflictingEvents.length - 2} more`}
-                          </li>
-                        ))}
-                      </ul>
-                      <span className="mt-1 block text-xs text-amber-800/80 dark:text-amber-200/80">You can still submit — this is just a heads-up.</span>
-                    </div>
-                  </div>
-                )}
+                <OverlapList
+                  entries={overlaps}
+                  formatWhen={(d) => formatConflictDate(d, occurrences, fmtChipDate)}
+                  forSubmitter
+                  note="You can still submit — this is just a heads-up."
+                />
               </Section>
 
               {/* 3. Where & details */}

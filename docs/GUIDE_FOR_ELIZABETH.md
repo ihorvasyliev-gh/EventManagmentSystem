@@ -75,12 +75,9 @@ https://ccp-event-calendar.pages.dev/submit
 (Or visit https://ccp-event-calendar.pages.dev/ and click "Submit an Event for review" below the Sign In button)
 
 What kind of events?
-• Enterprise network meetings & business clinics
-• Community gatherings & family fun days in estates
-• Lord Mayor or dignitary visits to projects
-• Certificate presentations & course graduations
-• Public information sessions, open days & workshops
-• Launches, celebrations, or community milestone events
+• Any event held exclusively by CCP, co-hosted, or funded by CCP
+• Any event you'd be happy for colleagues, Board members, or City Hall to attend (award ceremonies, Culture Night, info talks, family fun days, Christmas markets, Lord Mayor visits)
+• Local community activities (coffee mornings, youth sessions, open days) to keep colleagues and the area informed
 
 Information needed:
 1. Name of the event

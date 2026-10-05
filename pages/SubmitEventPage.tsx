@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   MapPin, User, Mail, CheckCircle2, AlertCircle, UploadCloud, X, ArrowLeft, Send, Clock, CalendarDays,
-  ImageIcon, Info, RotateCcw, Sparkles
+  ImageIcon, Info, RotateCcw, Sparkles, ChevronDown
 } from 'lucide-react';
 import { submitEvent, getEvents } from '../services/eventService';
 import { User as AuthUser, UserRole, Event } from '../types';
@@ -603,8 +603,29 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
                 {isAdmin
                   ? 'It goes straight onto the calendar and into the next Upcoming Events Digest.'
-                  : 'Meetings, courses, family days, visits or info sessions in the next few weeks — fill in the four short steps below. It takes about two minutes.'}
+                  : 'Any CCP, co-hosted, or CCP-funded event you’d be happy for colleagues, Board members, or City Hall to attend or share — fill in the four short steps below (takes ~2 mins).'}
               </p>
+
+              {!isAdmin && (
+                <details className="mt-3 group rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/50 p-3.5 sm:p-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition-colors">
+                  <summary className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer list-none select-none">
+                    <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
+                    <span>What can be included? Guidelines from CEO</span>
+                    <ChevronDown className="w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
+                    <p>
+                      <strong className="text-slate-800 dark:text-slate-200">Eligible events:</strong> Any event held exclusively by CCP, co-hosted with another organisation, or held by a third party that was funded by CCP.
+                    </p>
+                    <p>
+                      <strong className="text-slate-800 dark:text-slate-200">Who it’s for:</strong> Any event that you would be happy for a colleague, a Board member, or staff member from City Hall to attend — e.g. award ceremonies, Culture Night, information talks, family fun days, Christmas markets, visits by the Lord Mayor, etc.
+                    </p>
+                    <p>
+                      <strong className="text-slate-800 dark:text-slate-200">Community & local activities:</strong> Things like coffee mornings — while Board members or City Hall may not attend personally, colleagues might wish to notify other staff or their community that it is taking place in their area.
+                    </p>
+                  </div>
+                </details>
+              )}
             </div>
 
             {showDraftNotice && (
@@ -950,23 +971,34 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </div>
 
             {!isAdmin && (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white mb-3">What happens next</p>
-                <ol className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                  {[
-                    ['You submit', 'Any time — Wednesdays are best.'],
-                    ['Elizabeth reviews', 'Usually on Thursday.'],
-                    ['It’s published', 'On the calendar and in Friday’s digest.']
-                  ].map(([head, sub], i) => (
-                    <li key={head} className="flex gap-3">
-                      <span className="shrink-0 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">{i + 1}</span>
-                      <span>
-                        <span className="block font-medium text-slate-800 dark:text-slate-200">{head}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{sub}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ol>
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5 flex items-center gap-2">
+                    <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
+                    <span>What can be included?</span>
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Any event held by CCP, co-hosted, or funded by CCP that colleagues, Board members, or City Hall could attend or share (from talks & festivals to local coffee mornings).
+                  </p>
+                </div>
+                <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-3">What happens next</p>
+                  <ol className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                    {[
+                      ['You submit', 'Any time — Wednesdays are best.'],
+                      ['Elizabeth reviews', 'Usually on Thursday.'],
+                      ['It’s published', 'On the calendar and in Friday’s digest.']
+                    ].map(([head, sub], i) => (
+                      <li key={head} className="flex gap-3">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">{i + 1}</span>
+                        <span>
+                          <span className="block font-medium text-slate-800 dark:text-slate-200">{head}</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{sub}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               </div>
             )}
           </aside>

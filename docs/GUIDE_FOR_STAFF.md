@@ -46,13 +46,18 @@ There are two easy ways to open the form:
 
 ## 🎯 What Types of Events Should Be Submitted?
 
-Please submit any activity, session, or milestone happening in your project area, such as:
+Per guidance from Brenda Cahill (CEO), please submit **any event that you would be happy for a colleague, a Board member, or staff member from City Hall to attend or share**.
 
-* 🏢 **Enterprise & Employment:** Enterprise network meetings, business mentoring breakfasts, job seeker clinics, start-up workshops.
-* 👨‍👩‍👧‍👦 **Community & Family:** Family fun days in estates, community gardening days, local festival activities, youth engagement sessions.
-* 🎓 **Education & Training:** Awarding certificates to clients completing courses, adult education graduations, IT classes.
-* 🏛️ **Special Visits & Celebrations:** Lord Mayor visits, ministerial visits, international delegation tours, community project launches.
-* ℹ️ **Public Information Sessions:** Open days, funding information seminars, public health talks, service registration mornings.
+This includes:
+* **Event Eligibility:**
+  * Held exclusively by Cork City Partnership (CCP).
+  * Co-hosted with another organisation.
+  * Organised by a third party that was funded by CCP.
+* **Attendance & Visibility:**
+  * Milestone events & visits: Lord Mayor visits, ministerial visits, award ceremonies, Culture Night, Christmas markets, community project launches.
+  * Project & public sessions: Information talks, enterprise network breakfasts, job seeker clinics, start-up workshops, adult education graduations.
+  * Community & family days: Family fun days in estates, community gardening days, local festival activities, youth engagement sessions.
+  * Local gatherings (e.g. coffee mornings): While Board members or City Hall may not attend in person, colleagues might wish to notify other staff or their local community that this is happening in their area.
 
 ---
 

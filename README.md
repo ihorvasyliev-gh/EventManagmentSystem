@@ -18,7 +18,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 
 | | |
 |---|---|
-| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer. |
+| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF that becomes an image of its first page). |
 | 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. Updates arrive in real time. |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp summary** | One click copies a formatted, emoji-friendly text version of the digest. |
@@ -165,7 +165,7 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 | Backend | Supabase (PostgreSQL, Auth, Realtime, row-level security) |
 | Files | Cloudflare R2 |
 | Hosting | Cloudflare Pages and Pages Functions |
-| Documents | jsPDF (digest), ExcelJS (`.xlsx`) |
+| Documents | jsPDF (digest), ExcelJS (`.xlsx`), PDF.js (PDF flyers → JPG) |
 
 ## Support
 

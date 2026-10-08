@@ -15,6 +15,11 @@
   Cache-Control: public, max-age=31536000, immutable
   Content-Type: application/javascript; charset=utf-8
 
+# Module workers (pdf.js, used to turn PDF flyers into images)
+/assets/*.mjs
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Type: application/javascript; charset=utf-8
+
 # CSS - aggressive caching with immutable
 /assets/*.css
   Cache-Control: public, max-age=31536000, immutable

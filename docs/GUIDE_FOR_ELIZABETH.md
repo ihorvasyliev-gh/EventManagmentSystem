@@ -84,7 +84,7 @@ Information needed:
 2. Date & start/finish time
 3. Venue and location (room/building/address)
 4. A few lines describing what the event is about
-5. Optional: Event flyer or poster (PNG/JPG image, or a PDF; the first page of a PDF becomes the poster image)
+5. Optional: Event flyer or poster (PNG/JPG image, or a PDF; for a PDF with several pages the submitter picks the page that becomes the poster image)
 
 Please submit all items by Thursday 5:00 PM so they can be included in Friday's release.
 

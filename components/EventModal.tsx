@@ -22,7 +22,9 @@ import { supabase } from '../lib/supabase';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { useToast } from '../contexts/ToastContext';
 import { exportToICal, downloadFile } from '../utils/export';
-import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB, isPdfFile, preparePosterFile, PreparedPoster } from '../utils/posterFile';
+import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
+import { usePosterFile } from '../hooks/usePosterFile';
+import PdfPagePicker from './PdfPagePicker';
 
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
@@ -113,13 +115,10 @@ const EventModal: React.FC<EventModalProps> = ({
   const [submitterEmail, setSubmitterEmail] = useState('');
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
   const [maxAttendees, setMaxAttendees] = useState<number | ''>('');
-  const [posterFile, setPosterFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  // Set when the poster was made from a PDF (its name and page count)
-  const [posterPdf, setPosterPdf] = useState<PreparedPoster['pdf'] | null>(null);
-  const [posterConverting, setPosterConverting] = useState(false);
-  // Only the latest pick is applied, in case a slow PDF finishes after the form moved on
-  const posterPickRef = useRef(0);
+  const poster = usePosterFile((message) => {
+    if (message) showToast(message, 'warning');
+  });
+  const { file: posterFile, preview: previewUrl, pdf: posterPdf } = poster;
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   // Lazy loaded states
   const [comments, setComments] = useState<EventComment[]>([]);
@@ -236,7 +235,7 @@ const EventModal: React.FC<EventModalProps> = ({
         setSubmitterEmail(event.submitterEmail || '');
         setRsvpEnabled(event.rsvpEnabled || false);
         setMaxAttendees(event.maxAttendees || '');
-        setPreviewUrl(event.posterUrl || null);
+        poster.reset(event.posterUrl || null);
 
         // Initial values from props (might be incomplete if lazy loaded)
         setAttachments(event.attachments || []);
@@ -259,11 +258,6 @@ const EventModal: React.FC<EventModalProps> = ({
         // Days deleted earlier ("Delete only this occurrence") are left out of hand-picked dates
         const remaining = materializeCustomSchedule(source, exceptionsRef.current?.get(source.id));
         scheduleControls.reset(readScheduleFromEvent(remaining ? { ...source, ...remaining } : source));
-
-        posterPickRef.current++;
-        setPosterFile(null);
-        setPosterPdf(null);
-        setPosterConverting(false);
 
         // Load Recurrence Data
         if (event.recurrence) {
@@ -324,7 +318,7 @@ const EventModal: React.FC<EventModalProps> = ({
     setSubmitterEmail(draft.submitterEmail || '');
     setRsvpEnabled(!!draft.rsvpEnabled);
     setMaxAttendees(draft.maxAttendees || '');
-    setPreviewUrl(draft.posterUrl || null);
+    poster.reset(draft.posterUrl || null);
     setAttachments(draft.attachments || []);
     scheduleControls.reset(readScheduleFromEvent({ ...draft, location: draft.location || '' }));
     if (draft.recurrence && draft.recurrence.type !== 'custom') {
@@ -407,33 +401,8 @@ const EventModal: React.FC<EventModalProps> = ({
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const pick = ++posterPickRef.current;
-    setPosterConverting(isPdfFile(file));
-    try {
-      const poster = await preparePosterFile(file);
-      if (pick !== posterPickRef.current) return;
-      setPosterFile(poster.file);
-      setPreviewUrl(poster.preview);
-      setPosterPdf(poster.pdf ?? null);
-    } catch (err) {
-      if (pick !== posterPickRef.current) return;
-      showToast(err instanceof Error ? err.message : 'That file could not be used as a poster.', 'warning');
-    } finally {
-      if (pick === posterPickRef.current) setPosterConverting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
   const handleRemovePoster = () => {
-    posterPickRef.current++;
-    setPosterFile(null);
-    setPreviewUrl(null);
-    setPosterPdf(null);
-    setPosterConverting(false);
+    poster.reset();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -442,8 +411,13 @@ const EventModal: React.FC<EventModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (posterConverting) {
-      showToast('The PDF is still being turned into an image — save again in a moment.', 'warning');
+    if (poster.busy || poster.choosing) {
+      showToast(
+        poster.busy
+          ? 'The PDF is still being turned into an image — save again in a moment.'
+          : 'Pick the page of the PDF to use as the poster (or cancel).',
+        'warning'
+      );
       return;
     }
     if (!title.trim()) {
@@ -1226,11 +1200,13 @@ const EventModal: React.FC<EventModalProps> = ({
                     Poster / Flyer <span className="text-slate-400 font-normal lowercase">(optional)</span>
                   </label>
 
-                  {posterConverting ? (
+                  {poster.choosing ? (
+                    <PdfPagePicker pdf={poster.choosing} busy={poster.busy} onPick={poster.choosePage} onCancel={poster.cancelChoice} />
+                  ) : poster.busy ? (
                     <div role="status" className="rounded-xl border-2 border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/20 p-5 text-center">
                       <Loader2 className="w-7 h-7 text-brand-500 animate-spin mx-auto mb-1.5" />
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Turning the PDF into an image…</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">The first page becomes the poster</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Reading the PDF…</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">This only takes a moment</p>
                     </div>
                   ) : previewUrl ? (
                     <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 p-2.5 flex items-center gap-4">
@@ -1244,7 +1220,7 @@ const EventModal: React.FC<EventModalProps> = ({
                           {posterPdf?.name || posterFile?.name || (title ? `${title} flyer` : 'Current poster image')}
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {posterPdf && (posterPdf.pages > 1 ? `Page 1 of ${posterPdf.pages} used · ` : 'Converted from PDF · ')}
+                          {posterPdf && (posterPdf.pages > 1 ? `Page ${posterPdf.page} of ${posterPdf.pages} · ` : 'Converted from PDF · ')}
                           {posterFile ? `${(posterFile.size / 1024).toFixed(0)} KB` : 'Active poster'}
                         </p>
                       </div>
@@ -1277,7 +1253,10 @@ const EventModal: React.FC<EventModalProps> = ({
                     type="file"
                     accept={POSTER_ACCEPT}
                     className="hidden"
-                    onChange={handleFileChange}
+                    onChange={(e) => {
+                      void poster.accept(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
                   />
                 </div>
 

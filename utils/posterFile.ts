@@ -1,6 +1,9 @@
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
+
 /**
- * Poster uploads. Images are used as they are; a PDF flyer is turned into a JPG of its
- * first page in the browser, so every poster (calendar, inbox, digest, Excel) is an image.
+ * Poster uploads. Images are used as they are; a PDF flyer is turned into a JPG of one
+ * page in the browser (the user picks the page when there are several), so every poster
+ * (calendar, inbox, digest, Excel) is an image.
  */
 
 export const POSTER_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -14,6 +17,11 @@ export const MAX_POSTER_PDF_MB = 25;
 /** Longest side of the JPG made from a PDF: sharp full-screen and in the digest, usually well under 1 MB */
 export const PDF_POSTER_LONG_SIDE = 2000;
 const PDF_POSTER_QUALITY = 0.9;
+/** Page previews in the page picker */
+const PDF_THUMB_LONG_SIDE = 320;
+const PDF_THUMB_QUALITY = 0.8;
+/** The page picker shows at most this many pages */
+export const MAX_PICKER_PAGES = 30;
 
 export const isPdfFile = (file: { type: string; name: string }): boolean =>
   /^application\/(x-)?pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
@@ -46,8 +54,19 @@ export interface PreparedPoster {
   file: File;
   /** Data URL for the preview */
   preview: string;
-  /** Set when the image was made from a PDF: its file name and page count (only page 1 is used) */
-  pdf?: { name: string; pages: number };
+  /** Set when the image was made from a PDF: its file name, page count and the page used */
+  pdf?: { name: string; pages: number; page: number };
+}
+
+/** A PDF opened for picking its poster page. Call `close()` once done with it. */
+export interface OpenedPdf {
+  name: string;
+  pages: number;
+  /** Small preview of a page (1-based), as a data URL */
+  thumbnail: (page: number) => Promise<string>;
+  /** A page as a poster-sized JPG */
+  render: (page: number) => Promise<PreparedPoster>;
+  close: () => void;
 }
 
 const readAsDataUrl = (file: Blob): Promise<string> =>
@@ -58,49 +77,46 @@ const readAsDataUrl = (file: Blob): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-/** Renders the first page of a PDF to a JPG. pdf.js is only downloaded when a PDF is picked. */
-const pdfToPosterImage = async (pdf: File): Promise<{ file: File; pages: number }> => {
+/** pdf.js is only downloaded when a PDF is picked */
+const loadPdfJs = async () => {
   const [pdfjs, { default: workerSrc }] = await Promise.all([
     // The legacy build also runs on older phone browsers (Safari < 17)
     import('pdfjs-dist/legacy/build/pdf.mjs'),
     import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
   ]);
   pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  return pdfjs;
+};
 
-  const task = pdfjs.getDocument({ data: new Uint8Array(await pdf.arrayBuffer()) });
+const renderPageToJpeg = async (doc: PDFDocumentProxy, pageNumber: number, longSide: number, quality: number): Promise<Blob> => {
+  const page = await doc.getPage(pageNumber);
   try {
-    const doc = await task.promise;
-    const page = await doc.getPage(1);
     const { width, height } = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: pdfRenderScale(width, height) });
+    const viewport = page.getViewport({ scale: pdfRenderScale(width, height, longSide) });
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(viewport.width));
     canvas.height = Math.max(1, Math.round(viewport.height));
     // White paper: JPG has no transparency
     await page.render({ canvas, viewport, background: '#ffffff' }).promise;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', PDF_POSTER_QUALITY));
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) throw new Error('The page could not be saved as an image');
-    return { file: new File([blob], posterNameFromPdf(pdf.name), { type: 'image/jpeg' }), pages: doc.numPages };
+    return blob;
   } finally {
-    void task.destroy();
+    page.cleanup();
   }
 };
 
-/**
- * Checks a chosen poster and, for a PDF, converts its first page to a JPG.
- * Throws an Error whose message can be shown to the user.
- */
-export const preparePosterFile = async (file: File): Promise<PreparedPoster> => {
-  const problem = checkPosterFile(file);
-  if (problem) throw new Error(problem);
-
-  if (!isPdfFile(file)) return { file, preview: await readAsDataUrl(file) };
-
-  let image: { file: File; pages: number };
+/** Opens a PDF for picking a page. Throws an Error whose message can be shown to the user. */
+export const openPdf = async (file: File): Promise<OpenedPdf> => {
+  let task: PDFDocumentLoadingTask | undefined;
+  let doc: PDFDocumentProxy;
   try {
-    image = await pdfToPosterImage(file);
+    const pdfjs = await loadPdfJs();
+    task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+    doc = await task.promise;
   } catch (err) {
-    console.warn('PDF poster conversion failed:', err);
+    void task?.destroy();
+    console.warn('Could not open the PDF poster:', err);
     const locked = err instanceof Error && err.name === 'PasswordException';
     throw new Error(
       locked
@@ -108,5 +124,30 @@ export const preparePosterFile = async (file: File): Promise<PreparedPoster> => 
         : 'That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.'
     );
   }
-  return { file: image.file, preview: await readAsDataUrl(image.file), pdf: { name: file.name, pages: image.pages } };
+
+  const pages = doc.numPages;
+  return {
+    name: file.name,
+    pages,
+    thumbnail: async (page) => readAsDataUrl(await renderPageToJpeg(doc, page, PDF_THUMB_LONG_SIDE, PDF_THUMB_QUALITY)),
+    render: async (page) => {
+      let blob: Blob;
+      try {
+        blob = await renderPageToJpeg(doc, page, PDF_POSTER_LONG_SIDE, PDF_POSTER_QUALITY);
+      } catch (err) {
+        console.warn(`Could not render page ${page} of the PDF poster:`, err);
+        throw new Error('That page could not be turned into an image. Please try another page, or save the flyer as an image (PNG or JPG).');
+      }
+      const image = new File([blob], posterNameFromPdf(file.name), { type: 'image/jpeg' });
+      return { file: image, preview: await readAsDataUrl(image), pdf: { name: file.name, pages, page } };
+    },
+    close: () => void task!.destroy()
+  };
+};
+
+/** Checks a chosen image and reads it for the preview. Throws an Error whose message can be shown to the user. */
+export const prepareImagePoster = async (file: File): Promise<PreparedPoster> => {
+  const problem = checkPosterFile(file);
+  if (problem) throw new Error(problem);
+  return { file, preview: await readAsDataUrl(file) };
 };

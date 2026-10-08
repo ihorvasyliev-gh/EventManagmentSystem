@@ -18,7 +18,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 
 | | |
 |---|---|
-| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF that becomes an image of its first page). |
+| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). |
 | 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. Updates arrive in real time. |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp summary** | One click copies a formatted, emoji-friendly text version of the digest. |

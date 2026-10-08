@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   MapPin, User, Mail, CheckCircle2, AlertCircle, UploadCloud, X, ArrowLeft, Send, Clock, CalendarDays,
   ImageIcon, Info, RotateCcw, Sparkles, ChevronDown, Loader2
@@ -22,7 +22,9 @@ import ThemeToggle from '../components/ThemeToggle';
 import OverlapList from '../components/OverlapList';
 import { groupOverlaps } from '../utils/duplicateDetection';
 import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../components/SubmitReview';
-import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB, isPdfFile, preparePosterFile, PreparedPoster } from '../utils/posterFile';
+import PdfPagePicker from '../components/PdfPagePicker';
+import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
+import { usePosterFile } from '../hooks/usePosterFile';
 
 const CATEGORIES = EVENT_CATEGORIES;
 const DESCRIPTION_SOFT_LIMIT = 600;
@@ -217,13 +219,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   );
 
   // Poster
-  const [posterFile, setPosterFile] = useState<File | null>(null);
-  const [posterPreview, setPosterPreview] = useState<string | null>(null);
-  // Set when the poster was made from a PDF (its name and page count)
-  const [posterPdf, setPosterPdf] = useState<PreparedPoster['pdf'] | null>(null);
-  const [posterConverting, setPosterConverting] = useState(false);
-  // Only the latest pick is applied, in case a slow PDF finishes after the poster was removed
-  const posterPickRef = useRef(0);
+  const poster = usePosterFile((message) =>
+    setErrors((prev) => (prev.poster === (message ?? undefined) ? prev : { ...prev, poster: message ?? undefined }))
+  );
+  const { file: posterFile, preview: posterPreview, pdf: posterPdf } = poster;
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -267,32 +266,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
   const clearError = (field: FieldName) => setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
-  const acceptFile = useCallback(async (file: File | undefined) => {
-    if (!file) return;
-    const pick = ++posterPickRef.current;
-    setPosterConverting(isPdfFile(file));
-    try {
-      const poster = await preparePosterFile(file);
-      if (pick !== posterPickRef.current) return;
-      setPosterFile(poster.file);
-      setPosterPreview(poster.preview);
-      setPosterPdf(poster.pdf ?? null);
-      clearError('poster');
-    } catch (err) {
-      if (pick !== posterPickRef.current) return;
-      setErrors((prev) => ({ ...prev, poster: err instanceof Error ? err.message : 'That file could not be used.' }));
-    } finally {
-      if (pick === posterPickRef.current) setPosterConverting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }, []);
-
   const handleRemovePoster = () => {
-    posterPickRef.current++;
-    setPosterFile(null);
-    setPosterPreview(null);
-    setPosterPdf(null);
-    setPosterConverting(false);
+    poster.reset();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -315,7 +290,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
     if (!submitterName.trim()) next.name = 'Please enter your name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
-    if (posterConverting) next.poster = 'Your PDF is still being turned into an image — one moment, then send again.';
+    if (poster.busy) next.poster = 'Your PDF is still being turned into an image — one moment, then send again.';
+    else if (poster.choosing) next.poster = 'Pick the page of your PDF to use as the poster (or cancel).';
     return next;
   };
 
@@ -808,11 +784,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
                     Poster or flyer <span className="font-normal text-slate-400">(optional)</span>
                   </span>
-                  {posterConverting ? (
+                  {poster.choosing ? (
+                    <PdfPagePicker pdf={poster.choosing} busy={poster.busy} onPick={poster.choosePage} onCancel={poster.cancelChoice} />
+                  ) : poster.busy ? (
                     <div role="status" className="w-full flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/20 p-6 text-center">
                       <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Turning your PDF into an image…</span>
-                      <span className="text-xs text-slate-400">The first page becomes the poster</span>
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reading your PDF…</span>
+                      <span className="text-xs text-slate-400">This only takes a moment</span>
                     </div>
                   ) : posterPreview ? (
                     <div className="flex items-center gap-4 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
@@ -820,7 +798,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{posterPdf?.name || posterFile?.name || 'Uploaded flyer'}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {posterPdf && (posterPdf.pages > 1 ? `Page 1 of ${posterPdf.pages} used · ` : 'Converted from PDF · ')}
+                          {posterPdf && (posterPdf.pages > 1 ? `Page ${posterPdf.page} of ${posterPdf.pages} · ` : 'Converted from PDF · ')}
                           {posterFile ? `${Math.max(1, Math.round(posterFile.size / 1024))} KB` : ''}
                         </p>
                         <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
@@ -842,7 +820,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                       onClick={() => fileInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                       onDragLeave={() => setIsDragging(false)}
-                      onDrop={(e) => { e.preventDefault(); setIsDragging(false); acceptFile(e.dataTransfer.files?.[0]); }}
+                      onDrop={(e) => { e.preventDefault(); setIsDragging(false); void poster.accept(e.dataTransfer.files?.[0]); }}
                       className={`w-full flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
                         isDragging
                           ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30'
@@ -865,7 +843,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     type="file"
                     accept={POSTER_ACCEPT}
                     className="hidden"
-                    onChange={(e) => acceptFile(e.target.files?.[0])}
+                    onChange={(e) => {
+                      void poster.accept(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
                   />
                 </div>
               </Section>

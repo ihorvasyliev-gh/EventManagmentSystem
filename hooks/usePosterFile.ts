@@ -8,6 +8,9 @@ const messageOf = (err: unknown): string =>
  * State of a poster field: the image to upload, its preview, and — for a PDF — the page
  * picker. A one-page PDF is converted straight away; with several pages the user picks one.
  *
+ * Don't clear the file input right after a pick (that can make the file unreadable on
+ * phones): clear it just before opening the file dialog instead.
+ *
  * `onError` gets a message to show, or null once a poster was chosen or a PDF opened.
  */
 export function usePosterFile(onError: (message: string | null) => void) {
@@ -51,8 +54,11 @@ export function usePosterFile(onError: (message: string | null) => void) {
       return;
     }
     const action = ++actionRef.current;
-    closePdf();
     const fromPdf = isPdfFile(picked);
+    // Read the PDF straight away, before pdf.js loads: on phones a picked file can stop being readable later
+    const bytes = fromPdf ? picked.arrayBuffer() : undefined;
+    bytes?.catch(() => undefined); // reported by openPdf
+    closePdf();
     setBusy(fromPdf);
     try {
       if (!fromPdf) {
@@ -60,7 +66,7 @@ export function usePosterFile(onError: (message: string | null) => void) {
         if (action === actionRef.current) apply(poster);
         return;
       }
-      const opened = await openPdf(picked);
+      const opened = await openPdf(picked, bytes);
       if (action !== actionRef.current) {
         opened.close();
         return;

@@ -77,6 +77,17 @@ const readAsDataUrl = (file: Blob): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+/** Short technical reason, shown after the message so a screenshot tells support what failed */
+const describeError = (err: unknown): string => {
+  const text = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  return text.length > 140 ? `${text.slice(0, 139)}…` : text;
+};
+
+const userError = (message: string, cause: unknown): Error => {
+  console.warn(message, cause);
+  return new Error(`${message} (${describeError(cause)})`, { cause });
+};
+
 /** pdf.js is only downloaded when a PDF is picked */
 const loadPdfJs = async () => {
   const [pdfjs, { default: workerSrc }] = await Promise.all([
@@ -106,23 +117,38 @@ const renderPageToJpeg = async (doc: PDFDocumentProxy, pageNumber: number, longS
   }
 };
 
-/** Opens a PDF for picking a page. Throws an Error whose message can be shown to the user. */
-export const openPdf = async (file: File): Promise<OpenedPdf> => {
+/**
+ * Opens a PDF for picking a page. Throws an Error whose message can be shown to the user.
+ *
+ * Pass `bytes` when the file was read as soon as it was picked: on phones a picked file
+ * can stop being readable a moment later.
+ */
+export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arrayBuffer()): Promise<OpenedPdf> => {
+  let data: Uint8Array;
+  try {
+    data = new Uint8Array(await bytes);
+  } catch (err) {
+    throw userError('The file could not be opened on this device. Please choose it again, or save the flyer as an image (PNG or JPG).', err);
+  }
+
+  let pdfjs: Awaited<ReturnType<typeof loadPdfJs>>;
+  try {
+    pdfjs = await loadPdfJs();
+  } catch (err) {
+    throw userError('The PDF reader could not be loaded. Please check your connection and try again.', err);
+  }
+
   let task: PDFDocumentLoadingTask | undefined;
   let doc: PDFDocumentProxy;
   try {
-    const pdfjs = await loadPdfJs();
-    task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+    task = pdfjs.getDocument({ data });
     doc = await task.promise;
   } catch (err) {
     void task?.destroy();
-    console.warn('Could not open the PDF poster:', err);
-    const locked = err instanceof Error && err.name === 'PasswordException';
-    throw new Error(
-      locked
-        ? 'That PDF is password-protected. Please remove the password or save the flyer as an image (PNG or JPG).'
-        : 'That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.'
-    );
+    if (err instanceof Error && err.name === 'PasswordException') {
+      throw new Error('That PDF is password-protected. Please remove the password or save the flyer as an image (PNG or JPG).');
+    }
+    throw userError('That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.', err);
   }
 
   const pages = doc.numPages;
@@ -135,8 +161,7 @@ export const openPdf = async (file: File): Promise<OpenedPdf> => {
       try {
         blob = await renderPageToJpeg(doc, page, PDF_POSTER_LONG_SIDE, PDF_POSTER_QUALITY);
       } catch (err) {
-        console.warn(`Could not render page ${page} of the PDF poster:`, err);
-        throw new Error('That page could not be turned into an image. Please try another page, or save the flyer as an image (PNG or JPG).');
+        throw userError('That page could not be turned into an image. Please try another page, or save the flyer as an image (PNG or JPG).', err);
       }
       const image = new File([blob], posterNameFromPdf(file.name), { type: 'image/jpeg' });
       return { file: image, preview: await readAsDataUrl(image), pdf: { name: file.name, pages, page } };

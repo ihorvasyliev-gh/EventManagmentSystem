@@ -401,6 +401,15 @@ const EventModal: React.FC<EventModalProps> = ({
     }
   };
 
+  // Cleared just before the file dialog opens, not after a pick: the same file can be picked
+  // again, and a file still being read stays readable (clearing it can break reading on phones)
+  const openFilePicker = () => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.value = '';
+    input.click();
+  };
+
   const handleRemovePoster = () => {
     poster.reset();
     if (fileInputRef.current) {
@@ -1235,7 +1244,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     </div>
                   ) : (
                     <div
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={openFilePicker}
                       className="cursor-pointer border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-brand-500 dark:hover:border-brand-400 rounded-xl p-5 text-center transition-colors bg-slate-50/50 dark:bg-slate-800/50"
                     >
                       <Upload className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
@@ -1253,10 +1262,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     type="file"
                     accept={POSTER_ACCEPT}
                     className="hidden"
-                    onChange={(e) => {
-                      void poster.accept(e.target.files?.[0]);
-                      e.target.value = '';
-                    }}
+                    onChange={(e) => void poster.accept(e.target.files?.[0])}
                   />
                 </div>
 

@@ -266,6 +266,15 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
   const clearError = (field: FieldName) => setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
+  // Cleared just before the file dialog opens, not after a pick: the same file can be picked
+  // again, and a file still being read stays readable (clearing it can break reading on phones)
+  const openFilePicker = () => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.value = '';
+    input.click();
+  };
+
   const handleRemovePoster = () => {
     poster.reset();
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -801,7 +810,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                           {posterPdf && (posterPdf.pages > 1 ? `Page ${posterPdf.page} of ${posterPdf.pages} · ` : 'Converted from PDF · ')}
                           {posterFile ? `${Math.max(1, Math.round(posterFile.size / 1024))} KB` : ''}
                         </p>
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                        <button type="button" onClick={openFilePicker} className="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                           Replace
                         </button>
                       </div>
@@ -817,7 +826,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   ) : (
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={openFilePicker}
                       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                       onDragLeave={() => setIsDragging(false)}
                       onDrop={(e) => { e.preventDefault(); setIsDragging(false); void poster.accept(e.dataTransfer.files?.[0]); }}
@@ -843,10 +852,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     type="file"
                     accept={POSTER_ACCEPT}
                     className="hidden"
-                    onChange={(e) => {
-                      void poster.accept(e.target.files?.[0]);
-                      e.target.value = '';
-                    }}
+                    onChange={(e) => void poster.accept(e.target.files?.[0])}
                   />
                 </div>
               </Section>

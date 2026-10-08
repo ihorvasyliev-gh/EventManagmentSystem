@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkPosterFile, isPdfFile, pdfRenderScale, posterNameFromPdf, posterRenderScale, PDF_POSTER_MAX_PIXELS, PDF_POSTER_MAX_SIDE } from '../utils/posterFile.ts';
+import { checkPosterFile, describePdfBytes, isPdfFile, looksLikeWholePdf, pdfRenderScale, posterNameFromPdf, posterRenderScale, PDF_POSTER_MAX_PIXELS, PDF_POSTER_MAX_SIDE } from '../utils/posterFile.ts';
 
 const MB = 1024 * 1024;
 
@@ -54,4 +54,21 @@ test('the image keeps the PDF name', () => {
   assert.equal(posterNameFromPdf('Summer Fair.pdf'), 'Summer Fair.png');
   assert.equal(posterNameFromPdf('FLYER.PDF', 'jpg'), 'FLYER.jpg');
   assert.equal(posterNameFromPdf('.pdf'), 'poster.png');
+});
+
+const bytes = (text: string) => new Uint8Array(Buffer.from(text, 'latin1'));
+const wholePdf = bytes(`%PDF-1.7\n%\xe2\xe3\xcf\xd3\n${'1 0 obj << >> endobj\n'.repeat(200)}startxref\n12\n%%EOF\n`);
+
+test('a whole PDF is told apart from a cut-off one', () => {
+  assert.equal(looksLikeWholePdf(wholePdf), true);
+  assert.equal(looksLikeWholePdf(wholePdf.subarray(0, wholePdf.length - 600)), false);
+  assert.equal(looksLikeWholePdf(bytes('<!doctype html><html></html>')), false);
+  // Junk after %%EOF is allowed
+  assert.equal(looksLikeWholePdf(bytes('%PDF-1.4\n...\n%%EOF\r\n\0\0')), true);
+});
+
+test('the error says how much of the PDF arrived', () => {
+  assert.equal(describePdfBytes(wholePdf, wholePdf.length), `${wholePdf.length.toLocaleString('en')} of ${wholePdf.length.toLocaleString('en')} bytes, starts "%PDF-1.7", ends with %%EOF`);
+  assert.equal(describePdfBytes(wholePdf.subarray(0, 1000), 5421557), '1,000 of 5,421,557 bytes, starts "%PDF-1.7", no %%EOF at the end');
+  assert.equal(describePdfBytes(bytes('<html>\0\n'), 8), '8 of 8 bytes, starts "<html>??", no %%EOF at the end');
 });

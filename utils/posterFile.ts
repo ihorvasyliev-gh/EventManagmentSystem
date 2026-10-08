@@ -87,6 +87,64 @@ export interface OpenedPdf {
   close: () => void;
 }
 
+/** A whole PDF starts with "%PDF-" and ends with "%%EOF" (each may sit within 1 KB of its end of the file) */
+export const looksLikeWholePdf = (data: Uint8Array): boolean => {
+  const text = (from: number, to: number) => String.fromCharCode(...data.subarray(from, to));
+  return text(0, 1024).includes('%PDF-') && text(Math.max(0, data.length - 1024), data.length).includes('%%EOF');
+};
+
+/** What arrived, for the error message: a screenshot then shows whether the browser handed over the whole file */
+export const describePdfBytes = (data: Uint8Array, expectedSize: number): string => {
+  const start = String.fromCharCode(...data.subarray(0, 8)).replace(/[^\x20-\x7e]/g, '?');
+  const end = String.fromCharCode(...data.subarray(Math.max(0, data.length - 1024))).includes('%%EOF') ? 'ends with %%EOF' : 'no %%EOF at the end';
+  return `${data.length.toLocaleString('en')} of ${expectedSize.toLocaleString('en')} bytes, starts "${start}", ${end}`;
+};
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const readWithFileReader = (file: Blob): Promise<ArrayBuffer> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file);
+  });
+
+const READ_CHUNK_BYTES = 1024 * 1024;
+const readInChunks = async (file: Blob): Promise<ArrayBuffer> => {
+  const parts: ArrayBuffer[] = [];
+  for (let at = 0; at < file.size; at += READ_CHUNK_BYTES) parts.push(await file.slice(at, at + READ_CHUNK_BYTES).arrayBuffer());
+  return new Blob(parts).arrayBuffer();
+};
+
+/**
+ * Reads a picked PDF in full. Some phone browsers hand over a file cut short (for example
+ * while the files app is still fetching it from the cloud), so an incomplete read is
+ * retried a moment later in other ways. Returns the most complete copy it got.
+ */
+const readWholePdf = async (file: File, first: Promise<ArrayBuffer>): Promise<Uint8Array> => {
+  const attempts: [number, () => Promise<ArrayBuffer>][] = [
+    [0, () => first],
+    [400, () => readWithFileReader(file)],
+    [1500, () => readInChunks(file)]
+  ];
+  let best: Uint8Array | null = null;
+  let lastError: unknown;
+  for (const [delay, read] of attempts) {
+    if (delay) await wait(delay);
+    try {
+      const data = new Uint8Array(await read());
+      if (data.length === file.size && looksLikeWholePdf(data)) return data;
+      console.warn(`Incomplete read of the PDF poster: ${describePdfBytes(data, file.size)}`);
+      if (!best || data.length > best.length) best = data;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (best) return best;
+  throw lastError;
+};
+
 const readAsDataUrl = (file: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -101,9 +159,9 @@ const describeError = (err: unknown): string => {
   return text.length > 140 ? `${text.slice(0, 139)}…` : text;
 };
 
-const userError = (message: string, cause: unknown): Error => {
-  console.warn(message, cause);
-  return new Error(`${message} (${describeError(cause)})`, { cause });
+const userError = (message: string, cause: unknown, facts?: string): Error => {
+  console.warn(message, cause, facts);
+  return new Error(`${message} (${describeError(cause)}${facts ? ` · ${facts}` : ''})`, { cause });
 };
 
 /** pdf.js is only downloaded when a PDF is picked */
@@ -161,10 +219,14 @@ const encodePoster = async (canvas: HTMLCanvasElement): Promise<Blob> => {
 export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arrayBuffer()): Promise<OpenedPdf> => {
   let data: Uint8Array;
   try {
-    data = new Uint8Array(await bytes);
+    data = await readWholePdf(file, bytes);
   } catch (err) {
     throw userError('The file could not be opened on this device. Please choose it again, or save the flyer as an image (PNG or JPG).', err);
   }
+  // Worked out before pdf.js takes the bytes over to its worker
+  const arrived = describePdfBytes(data, file.size);
+  const cutShort = data.length < file.size;
+  const whole = looksLikeWholePdf(data);
 
   let pdfjs: Awaited<ReturnType<typeof loadPdfJs>>;
   try {
@@ -183,7 +245,12 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
     if (err instanceof Error && err.name === 'PasswordException') {
       throw new Error('That PDF is password-protected. Please remove the password or save the flyer as an image (PNG or JPG).');
     }
-    throw userError('That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.', err);
+    const message = cutShort
+      ? 'Your browser only handed over part of this PDF. Please try again in a moment, try another browser (such as Chrome), or save the flyer as an image (PNG or JPG).'
+      : !whole
+        ? 'This PDF looks incomplete or damaged — it may not have finished downloading to this device. Open it here to check, download it again, or save the flyer as an image (PNG or JPG).'
+        : 'That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.';
+    throw userError(message, err, arrived);
   }
 
   const pages = doc.numPages;

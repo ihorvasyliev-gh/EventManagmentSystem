@@ -116,13 +116,6 @@ export const looksLikeWholePdf = (data: Uint8Array): boolean => {
   return text(0, 1024).includes('%PDF-') && text(Math.max(0, data.length - 1024), data.length).includes('%%EOF');
 };
 
-/** What arrived, for the error message: a screenshot then shows whether the browser handed over the whole file */
-export const describePdfBytes = (data: Uint8Array, expectedSize: number): string => {
-  const start = String.fromCharCode(...data.subarray(0, 8)).replace(/[^\x20-\x7e]/g, '?');
-  const end = String.fromCharCode(...data.subarray(Math.max(0, data.length - 1024))).includes('%%EOF') ? 'ends with %%EOF' : 'no %%EOF at the end';
-  return `${data.length.toLocaleString('en')} of ${expectedSize.toLocaleString('en')} bytes, starts "${start}", ${end}`;
-};
-
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const readWithFileReader = (file: Blob): Promise<ArrayBuffer> =>
@@ -159,7 +152,7 @@ const readWholePdf = async (file: File, first: Promise<ArrayBuffer>): Promise<Ui
       const data = new Uint8Array(await read());
       // An encrypted copy reads the same every time: no point trying again
       if ((data.length === file.size && looksLikeWholePdf(data)) || sniffFileKind(data) === 'managed-encrypted') return data;
-      console.warn(`Incomplete read of the PDF poster: ${describePdfBytes(data, file.size)}`);
+      console.warn(`Incomplete read of the PDF poster: ${data.length} of ${file.size} bytes`);
       if (!best || data.length > best.length) best = data;
     } catch (err) {
       lastError = err;
@@ -177,15 +170,10 @@ const readAsDataUrl = (file: Blob): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-/** Short technical reason, shown after the message so a screenshot tells support what failed */
-const describeError = (err: unknown): string => {
-  const text = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  return text.length > 140 ? `${text.slice(0, 139)}…` : text;
-};
-
-const userError = (message: string, cause: unknown, facts?: string): Error => {
-  console.warn(message, cause, facts);
-  return new Error(`${message} (${describeError(cause)}${facts ? ` · ${facts}` : ''})`, { cause });
+/** An error whose message is shown to the user as it is; the technical cause only goes to the console */
+const userError = (message: string, cause?: unknown): Error => {
+  console.warn(message, cause);
+  return new Error(message, { cause });
 };
 
 /** pdf.js is only downloaded when a PDF is picked */
@@ -247,12 +235,8 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
   } catch (err) {
     throw userError('The file could not be opened on this device. Please choose it again, or save the flyer as an image (PNG or JPG).', err);
   }
-  if (sniffFileKind(data) === 'managed-encrypted') {
-    const cause = Object.assign(new Error('the file is encrypted by a protected work app'), { name: 'EncryptedFile' });
-    throw userError(MANAGED_ENCRYPTION_MESSAGE, cause, describePdfBytes(data, file.size));
-  }
+  if (sniffFileKind(data) === 'managed-encrypted') throw userError(MANAGED_ENCRYPTION_MESSAGE);
   // Worked out before pdf.js takes the bytes over to its worker
-  const arrived = describePdfBytes(data, file.size);
   const cutShort = data.length < file.size;
   const whole = looksLikeWholePdf(data);
 
@@ -278,7 +262,7 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
       : !whole
         ? 'This PDF looks incomplete or damaged — it may not have finished downloading to this device. Open it here to check, download it again, or save the flyer as an image (PNG or JPG).'
         : 'That PDF could not be read. Please save the flyer as an image (PNG or JPG) and try again.';
-    throw userError(message, err, arrived);
+    throw userError(message, err);
   }
 
   const pages = doc.numPages;

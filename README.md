@@ -165,7 +165,7 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 | Backend | Supabase (PostgreSQL, Auth, Realtime, row-level security) |
 | Files | Cloudflare R2 |
 | Hosting | Cloudflare Pages and Pages Functions |
-| Documents | jsPDF (digest), ExcelJS (`.xlsx`), PDF.js (PDF flyers → JPG) |
+| Documents | jsPDF (digest), ExcelJS (`.xlsx`), PDF.js (PDF flyers → print-quality PNG) |
 
 ## Support
 

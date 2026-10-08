@@ -70,7 +70,7 @@ This includes:
 | **Date & Time** | Tap every date the event runs on, then set the start and estimated finish time. <br>If the times differ from day to day, untick **Same time every day** and set a start and finish time for each date. <br>If it runs more than once on a day (e.g. morning and evening), click **Add another time**. |
 | **Venue / Location** | Be specific with the venue name, room number, or address. <br>*Example:* "Hollyhill Library, Meeting Room 2, Harbour View Rd, Knocknaheeny, Cork" *(This automatically links to Google Maps on the PDF!)* <br>If it moves between venues, untick **Same place for all dates** and enter the address for each date and time. |
 | **Short Description** | **A few lines explaining what the event is about:** <br>• Who is it for? <br>• What will happen? <br>• Do attendees need to book or register in advance? |
-| **Event Poster / Flyer** *(Optional)* | Upload a clear image of your event flyer or poster (PNG, JPG, or WEBP up to 10MB), or the flyer as a PDF (up to 25MB). A PDF is turned into an image of one page: if it has several pages, you tap the page to use as the poster. It will be embedded as a thumbnail directly into the Board's digest! |
+| **Event Poster / Flyer** *(Optional)* | Upload a clear image of your event flyer or poster (PNG, JPG, or WEBP up to 10MB), or the flyer as a PDF (up to 25MB). A PDF is turned into a print-quality image of one page (300 DPI): if it has several pages, you tap the page to use as the poster. It will be embedded as a thumbnail directly into the Board's digest! |
 | **Your Name & Email** | Your contact details so Elizabeth can reach out if she needs to confirm any details before publishing. |
 
 ---

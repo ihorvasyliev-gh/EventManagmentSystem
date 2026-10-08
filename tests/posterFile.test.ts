@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkPosterFile, isPdfFile, pdfRenderScale, posterNameFromPdf } from '../utils/posterFile.ts';
+import { checkPosterFile, isPdfFile, pdfRenderScale, posterNameFromPdf, posterRenderScale, PDF_POSTER_MAX_PIXELS, PDF_POSTER_MAX_SIDE } from '../utils/posterFile.ts';
 
 const MB = 1024 * 1024;
 
@@ -23,18 +23,35 @@ test('other file types are refused', () => {
   assert.match(checkPosterFile({ type: 'application/msword', name: 'a.doc', size: 1000 })!, /or a PDF/);
 });
 
-test('a page renders with its longest side at the target size', () => {
+test('a page preview renders with its longest side at the target size', () => {
   // A4 portrait and landscape, in PDF points
-  assert.equal(Math.round(842 * pdfRenderScale(595, 842)), 2000);
-  assert.equal(Math.round(842 * pdfRenderScale(842, 595)), 2000);
-  // A0 is scaled down, a small card up
-  assert.ok(pdfRenderScale(2384, 3370) < 1);
-  assert.ok(pdfRenderScale(252, 144) > 1);
-  assert.equal(pdfRenderScale(0, 0), 1);
+  assert.equal(Math.round(842 * pdfRenderScale(595, 842, 320)), 320);
+  assert.equal(Math.round(842 * pdfRenderScale(842, 595, 320)), 320);
+  assert.equal(pdfRenderScale(0, 0, 320), 1);
 });
 
-test('the JPG keeps the PDF name', () => {
-  assert.equal(posterNameFromPdf('Summer Fair.pdf'), 'Summer Fair.jpg');
-  assert.equal(posterNameFromPdf('FLYER.PDF'), 'FLYER.jpg');
-  assert.equal(posterNameFromPdf('.pdf'), 'poster.jpg');
+const posterSize = (w: number, h: number) => [Math.floor(w * posterRenderScale(w, h)), Math.floor(h * posterRenderScale(w, h))];
+
+test('a poster is drawn at 300 DPI', () => {
+  // A4 (595.28 × 841.89 pt) and a business card (3.5 × 2 in)
+  assert.deepEqual(posterSize(595.28, 841.89), [2480, 3507]);
+  assert.deepEqual(posterSize(252, 144), [1050, 600]);
+});
+
+test('a big page is capped at what phones can draw', () => {
+  // A3 and A0: longest side 4096 px
+  assert.deepEqual(posterSize(841.89, 1190.55), [2896, 4096]);
+  const [w, h] = posterSize(2383.94, 3370.39);
+  assert.equal(h, PDF_POSTER_MAX_SIDE);
+  assert.ok(w * h <= PDF_POSTER_MAX_PIXELS);
+  // A square page hits the pixel cap before the side cap
+  const [sw, sh] = posterSize(1000, 1000);
+  assert.ok(sw * sh <= PDF_POSTER_MAX_PIXELS && sw === 4000 && sh === 4000);
+  assert.equal(posterRenderScale(0, 0), 1);
+});
+
+test('the image keeps the PDF name', () => {
+  assert.equal(posterNameFromPdf('Summer Fair.pdf'), 'Summer Fair.png');
+  assert.equal(posterNameFromPdf('FLYER.PDF', 'jpg'), 'FLYER.jpg');
+  assert.equal(posterNameFromPdf('.pdf'), 'poster.png');
 });

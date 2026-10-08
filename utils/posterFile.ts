@@ -1,7 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 
 /**
- * Poster uploads. Images are used as they are; a PDF flyer is turned into a JPG of one
+ * Poster uploads. Images are used as they are; a PDF flyer is turned into an image of one
  * page in the browser (the user picks the page when there are several), so every poster
  * (calendar, inbox, digest, Excel) is an image.
  */
@@ -11,12 +11,19 @@ export const POSTER_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'imag
 export const POSTER_ACCEPT = [...POSTER_IMAGE_TYPES, 'application/pdf', '.pdf'].join(',');
 
 export const MAX_POSTER_IMAGE_MB = 10;
-/** A PDF never leaves the device (only the JPG made from it is uploaded), so it may be larger */
+/** A PDF never leaves the device (only the image made from it is uploaded), so it may be larger */
 export const MAX_POSTER_PDF_MB = 25;
 
-/** Longest side of the JPG made from a PDF: sharp full-screen and in the digest, usually well under 1 MB */
-export const PDF_POSTER_LONG_SIDE = 2000;
-const PDF_POSTER_QUALITY = 0.9;
+/**
+ * A PDF page becomes a print-quality image: 300 DPI, but no more than phones can draw
+ * (iOS Safari refuses canvases over 16.7 megapixels). A4 → 2480×3508, A3 → 2895×4096.
+ */
+const PDF_POSTER_DPI = 300;
+export const PDF_POSTER_MAX_SIDE = 4096;
+export const PDF_POSTER_MAX_PIXELS = 16_000_000;
+/** Saved as lossless PNG; a photo-heavy page whose PNG would be bigger than this becomes a near-lossless JPG */
+const PDF_POSTER_PNG_MAX_BYTES = 8 * 1024 * 1024;
+const PDF_POSTER_JPEG_QUALITY = 0.95;
 /** Page previews in the page picker */
 const PDF_THUMB_LONG_SIDE = 320;
 const PDF_THUMB_QUALITY = 0.8;
@@ -41,13 +48,24 @@ export const checkPosterFile = (file: { type: string; name: string; size: number
 };
 
 /** Scale at which a page of `width`×`height` PDF points renders with its longest side at `longSide` px */
-export const pdfRenderScale = (width: number, height: number, longSide = PDF_POSTER_LONG_SIDE): number => {
+export const pdfRenderScale = (width: number, height: number, longSide: number): number => {
   const longest = Math.max(width, height);
   return longest > 0 && Number.isFinite(longest) ? longSide / longest : 1;
 };
 
-/** "Summer Fair.pdf" → "Summer Fair.jpg" */
-export const posterNameFromPdf = (name: string): string => `${name.replace(/\.pdf$/i, '') || 'poster'}.jpg`;
+/** Scale for the poster image of a page of `width`×`height` PDF points (72 points = 1 inch) */
+export const posterRenderScale = (width: number, height: number): number => {
+  if (!(width > 0 && height > 0 && Number.isFinite(width * height))) return 1;
+  return Math.min(
+    PDF_POSTER_DPI / 72,
+    PDF_POSTER_MAX_SIDE / Math.max(width, height),
+    Math.sqrt(PDF_POSTER_MAX_PIXELS / (width * height))
+  );
+};
+
+/** "Summer Fair.pdf" → "Summer Fair.png" */
+export const posterNameFromPdf = (name: string, extension = 'png'): string =>
+  `${name.replace(/\.pdf$/i, '') || 'poster'}.${extension}`;
 
 export interface PreparedPoster {
   /** The image to upload */
@@ -64,7 +82,7 @@ export interface OpenedPdf {
   pages: number;
   /** Small preview of a page (1-based), as a data URL */
   thumbnail: (page: number) => Promise<string>;
-  /** A page as a poster-sized JPG */
+  /** A page as a print-quality image (PNG, or JPG for a photo-heavy page) */
   render: (page: number) => Promise<PreparedPoster>;
   close: () => void;
 }
@@ -99,22 +117,39 @@ const loadPdfJs = async () => {
   return pdfjs;
 };
 
-const renderPageToJpeg = async (doc: PDFDocumentProxy, pageNumber: number, longSide: number, quality: number): Promise<Blob> => {
+const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error(`The page could not be saved as ${type}`))), type, quality);
+  });
+
+/** Draws a page on white paper at `scale(width, height)` and saves it with `encode` */
+const renderPage = async (
+  doc: PDFDocumentProxy,
+  pageNumber: number,
+  scale: (width: number, height: number) => number,
+  encode: (canvas: HTMLCanvasElement) => Promise<Blob>
+): Promise<Blob> => {
   const page = await doc.getPage(pageNumber);
+  const canvas = document.createElement('canvas');
   try {
     const { width, height } = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: pdfRenderScale(width, height, longSide) });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(viewport.width));
-    canvas.height = Math.max(1, Math.round(viewport.height));
-    // White paper: JPG has no transparency
+    const viewport = page.getViewport({ scale: scale(width, height) });
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
     await page.render({ canvas, viewport, background: '#ffffff' }).promise;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-    if (!blob) throw new Error('The page could not be saved as an image');
-    return blob;
+    return await encode(canvas);
   } finally {
+    // Phones run out of canvas memory quickly: let this one go straight away
+    canvas.width = 0;
+    canvas.height = 0;
     page.cleanup();
   }
+};
+
+/** Lossless PNG, unless that is too big to upload comfortably (a full-page photo): then a near-lossless JPG */
+const encodePoster = async (canvas: HTMLCanvasElement): Promise<Blob> => {
+  const png = await canvasToBlob(canvas, 'image/png');
+  return png.size <= PDF_POSTER_PNG_MAX_BYTES ? png : canvasToBlob(canvas, 'image/jpeg', PDF_POSTER_JPEG_QUALITY);
 };
 
 /**
@@ -155,15 +190,20 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
   return {
     name: file.name,
     pages,
-    thumbnail: async (page) => readAsDataUrl(await renderPageToJpeg(doc, page, PDF_THUMB_LONG_SIDE, PDF_THUMB_QUALITY)),
+    thumbnail: async (page) =>
+      readAsDataUrl(await renderPage(
+        doc, page,
+        (width, height) => pdfRenderScale(width, height, PDF_THUMB_LONG_SIDE),
+        (canvas) => canvasToBlob(canvas, 'image/jpeg', PDF_THUMB_QUALITY)
+      )),
     render: async (page) => {
       let blob: Blob;
       try {
-        blob = await renderPageToJpeg(doc, page, PDF_POSTER_LONG_SIDE, PDF_POSTER_QUALITY);
+        blob = await renderPage(doc, page, posterRenderScale, encodePoster);
       } catch (err) {
         throw userError('That page could not be turned into an image. Please try another page, or save the flyer as an image (PNG or JPG).', err);
       }
-      const image = new File([blob], posterNameFromPdf(file.name), { type: 'image/jpeg' });
+      const image = new File([blob], posterNameFromPdf(file.name, blob.type === 'image/png' ? 'png' : 'jpg'), { type: blob.type });
       return { file: image, preview: await readAsDataUrl(image), pdf: { name: file.name, pages, page } };
     },
     close: () => void task!.destroy()

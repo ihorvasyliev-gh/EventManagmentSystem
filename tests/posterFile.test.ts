@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkPosterFile, describePdfBytes, isPdfFile, looksLikeWholePdf, pdfRenderScale, posterNameFromPdf, posterRenderScale, PDF_POSTER_MAX_PIXELS, PDF_POSTER_MAX_SIDE } from '../utils/posterFile.ts';
+import { checkPosterFile, describePdfBytes, isPdfFile, looksLikeWholePdf, sniffFileKind, pdfRenderScale, posterNameFromPdf, posterRenderScale, PDF_POSTER_MAX_PIXELS, PDF_POSTER_MAX_SIDE } from '../utils/posterFile.ts';
 
 const MB = 1024 * 1024;
 
@@ -71,4 +71,19 @@ test('the error says how much of the PDF arrived', () => {
   assert.equal(describePdfBytes(wholePdf, wholePdf.length), `${wholePdf.length.toLocaleString('en')} of ${wholePdf.length.toLocaleString('en')} bytes, starts "%PDF-1.7", ends with %%EOF`);
   assert.equal(describePdfBytes(wholePdf.subarray(0, 1000), 5421557), '1,000 of 5,421,557 bytes, starts "%PDF-1.7", no %%EOF at the end');
   assert.equal(describePdfBytes(bytes('<html>\0\n'), 8), '8 of 8 bytes, starts "<html>??", no %%EOF at the end');
+});
+
+test('a file is recognised by its first bytes', () => {
+  const head = (...b: number[]) => new Uint8Array([...b, ...new Array(24).fill(0)]);
+  assert.equal(sniffFileKind(head(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a)), 'png');
+  assert.equal(sniffFileKind(head(0xff, 0xd8, 0xff, 0xe0)), 'jpeg');
+  assert.equal(sniffFileKind(bytes('GIF89a' + '\0'.repeat(20))), 'gif');
+  assert.equal(sniffFileKind(bytes('RIFF\x10\0\0\0WEBPVP8 ' + '\0'.repeat(16))), 'webp');
+  assert.equal(sniffFileKind(wholePdf), 'pdf');
+  assert.equal(sniffFileKind(bytes('<!doctype html>' + ' '.repeat(20))), 'unknown');
+});
+
+test('an encrypted copy from a managed Microsoft Edge is recognised', () => {
+  // What Edge under Intune app protection handed over instead of a PDF
+  assert.equal(sniffFileKind(bytes('\x0eMSMAMARPC' + '\x01\x02'.repeat(20))), 'managed-encrypted');
 });

@@ -87,6 +87,29 @@ export interface OpenedPdf {
   close: () => void;
 }
 
+/**
+ * Microsoft Edge under an organisation's app protection (Microsoft Intune, "MAM") can hand a
+ * website an encrypted copy of a picked file. Such a copy starts with this tag instead of the
+ * file's own header, and no website can read it.
+ */
+const MANAGED_ENCRYPTION_TAG = 'MSMAMAR';
+export const MANAGED_ENCRYPTION_MESSAGE =
+  'This browser is managed by your organisation and handed the page an encrypted copy of the file, which can’t be read. Please add the poster in Chrome or another browser, or from a computer.';
+
+export type FileKind = 'pdf' | 'png' | 'jpeg' | 'gif' | 'webp' | 'managed-encrypted' | 'unknown';
+
+/** What a file really is, from its first bytes (at least 16; up to 1 KB for a PDF) */
+export const sniffFileKind = (head: Uint8Array): FileKind => {
+  const text = String.fromCharCode(...head.subarray(0, 1024));
+  if (text.slice(0, 32).includes(MANAGED_ENCRYPTION_TAG)) return 'managed-encrypted';
+  if (head[0] === 0x89 && text.slice(1, 4) === 'PNG') return 'png';
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpeg';
+  if (text.startsWith('GIF8')) return 'gif';
+  if (text.startsWith('RIFF') && text.slice(8, 12) === 'WEBP') return 'webp';
+  if (text.includes('%PDF-')) return 'pdf';
+  return 'unknown';
+};
+
 /** A whole PDF starts with "%PDF-" and ends with "%%EOF" (each may sit within 1 KB of its end of the file) */
 export const looksLikeWholePdf = (data: Uint8Array): boolean => {
   const text = (from: number, to: number) => String.fromCharCode(...data.subarray(from, to));
@@ -134,7 +157,8 @@ const readWholePdf = async (file: File, first: Promise<ArrayBuffer>): Promise<Ui
     if (delay) await wait(delay);
     try {
       const data = new Uint8Array(await read());
-      if (data.length === file.size && looksLikeWholePdf(data)) return data;
+      // An encrypted copy reads the same every time: no point trying again
+      if ((data.length === file.size && looksLikeWholePdf(data)) || sniffFileKind(data) === 'managed-encrypted') return data;
       console.warn(`Incomplete read of the PDF poster: ${describePdfBytes(data, file.size)}`);
       if (!best || data.length > best.length) best = data;
     } catch (err) {
@@ -223,6 +247,10 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
   } catch (err) {
     throw userError('The file could not be opened on this device. Please choose it again, or save the flyer as an image (PNG or JPG).', err);
   }
+  if (sniffFileKind(data) === 'managed-encrypted') {
+    const cause = Object.assign(new Error('the file was encrypted by the browser'), { name: 'EncryptedCopy' });
+    throw userError(MANAGED_ENCRYPTION_MESSAGE, cause, describePdfBytes(data, file.size));
+  }
   // Worked out before pdf.js takes the bytes over to its worker
   const arrived = describePdfBytes(data, file.size);
   const cutShort = data.length < file.size;
@@ -281,5 +309,12 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
 export const prepareImagePoster = async (file: File): Promise<PreparedPoster> => {
   const problem = checkPosterFile(file);
   if (problem) throw new Error(problem);
-  return { file, preview: await readAsDataUrl(file) };
+  const [head, preview] = await Promise.all([file.slice(0, 32).arrayBuffer(), readAsDataUrl(file)]);
+  // Never upload something that would show as a broken poster
+  const kind = sniffFileKind(new Uint8Array(head));
+  if (kind === 'managed-encrypted') throw new Error(MANAGED_ENCRYPTION_MESSAGE);
+  if (kind !== 'png' && kind !== 'jpeg' && kind !== 'gif' && kind !== 'webp') {
+    throw new Error('That image could not be read: it isn’t a PNG, JPG, GIF or WEBP inside. Please choose another file.');
+  }
+  return { file, preview };
 };

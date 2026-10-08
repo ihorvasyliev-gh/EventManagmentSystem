@@ -91,7 +91,7 @@ This includes:
 * **Submit Early:** Don't wait until Thursday evening if you already know your event date! Submitting early helps ensure your flyer and details are formatted cleanly.
 * **Keep Descriptions Concise:** 2 to 4 sentences are ideal for an executive digest. Focus on *what*, *who*, and *where*.
 * **Include Booking Details:** If places are limited, specify how people can register (e.g., *"Contact Mary at Mary@partnershipcork.ie or 021-4302310 to book"*).
-* **Adding a flyer on your phone:** Use Chrome (or Safari on iPhone). Microsoft Edge signed in with your work account encrypts files it uploads, so the form can't read the flyer.
+* **Flyers saved from work Outlook on your phone:** Outlook's work protection saves attachments encrypted, so the form can't read them on the phone. Upload the flyer from a computer instead, or send the event without a poster and email the flyer to Elizabeth.
 * **Changes & Cancellations:** If an event is rescheduled, moved, or cancelled, please email Elizabeth as soon as possible so the calendar can be updated.
 * **Something not working?** If the form shows an error or won't send, email [ivasyliev@partnershipcork.ie](mailto:ivasyliev@partnershipcork.ie) and say what you were doing.
 

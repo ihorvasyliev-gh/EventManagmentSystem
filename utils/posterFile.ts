@@ -88,13 +88,13 @@ export interface OpenedPdf {
 }
 
 /**
- * Microsoft Edge under an organisation's app protection (Microsoft Intune, "MAM") can hand a
- * website an encrypted copy of a picked file. Such a copy starts with this tag instead of the
- * file's own header, and no website can read it.
+ * Work apps under an organisation's app protection (Microsoft Intune, "MAM") save files
+ * encrypted: an attachment saved from work Outlook on a phone starts with this tag instead
+ * of its own header. Only those apps hold the key, so no browser or website can read it.
  */
 const MANAGED_ENCRYPTION_TAG = 'MSMAMAR';
 export const MANAGED_ENCRYPTION_MESSAGE =
-  'This browser is managed by your organisation and handed the page an encrypted copy of the file, which can’t be read. Please add the poster in Chrome or another browser, or from a computer.';
+  'This flyer was saved from a protected work app (such as Outlook), so it’s encrypted and can’t be uploaded from this phone. Please upload it from a computer, or send the event without a poster and email the flyer to the coordinator.';
 
 export type FileKind = 'pdf' | 'png' | 'jpeg' | 'gif' | 'webp' | 'managed-encrypted' | 'unknown';
 
@@ -248,7 +248,7 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
     throw userError('The file could not be opened on this device. Please choose it again, or save the flyer as an image (PNG or JPG).', err);
   }
   if (sniffFileKind(data) === 'managed-encrypted') {
-    const cause = Object.assign(new Error('the file was encrypted by the browser'), { name: 'EncryptedCopy' });
+    const cause = Object.assign(new Error('the file is encrypted by a protected work app'), { name: 'EncryptedFile' });
     throw userError(MANAGED_ENCRYPTION_MESSAGE, cause, describePdfBytes(data, file.size));
   }
   // Worked out before pdf.js takes the bytes over to its worker

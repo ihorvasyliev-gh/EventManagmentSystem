@@ -83,7 +83,7 @@ test('a file is recognised by its first bytes', () => {
   assert.equal(sniffFileKind(bytes('<!doctype html>' + ' '.repeat(20))), 'unknown');
 });
 
-test('an encrypted copy from a managed Microsoft Edge is recognised', () => {
-  // What Edge under Intune app protection handed over instead of a PDF
+test('a file encrypted by a protected work app is recognised', () => {
+  // A PDF attachment saved from work Outlook (Intune app protection) on a phone
   assert.equal(sniffFileKind(bytes('\x0eMSMAMARPC' + '\x01\x02'.repeat(20))), 'managed-encrypted');
 });

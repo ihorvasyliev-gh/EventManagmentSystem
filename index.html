@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#d91b1b" />
     <meta name="description" content="CCP Event Calendar - Manage and view community events" />
     
-    <!-- Resource Hints for Performance -->
-    <link rel="dns-prefetch" href="https://supabase.co" />
-    <link rel="preconnect" href="https://supabase.co" crossorigin />
+    <!-- Open the connection to this project's Supabase while the app loads (the bare supabase.co host saved nothing) -->
+    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
+    <link rel="dns-prefetch" href="%VITE_SUPABASE_URL%" />
     <link rel="preload" href="/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
     
     <title>CCP Event Calendar</title>

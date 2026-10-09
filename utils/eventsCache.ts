@@ -2,7 +2,9 @@ import { Event } from '../types';
 
 const EVENTS_CACHE_KEY = 'ccp_events_cache';
 const EVENTS_CACHE_TIMESTAMP_KEY = 'ccp_events_cache_timestamp';
-const CACHE_DURATION_MS = 30 * 60 * 1000; // 30 минут — «свежий» кеш для мгновенного отображения
+// The cache is shown straight away and refreshed in the background (stale-while-revalidate), so it
+// only has to be recent enough to be a fair first picture. 30 minutes meant a skeleton on most visits.
+const CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface CachedEvents {
   events: Event[];
@@ -84,6 +86,15 @@ export function cacheEvents(events: Event[]): void {
     localStorage.setItem(EVENTS_CACHE_TIMESTAMP_KEY, cached.timestamp.toString());
   } catch (err) {
     if (import.meta.env.DEV) console.warn('Failed to cache events:', err);
+  }
+}
+
+/** Marks the cached events as just confirmed by the server (nothing had changed) */
+export function touchEventsCache(): void {
+  try {
+    if (localStorage.getItem(EVENTS_CACHE_KEY)) localStorage.setItem(EVENTS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+  } catch {
+    // Storage unavailable: the cache just isn't kept
   }
 }
 

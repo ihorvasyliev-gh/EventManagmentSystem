@@ -604,6 +604,27 @@ export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<
 };
 
 /**
+ * Every deleted occurrence the user may see (row-level security limits it to visible events).
+ * Needs no event ids, so the calendar fetches it alongside the events instead of after them,
+ * and a long list of ids can't make the request URL too long.
+ */
+export const getAllRecurrenceExceptions = async (): Promise<Map<string, Date[]>> => {
+  const { data, error } = await supabase
+    .from('recurrence_exceptions')
+    .select('event_id, exception_date');
+
+  if (error) throw new Error(error.message || 'Failed to fetch recurrence exceptions');
+
+  const map = new Map<string, Date[]>();
+  for (const item of data || []) {
+    const list = map.get(item.event_id) || [];
+    list.push(new Date(item.exception_date));
+    map.set(item.event_id, list);
+  }
+  return map;
+};
+
+/**
  * Удалить конкретный экземпляр повторяющегося события
  */
 export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Date, userId: string, userName: string): Promise<void> => {

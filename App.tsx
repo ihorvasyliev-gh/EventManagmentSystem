@@ -9,14 +9,14 @@ import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { User, Event, EventFilters, UserRole, EventStatus } from './types';
-import { getEvents, updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, getRecurrenceExceptionsBatch, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
+import { getEvents, updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, getAllRecurrenceExceptions, getPendingSubmissions, approveSubmission, rejectSubmission } from './services/eventService';
 import { logout as logoutService, getCurrentUser } from './services/authService';
 import { checkTomorrowRSVPEvents } from './services/notificationService';
 import { supabase } from './lib/supabase';
 import { filterEvents } from './utils/filterEvents';
 import { expandRecurringEvents, getEventLocations } from './utils/recurrence';
 import { getCachedUser, cacheUser, clearUserCache } from './utils/sessionCache';
-import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions } from './utils/eventsCache';
+import { getCachedEvents, cacheEvents, clearEventsCache, getCachedExceptions, cacheExceptions, touchEventsCache } from './utils/eventsCache';
 import { isSameDay } from './utils/date';
 import { materializeCustomSchedule } from './utils/multiDateUtils';
 import BottomNavigation from './components/BottomNavigation';
@@ -233,35 +233,47 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   return true;
 };
 
-  // Refresh Events Handler — при обновлении показываем кеш + крутим логотип, скелетоны только при первой загрузке без кеша
-  const refreshEvents = useCallback(async (isManual = false) => {
-    if (!user) return;
+const areExceptionsEqual = (a: Map<string, Date[]>, b: Map<string, Date[]>): boolean => {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [id, dates] of a) {
+    const other = b.get(id);
+    if (!other || other.length !== dates.length) return false;
+    const times = new Set(other.map((d) => d.getTime()));
+    if (dates.some((d) => !times.has(d.getTime()))) return false;
+  }
+  return true;
+};
 
+  // Latest values for the refresh logic, which compares before it sets state
+  const eventsRef = React.useRef(events);
+  eventsRef.current = events;
+  const exceptionsRef = React.useRef(recurrenceExceptions);
+  exceptionsRef.current = recurrenceExceptions;
+  // The array restored from the local cache: written back unchanged, it would look freshly fetched
+  const restoredFromCacheRef = React.useRef<Event[] | null>(null);
+
+  // Fetches events and deleted occurrences together. When nothing changed the current state is
+  // kept, so a background sync doesn't re-render the whole calendar.
+  const fetchEventsNow = useCallback(async (isManual: boolean) => {
     setIsRefreshing(true);
-
     try {
-      const data = await getEvents();
-      // If manual refresh requested, always update state.
-      // Otherwise, update if any event data actually changed.
-      setEvents((prev) => (isManual || !areEventsEqual(prev, data) ? data : prev));
-      // Also refreshes the cache timestamp when nothing changed
-      cacheEvents(data);
-
-      // Load recurrence exceptions for recurring events in one batch
-      const recurringEventIds = data
-        .filter(e => e.recurrence && e.recurrence.type !== 'none')
-        .map(e => e.id);
-
-      if (recurringEventIds.length > 0) {
-        try {
-          const exceptionsMap = await getRecurrenceExceptionsBatch(recurringEventIds);
-          setRecurrenceExceptions(exceptionsMap);
-          cacheExceptions(exceptionsMap);
-        } catch (err) {
-          console.error('Error loading batch exceptions:', err);
-        }
+      const [data, exceptionsMap] = await Promise.all([
+        getEvents(),
+        getAllRecurrenceExceptions().catch((err) => {
+          console.error('Error loading recurrence exceptions:', err);
+          return null;
+        })
+      ]);
+      if (areEventsEqual(eventsRef.current, data)) {
+        touchEventsCache();
+      } else {
+        setEvents(data);
       }
-
+      if (exceptionsMap && !areExceptionsEqual(exceptionsRef.current, exceptionsMap)) {
+        setRecurrenceExceptions(exceptionsMap);
+        cacheExceptions(exceptionsMap);
+      }
     } catch (error) {
       console.error('Error loading events:', error);
       if (isManual) {
@@ -276,18 +288,50 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       setLoadingEvents(false);
       setIsRefreshing(false);
     }
-  }, [user, showToast]);
+  }, [showToast]);
+
+  // One fetch at a time. A refresh asked for meanwhile runs once more afterwards: the running
+  // fetch may have started before the change it is meant to pick up.
+  const refreshStateRef = React.useRef<{ running: Promise<void> | null; again: boolean; manualAgain: boolean }>({
+    running: null, again: false, manualAgain: false
+  });
+  // By id: the profile is re-read from the server after a cached sign-in, which must not refetch
+  const userId = user?.id ?? null;
+  const refreshEvents = useCallback((isManual = false): Promise<void> => {
+    if (!userId) return Promise.resolve();
+    const st = refreshStateRef.current;
+    if (st.running) {
+      st.again = true;
+      st.manualAgain = st.manualAgain || isManual;
+      return st.running;
+    }
+    const run = async (manual: boolean): Promise<void> => {
+      await fetchEventsNow(manual);
+      if (st.again) {
+        const nextManual = st.manualAgain;
+        st.again = false;
+        st.manualAgain = false;
+        await run(nextManual);
+      }
+    };
+    st.running = run(isManual).finally(() => {
+      st.running = null;
+    });
+    return st.running;
+  }, [userId, fetchEventsNow]);
 
   // Initial Load of Events
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     // Check for tomorrow's events and notify
-    checkTomorrowRSVPEvents(user.id).catch(console.error);
+    checkTomorrowRSVPEvents(userId).catch(console.error);
 
     const cached = getCachedEvents();
 
     if (cached && cached.length > 0) {
+      // Show the last known calendar at once; the fetch below brings it up to date
+      restoredFromCacheRef.current = cached;
       setEvents(cached);
       setLoadingEvents(false);
 
@@ -300,17 +344,13 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       setLoadingEvents(true);
     }
 
-    // Background sync using requestIdleCallback for non-blocking updates
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(() => refreshEvents(false), { timeout: 2000 });
-    } else {
-      setTimeout(() => refreshEvents(false), 100);
-    }
-  }, [user, refreshEvents]);
+    // Start the request straight away (it used to wait for an idle moment, up to 2 s)
+    refreshEvents(false);
+  }, [userId, refreshEvents]);
 
-  // Keep the local cache in step with every optimistic change
+  // Keep the local cache in step with every change (not the copy just restored from it)
   useEffect(() => {
-    if (user) cacheEvents(events);
+    if (user && events !== restoredFromCacheRef.current) cacheEvents(events);
   }, [user, events]);
 
   // Pull-to-refresh on mobile when at top of page
@@ -358,8 +398,9 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   }, []);
 
   // Submissions handlers for Admins
+  const isAdmin = user?.role === UserRole.ADMIN;
   const refreshSubmissions = useCallback(async () => {
-    if (user?.role === UserRole.ADMIN) {
+    if (isAdmin) {
       try {
         const subs = await getPendingSubmissions();
         setPendingSubmissions((prev) => {
@@ -375,13 +416,13 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         console.error('Error fetching submissions:', err);
       }
     }
-  }, [user]);
+  }, [isAdmin]);
 
   useEffect(() => {
-    if (user?.role === UserRole.ADMIN) {
+    if (isAdmin) {
       refreshSubmissions();
     }
-  }, [user, refreshSubmissions]);
+  }, [isAdmin, refreshSubmissions]);
 
   // Realtime subscription for live updates of events & submissions
   useEffect(() => {
@@ -389,6 +430,8 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     if (import.meta.env.VITE_SUPABASE_REALTIME === 'false') return;
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    // A burst of changes (e.g. "Approve all") becomes one refresh instead of one per row
+    let debounce: ReturnType<typeof setTimeout> | undefined;
     try {
       channel = supabase
         .channel('events-realtime-channel')
@@ -400,17 +443,18 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
               console.log('[Realtime] Events table change:', payload.eventType, payload);
             }
 
-            if (user.role === UserRole.ADMIN) {
-              refreshSubmissions();
-              if (payload.eventType === 'INSERT') {
-                const newRow = payload.new as any;
-                if (newRow && (newRow.status === 'draft' || !newRow.status)) {
-                  showToast(`New submission received: "${newRow.title || 'Untitled Event'}"`, 'info');
-                }
+            if (user.role === UserRole.ADMIN && payload.eventType === 'INSERT') {
+              const newRow = payload.new as any;
+              if (newRow && (newRow.status === 'draft' || !newRow.status)) {
+                showToast(`New submission received: "${newRow.title || 'Untitled Event'}"`, 'info');
               }
             }
 
-            refreshEvents(true);
+            clearTimeout(debounce);
+            debounce = setTimeout(() => {
+              if (user.role === UserRole.ADMIN) refreshSubmissions();
+              refreshEvents(true);
+            }, 400);
           }
         )
         .subscribe((status) => {
@@ -425,6 +469,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
     }
 
     return () => {
+      clearTimeout(debounce);
       if (channel) {
         supabase.removeChannel(channel);
       }
@@ -435,8 +480,12 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
   useEffect(() => {
     if (!user) return;
 
+    let lastSync = 0;
     const handleSyncOnVisible = () => {
+      // "focus" and "visibilitychange" both fire on returning to the tab: one sync is enough
+      if (Date.now() - lastSync < 10_000) return;
       if (document.visibilityState === 'visible') {
+        lastSync = Date.now();
         if (user.role === UserRole.ADMIN) {
           refreshSubmissions();
         }
@@ -1021,12 +1070,13 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
         </div>
 
         {/* Quick Category Filter Pills */}
-        <div className="mb-4 sm:mb-6 flex items-center gap-2 overflow-x-auto lg:overflow-visible lg:flex-wrap pb-1 pt-0.5 no-scrollbar text-xs -mx-3 px-3 sm:mx-0 sm:px-0 touch-pan-x" role="group" aria-label="Filter by category">
+        {/* One row: scrolls sideways (faded edge) until it fits, from 1280px */}
+        <div className="mb-4 sm:mb-6 flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar text-xs -mx-3 px-3 sm:mx-0 sm:px-0 touch-pan-x [mask-image:linear-gradient(to_right,#000_88%,transparent)] xl:[mask-image:none]" role="group" aria-label="Filter by category">
           <button
             type="button"
             onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
             aria-pressed={!filters.category}
-            className={`flex-shrink-0 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
               !filters.category
                 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
@@ -1042,7 +1092,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
                 type="button"
                 onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
                 aria-pressed={isSelected}
-                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
                   isSelected
                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
@@ -1141,6 +1191,7 @@ const areEventsEqual = (a: Event[], b: Event[]): boolean => {
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
+            senderName={user.fullName}
             onOpenSubmissions={user.role === UserRole.ADMIN ? () => {
               setIsBulletinModalOpen(false);
               setIsSubmissionsModalOpen(true);

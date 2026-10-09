@@ -11,20 +11,19 @@ import {
   monthShort,
   monthShortUpper
 } from './digestGrouping';
+import {
+  toAbsoluteHttpUrl,
+  toDate,
+  MONTHS_LONG,
+  WEEKDAYS_LONG,
+  clock,
+  startOfLocalDay,
+  isAllDay,
+  formatLongRange,
+  digestGroupsFor
+} from './digestText.ts';
 
-/**
- * Links inside a PDF must be absolute: a site-relative poster URL ("/api/file/…") would
- * open as a file on the reader's computer. Returns null when no web link can be made.
- */
-export const toAbsoluteHttpUrl = (url: string | undefined, base = typeof window !== 'undefined' ? window.location.origin : ''): string | null => {
-  if (!url) return null;
-  try {
-    const abs = new URL(url, base || undefined);
-    return abs.protocol === 'https:' || abs.protocol === 'http:' ? abs.href : null;
-  } catch {
-    return null;
-  }
-};
+export { toAbsoluteHttpUrl, generateDigestEmail, type DigestEmail } from './digestText.ts';
 
 export interface BulletinOptions {
   startDate: Date;
@@ -121,13 +120,14 @@ export interface LoadedPdfFlyer {
 /**
  * Loads an image as a JPEG/PNG data URL for jsPDF, at most `maxSide` px on its long side.
  * createImageBitmap applies the EXIF orientation, so phone photos come out upright.
+ * `jpeg` flattens PNGs onto white: a flyer saved as PNG is several times larger otherwise.
  */
-export const loadImageForPdf = async (url: string, maxSide = 1200): Promise<LoadedPdfFlyer | null> => {
+export const loadImageForPdf = async (url: string, maxSide = 1200, jpeg = false): Promise<LoadedPdfFlyer | null> => {
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) return null;
     const blob = await res.blob();
-    const isPng = blob.type === 'image/png' || url.toLowerCase().includes('.png');
+    const isPng = !jpeg && (blob.type === 'image/png' || url.toLowerCase().includes('.png'));
     const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
     const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
@@ -143,7 +143,7 @@ export const loadImageForPdf = async (url: string, maxSide = 1200): Promise<Load
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     return {
-      dataUrl: canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88),
+      dataUrl: canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.86),
       width: canvas.width,
       height: canvas.height,
       aspectRatio: canvas.width / canvas.height,
@@ -153,6 +153,25 @@ export const loadImageForPdf = async (url: string, maxSide = 1200): Promise<Load
     console.warn('loadImageForPdf error:', err);
     return null;
   }
+};
+
+/** Images already prepared this session, so Preview then Download doesn't fetch and re-encode them twice */
+const imageCache = new Map<string, Promise<LoadedPdfFlyer | null>>();
+const IMAGE_CACHE_LIMIT = 80;
+
+const loadImageCached = (url: string, maxSide: number, jpeg = false): Promise<LoadedPdfFlyer | null> => {
+  const key = `${maxSide}|${jpeg ? 'jpeg' : 'auto'}|${url}`;
+  let pending = imageCache.get(key);
+  if (!pending) {
+    if (imageCache.size >= IMAGE_CACHE_LIMIT) imageCache.delete(imageCache.keys().next().value!);
+    pending = loadImageForPdf(url, maxSide, jpeg).then((img) => {
+      // A failed load (offline, flyer not uploaded yet) is tried again next time
+      if (!img) imageCache.delete(key);
+      return img;
+    });
+    imageCache.set(key, pending);
+  }
+  return pending;
 };
 
 // ---------------------------------------------------------------------------
@@ -283,18 +302,7 @@ const cleanUnicodeText = (text: string | null | undefined, preserveNewlines = fa
 // Date helpers
 // ---------------------------------------------------------------------------
 
-const toDate = (d: Date | string | number | undefined | null): Date | null => {
-  if (!d) return null;
-  const date = d instanceof Date ? d : new Date(d);
-  return isNaN(date.getTime()) ? null : date;
-};
-
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-const clock = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
 // Fixed English abbreviations ("Sep", not the en-IE "Sept")
 const formatDateRange = (start: Date | string, end: Date | string) => {
@@ -304,14 +312,6 @@ const formatDateRange = (start: Date | string, end: Date | string) => {
   const sStr = s ? fmt(s) : '';
   const eStr = e ? fmt(e) : '';
   return sStr && eStr ? `${sStr} – ${eStr}` : sStr || eStr;
-};
-
-/** "Friday 25 September – Friday 9 October 2026" (year shown once when shared) */
-const formatLongRange = (s: Date, e: Date): string => {
-  const long = (d: Date, withYear: boolean) =>
-    `${WEEKDAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}${withYear ? ` ${d.getFullYear()}` : ''}`;
-  if (startOfLocalDay(s).getTime() === startOfLocalDay(e).getTime()) return long(s, true);
-  return `${long(s, s.getFullYear() !== e.getFullYear())} – ${long(e, true)}`;
 };
 
 const formatEventTime = (start: Date | string, end?: Date | string) => {
@@ -325,19 +325,12 @@ const formatEventTime = (start: Date | string, end?: Date | string) => {
   return sStr;
 };
 
-const startOfLocalDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
 const addDays = (d: Date, n: number): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 const dayKeyOf = (d: Date): string => formatLocalDate(d);
 
 const dayCountInclusive = (start: Date, end: Date): number =>
   Math.round((startOfLocalDay(end).getTime() - startOfLocalDay(start).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-/** True for events without a meaningful time (starting at midnight and not ending at a set time) */
-const isAllDay = (start: Date, end: Date | null): boolean =>
-  start.getHours() === 0 && start.getMinutes() === 0 &&
-  (!end || (end.getHours() === 23 && end.getMinutes() >= 59) || (end.getHours() === 0 && end.getMinutes() === 0));
 
 // ---------------------------------------------------------------------------
 // Palette
@@ -367,6 +360,13 @@ const GOOGLE_BG: Rgb = [241, 245, 249];
 
 interface Block extends LayoutBlock {
   draw: (y: number) => void;
+  /** Executive cards: index of the event group (for the contents list) */
+  group?: number;
+  /**
+   * Executive cards: draw the day's date beside the card — on the day's first card, and
+   * again ("cont.") on the first card of a page the day carries over onto. Set after pagination.
+   */
+  tile?: 'first' | 'continued';
 }
 
 /**
@@ -378,16 +378,17 @@ interface Density {
   /** "At a glance" row height (null: by number of weeks) */
   glanceCellH: number | null;
   weekBannerH: number;
-  dayHeaderH: number;
+  /** Extra space before the first card of a new day */
+  dayGap: number;
   cardPadY: number;
   cardGap: number;
   flyerMaxH: number;
 }
 
 const DENSITIES: Density[] = [
-  { glanceCellH: null, weekBannerH: 11, dayHeaderH: 15, cardPadY: 4.6, cardGap: 3.2, flyerMaxH: 42 },
-  { glanceCellH: 10.5, weekBannerH: 10, dayHeaderH: 14, cardPadY: 4.1, cardGap: 2.7, flyerMaxH: 37 },
-  { glanceCellH: 10, weekBannerH: 9.5, dayHeaderH: 13.5, cardPadY: 3.7, cardGap: 2.3, flyerMaxH: 32 }
+  { glanceCellH: null, weekBannerH: 11, dayGap: 2.4, cardPadY: 4.6, cardGap: 3.2, flyerMaxH: 42 },
+  { glanceCellH: 10.5, weekBannerH: 10, dayGap: 2, cardPadY: 4.1, cardGap: 2.7, flyerMaxH: 37 },
+  { glanceCellH: 10, weekBannerH: 9.5, dayGap: 1.6, cardPadY: 3.7, cardGap: 2.3, flyerMaxH: 32 }
 ];
 
 /**
@@ -410,6 +411,10 @@ export const generateEventsDigestPDF = async (
   const CW = W - M * 2;                          // 182
   const PAGE_TOP = 26;                           // content top on continuation pages
   const PAGE_BOTTOM = H - 17;
+  // Executive cards sit right of a narrow column holding each day's date
+  const TILE_W = 12;
+  const CARD_X = M + TILE_W + 3;
+  const CARD_W = W - M - CARD_X;                 // 167
 
   // --- Fonts ---------------------------------------------------------------
   const fontData = await loadFontData();
@@ -587,16 +592,19 @@ export const generateEventsDigestPDF = async (
   const today = startOfLocalDay(new Date());
 
   const [logo, flyers] = await Promise.all([
-    loadImageForPdf('/assets/ccp-logo.png'),
+    // Printed about 55 mm wide: 600 px is still well over 250 dpi
+    loadImageCached('/assets/ccp-logo.png', 600),
     (async () => {
-      const map = new Map<string, LoadedPdfFlyer>();
+      // Keyed by event; the alias is per image, so a flyer shared by several events is embedded once
+      const map = new Map<string, LoadedPdfFlyer & { alias: string }>();
       if (!isExecutive) return map;
       await Promise.all(groups.map(async ({ event: ev }) => {
         const url = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (!url) return;
-        // Thumbnails are at most 42 mm tall: 600 px keeps them sharp in print at a fraction of the size
-        const flyer = await loadImageForPdf(url, 600);
-        if (flyer) map.set(ev.id, flyer);
+        // Thumbnails are at most 42 mm tall: 600 px keeps them sharp in print (QR codes still scan)
+        // and JPEG keeps a PNG flyer from adding a few hundred KB to the email attachment
+        const flyer = await loadImageCached(url, 600, true);
+        if (flyer) map.set(ev.id, { ...flyer, alias: `flyer-${url}` });
       }));
       return map;
     })()
@@ -858,31 +866,47 @@ export const generateEventsDigestPDF = async (
   const weekIndexOf = (d: Date) =>
     Math.floor(Math.round((startOfLocalDay(d).getTime() - gridStart.getTime()) / 86400000) / 7);
 
+  // Weeks relative to the issue date: the old "WEEK 2" counted from the period start, so a
+  // digest whose first days were empty opened on "Week 2"
+  const thisMonday = addDays(today, -((today.getDay() + 6) % 7));
+  const relativeWeekLabel = (monday: Date): string | null => {
+    const diff = Math.round((monday.getTime() - thisMonday.getTime()) / (7 * 86400000));
+    if (diff === 0) return 'THIS WEEK';
+    if (diff === 1) return 'NEXT WEEK';
+    return null;
+  };
+
   const weekBanner = (weekIndex: number, h: number): Block => {
     const monday = addDays(gridStart, weekIndex * 7);
     const wStart = monday < periodDayStart ? periodDayStart : monday;
     const sunday = addDays(monday, 6);
     const lastDay = startOfLocalDay(periodEnd);
     const wEnd = sunday > lastDay ? lastDay : sunday;
-    const range = wStart.getMonth() === wEnd.getMonth()
-      ? `${wStart.getDate()} – ${wEnd.getDate()} ${MONTHS_LONG[wEnd.getMonth()]}`
-      : `${wStart.getDate()} ${monthShort(wStart)} – ${wEnd.getDate()} ${monthShort(wEnd)}`;
+    const range = wStart.getTime() === wEnd.getTime()
+      ? `${WEEKDAYS_LONG[wStart.getDay()]} ${wStart.getDate()} ${MONTHS_LONG[wStart.getMonth()]}`
+      : wStart.getMonth() === wEnd.getMonth()
+        ? `${wStart.getDate()} – ${wEnd.getDate()} ${MONTHS_LONG[wEnd.getMonth()]}`
+        : `${wStart.getDate()} ${monthShort(wStart)} – ${wEnd.getDate()} ${monthShort(wEnd)}`;
+    const label = relativeWeekLabel(monday);
     return {
       h,
       keepWithNext: true,
       draw: (y) => {
-        const label = `WEEK ${weekIndex + 1}`;
-        font('bold', 6.8);
-        const lw = doc.getTextWidth(label) + 0.5 * (label.length - 1) + 6;
-        pill(M, y + 2.6, lw, 5.4, BG, BORDER);
+        let x = M;
+        if (label) {
+          font('bold', 6.6);
+          const lw = doc.getTextWidth(label) + 0.5 * (label.length - 1) + 6;
+          pill(M, y + 2.6, lw, 5.4, INK);
+          color(WHITE);
+          spaced(label, M + 3, y + 6.25, 0.5);
+          x += lw + 3;
+        }
+        font('bold', 9.5);
         color(INK);
-        spaced(label, M + 3, y + 6.3, 0.5);
-        font('semibold', 9);
-        color(INK);
-        doc.text(range, M + lw + 3, y + 6.5);
+        doc.text(range, x, y + 6.6);
         const rw = doc.getTextWidth(range);
         stroke(BORDER, 0.3);
-        doc.line(M + lw + rw + 6, y + 5.3, W - M, y + 5.3);
+        doc.line(x + rw + 3, y + 5.3, W - M, y + 5.3);
       }
     };
   };
@@ -894,70 +918,60 @@ export const generateEventsDigestPDF = async (
     return null;
   };
 
-  const dayHeader = (day: Date, count: number, execH: number): Block => {
+  /** Executive layout: the day's date in the column left of its cards (today in ink) */
+  const TILE_H = 15;
+  const dateTile = (day: Date, y: number, mode: 'first' | 'continued') => {
+    const isToday = day.getTime() === today.getTime();
+    const cx = M + TILE_W / 2;
+    fill(isToday ? INK : WHITE);
+    stroke(isToday ? INK : BORDER, 0.35);
+    doc.roundedRect(M, y, TILE_W, TILE_H, 2.2, 2.2, 'FD');
+    font('semibold', 5.2);
+    color(isToday ? WHITE : MUTED);
+    spaced(WEEKDAYS_LONG[day.getDay()].slice(0, 3).toUpperCase(), cx, y + 3.9, 0.3, 'center');
+    font('bold', 13);
+    color(isToday ? WHITE : INK);
+    doc.text(String(day.getDate()), cx, y + 9.7, { align: 'center' });
+    font('semibold', 5.2);
+    color(isToday ? WHITE : MUTED);
+    spaced(monthShortUpper(day), cx, y + 13.1, 0.3, 'center');
+    const note = mode === 'continued' ? 'CONT.' : relativeDayLabel(day);
+    if (note) {
+      font('bold', 4.8);
+      color(mode === 'continued' ? MUTED : INK);
+      spaced(note, cx, y + TILE_H + 3.3, 0.2, 'center');
+    }
+  };
+
+  /** Compact table: a shaded row per day */
+  const dayHeader = (day: Date, count: number): Block => {
     const key = dayKeyOf(day);
     const isToday = day.getTime() === today.getTime();
     return {
-      h: isExecutive ? execH : 8.5,
+      h: 8.5,
       keepWithNext: true,
       isDayHeader: true,
       dayKey: key,
       draw: (y) => {
         const countLabel = count === 1 ? '1 event' : `${count} events`;
         const rel = relativeDayLabel(day);
-        if (isExecutive) {
-          // Date tile (outlined — no solid ink block)
-          const tile = 11.5;
-          const ty = y + 1.5;
-          // Today is marked in ink, not red (red reads as a weekend or holiday)
-          const tileColor = isToday ? WHITE : INK;
-          fill(isToday ? INK : WHITE);
-          stroke(isToday ? INK : BORDER, 0.35);
-          doc.roundedRect(M, ty, tile, tile, 2.2, 2.2, 'FD');
-          font('semibold', 5.2);
-          color(isToday ? WHITE : MUTED);
-          spaced(monthShortUpper(day), M + tile / 2, ty + 3.7, 0.3, 'center');
-          font('bold', 12);
-          color(tileColor);
-          doc.text(String(day.getDate()), M + tile / 2, ty + 9.3, { align: 'center' });
-
-          font('bold', 11);
+        fill(BG);
+        doc.rect(M, y, CW, 7, 'F');
+        fill(INK);
+        doc.rect(M, y, isToday ? 1.6 : 0.9, 7, 'F');
+        font('bold', 8);
+        color(INK);
+        const label = `${WEEKDAYS_LONG[day.getDay()]} ${day.getDate()} ${MONTHS_LONG[day.getMonth()]}`;
+        doc.text(label, M + 3, y + 4.7);
+        if (rel) {
+          const lx = M + 3 + doc.getTextWidth(label) + 2.5;
+          font('bold', 5.8);
           color(INK);
-          const wd = WEEKDAYS_LONG[day.getDay()];
-          doc.text(wd, M + tile + 3.5, y + 6.3);
-          let afterX = M + tile + 3.5 + doc.getTextWidth(wd) + 2.5;
-          if (rel) {
-            font('bold', 5.8);
-            const cw = doc.getTextWidth(rel) + 0.3 * (rel.length - 1) + 4.4;
-            pill(afterX, y + 2.6, cw, 4.4, BG, BORDER);
-            color(INK);
-            spaced(rel, afterX + 2.2, y + 5.75, 0.3);
-            afterX += cw;
-          }
-          font('regular', 8);
-          color(MUTED);
-          doc.text(`${day.getDate()} ${MONTHS_LONG[day.getMonth()]} ${day.getFullYear()}`, M + tile + 3.5, y + 11);
-          font('medium', 7.5);
-          doc.text(countLabel, W - M, y + 6.3, { align: 'right' });
-        } else {
-          fill(BG);
-          doc.rect(M, y, CW, 7, 'F');
-          fill(INK);
-          doc.rect(M, y, isToday ? 1.6 : 0.9, 7, 'F');
-          font('bold', 8);
-          color(INK);
-          const label = `${WEEKDAYS_LONG[day.getDay()]} ${day.getDate()} ${MONTHS_LONG[day.getMonth()]}`;
-          doc.text(label, M + 3, y + 4.7);
-          if (rel) {
-            const lx = M + 3 + doc.getTextWidth(label) + 2.5;
-            font('bold', 5.8);
-            color(INK);
-            spaced(rel, lx, y + 4.6, 0.3);
-          }
-          font('medium', 7);
-          color(MUTED);
-          doc.text(countLabel, W - M - 2, y + 4.7, { align: 'right' });
+          spaced(rel, lx, y + 4.6, 0.3);
         }
+        font('medium', 7);
+        color(MUTED);
+        doc.text(countLabel, W - M - 2, y + 4.7, { align: 'right' });
       }
     };
   };
@@ -966,22 +980,19 @@ export const generateEventsDigestPDF = async (
     const [yy, mm, dd] = dayKey.split('-').map(Number);
     const day = new Date(yy, mm - 1, dd);
     return {
-      h: isExecutive ? 9 : 8.5,
+      h: 8.5,
       keepWithNext: true,
       draw: (y) => {
-        if (!isExecutive) {
-          fill(BG);
-          doc.rect(M, y, CW, 7, 'F');
-        }
+        fill(BG);
+        doc.rect(M, y, CW, 7, 'F');
         font('semibold', 8.5);
         color(INK);
         const label = `${WEEKDAYS_LONG[day.getDay()]} ${day.getDate()} ${MONTHS_LONG[day.getMonth()]}`;
-        const x = M + (isExecutive ? 0 : 3);
-        doc.text(label, x, y + 4.7);
+        doc.text(label, M + 3, y + 4.7);
         const labelW = doc.getTextWidth(label);
         font('regular', 7.5);
         color(MUTED);
-        doc.text('(continued)', x + labelW + 1.5, y + 4.7);
+        doc.text('(continued)', M + 3 + labelW + 1.5, y + 4.7);
       }
     };
   };
@@ -997,51 +1008,59 @@ export const generateEventsDigestPDF = async (
       return {
         date: `${WEEKDAYS_LONG[s.getDay()].slice(0, 3)} ${s.getDate()} ${monthShort(s)}`,
         time: isAllDay(s, e) ? 'All day' : e && !isMultiDayEvent(s, e) ? `${clock(s)} – ${clock(e)}` : clock(s),
-        place,
+        // Only a venue that differs from the card's own is printed (repeating it just got cut off)
+        place: place !== firstPlace ? place : '',
         calendarEvent: { ...ev, date: o.date, endDate: o.endDate, location: place }
       };
     });
   };
 
-  /** Small screen-only O / G buttons ending at `right`, centred on the text baseline `rowY` */
-  const calendarIcons = (right: number, rowY: number, calendarEvent: Parameters<typeof createGoogleCalendarUrl>[0], size: number) => {
-    const gap = size * 0.35;
+  type CalendarLinkEvent = Parameters<typeof createGoogleCalendarUrl>[0];
+  const calendarLinks = (calendarEvent: CalendarLinkEvent): Array<{ label: string; url: string; fg: Rgb; bg: Rgb }> => [
+    { label: '+ Outlook', url: createOutlookWebUrl(calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
+    { label: '+ Google', url: createGoogleCalendarUrl(calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
+  ];
+
+  /** Small "+ Outlook" / "+ Google" buttons in a row of "Also on" dates */
+  const ROW_BTN_PAD = 1.6;
+  const ROW_BTN_GAP = 1;
+  const rowButtonsWidth = (fs: number): number => {
+    font('semibold', fs);
+    return doc.getTextWidth('+ Outlook') + doc.getTextWidth('+ Google') + ROW_BTN_PAD * 4 + ROW_BTN_GAP;
+  };
+
+  /** Draws them (screen only) ending at `right`, centred on the row whose text baseline is `rowY` */
+  const rowButtons = (right: number, rowY: number, calendarEvent: CalendarLinkEvent, fs: number, bh: number) => {
+    let x = right - rowButtonsWidth(fs);
     screenOnly(() => {
-      const icons: Array<{ letter: string; url: string; fg: Rgb; bg: Rgb }> = [
-        { letter: 'O', url: createOutlookWebUrl(calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
-        { letter: 'G', url: createGoogleCalendarUrl(calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
-      ];
-      font('bold', size * 1.76);
-      icons.forEach((ic, k) => {
-        const ix = right - size * 2 - gap + k * (size + gap);
-        const iy = rowY - size * 0.75;
-        fill(ic.bg);
-        stroke(BORDER, 0.2);
-        doc.roundedRect(ix, iy, size, size, size * 0.24, size * 0.24, 'FD');
-        color(ic.fg);
-        doc.text(ic.letter, ix + size / 2, iy + size * 0.7, { align: 'center' });
-        doc.link(ix, iy, size, size, { url: ic.url });
+      calendarLinks(calendarEvent).forEach((b) => {
+        const bw = doc.getTextWidth(b.label) + ROW_BTN_PAD * 2;
+        const by = rowY - 0.9 - bh / 2;
+        pill(x, by, bw, bh, b.bg, BORDER);
+        color(b.fg);
+        doc.text(b.label, x + ROW_BTN_PAD, rowY - 0.35);
+        doc.link(x, by, bw, bh, { url: b.url });
+        x += bw + ROW_BTN_GAP;
       });
     });
-    return size * 2 + gap;
   };
 
   /** Measures and returns the executive card for one event group */
-  const executiveCard = (group: DigestEventGroup, dayKey: string, density: Density): Block => {
+  const executiveCard = (group: DigestEventGroup, groupIndex: number, density: Density): Block => {
     const ev = group.event;
     const cat = getCategoryRgb(ev.category);
     const flyer = flyers.get(ev.id);
     const start = toDate(ev.date) || new Date();
     const end = toDate(ev.endDate);
     const multi = !!end && isMultiDayEvent(start, end);
+    const allDay = isAllDay(start, end);
+    const day = startOfLocalDay(start);
 
     const ACCENT = 1.4;
     const PAD_Y = density.cardPadY;
-    const timeX = M + ACCENT + 4;
-    const dividerX = M + 30;
-    const mainX = dividerX + 4.5;
+    const mainX = CARD_X + ACCENT + 4.6;
     const FLYER_W = 30;
-    const mainRight = M + CW - 5 - (flyer ? FLYER_W + 5 : 0);
+    const mainRight = CARD_X + CARD_W - 5 - (flyer ? FLYER_W + 5 : 0);
     const mainW = mainRight - mainX;
 
     // Title
@@ -1061,13 +1080,13 @@ export const generateEventsDigestPDF = async (
     const descLines = fitLines(desc, mainW, 16);
     const DESC_LH = 3.85;
 
-    // "Also on": one row per other date with its time, venue (links to Google Maps)
-    // and small screen-only buttons adding that date to Google / Outlook
+    // "Also on": one row per other date with its time, its venue when it differs (links to
+    // Google Maps) and small screen-only buttons adding that date to Outlook / Google
     const otherDates = otherDatesOf(group);
     const ALSO_LABEL_H = 3.4;
     const ALSO_ROW_H = 4.8;
     const ALSO_PAD = 1.8;
-    const ICON = 3.4;
+    const ALSO_BTN_FS = 5.4;
     font('semibold', 7);
     const alsoDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3.5;
     font('medium', 7);
@@ -1077,14 +1096,25 @@ export const generateEventsDigestPDF = async (
     const contact = ev.submitterName
       ? txt(`${ev.submitterName}${ev.submitterEmail ? ` · ${ev.submitterEmail}` : ''}`)
       : '';
-    const BTN_H = 4.8;
 
-    let contentH = 4.2;                                              // category row
+    // When: "13:00 – 15:00", "All day" or "10:00 until Sun 18 Oct"
+    const when = allDay ? 'All day'
+      : !end ? clock(start)
+      : multi ? `${clock(start)} until ${WEEKDAYS_LONG[end.getDay()].slice(0, 3)} ${end.getDate()} ${monthShort(end)}`
+      : `${clock(start)} – ${clock(end)}`;
+    const chips = [
+      ...(multi && end ? [`${dayCountInclusive(start, end)} DAYS`] : []),
+      ...(group.occurrences.length > 1 ? [`${group.occurrences.length} DATES`] : [])
+    ];
+
+    let contentH = 4.2;                                              // time & category row
     contentH += titleLines.length * TITLE_LH - 0.6;
     if (venueLines.length) contentH += 2.2 + venueLines.length * VENUE_LH;
     if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
     if (contact) contentH += 2.4 + 3.3;
     if (otherDates.length) contentH += 3 + alsoH;
+
+    const BTN_H = 4.6;
 
     let flyerW = 0;
     let flyerH = 0;
@@ -1096,62 +1126,31 @@ export const generateEventsDigestPDF = async (
         flyerW = flyerH * flyer.aspectRatio;
       }
     }
-    const multiH = multi ? 7.4 : 0;
-    const h = Math.max(19 + multiH, PAD_Y * 2 + contentH, flyer ? flyerH + PAD_Y * 2 : 0);
+    // Tall enough for the date tile (and its "Today" / "cont." note) beside it
+    const h = Math.max(TILE_H + 4.5, PAD_Y * 2 + contentH, flyer ? flyerH + PAD_Y * 2 : 0);
 
-    return {
+    const block: Block = {
       h: h + density.cardGap,
-      dayKey,
+      dayKey: dayKeyOf(day),
+      group: groupIndex,
       draw: (y) => {
+        if (block.tile) dateTile(day, y, block.tile);
+
         const r = 2.4;
         // Card with a category-coloured left edge
         fill(cat.accent);
-        doc.roundedRect(M, y, CW, h, r, r, 'F');
+        doc.roundedRect(CARD_X, y, CARD_W, h, r, r, 'F');
         fill(WHITE);
-        doc.roundedRect(M + ACCENT, y, CW - ACCENT, h, r, r, 'F');
-        doc.rect(M + ACCENT, y, r, h, 'F');
+        doc.roundedRect(CARD_X + ACCENT, y, CARD_W - ACCENT, h, r, r, 'F');
+        doc.rect(CARD_X + ACCENT, y, r, h, 'F');
         stroke(BORDER, 0.25);
-        doc.roundedRect(M, y, CW, h, r, r, 'S');
+        doc.roundedRect(CARD_X, y, CARD_W, h, r, r, 'S');
 
-        // Time column
-        let ty = y + PAD_Y + 4.2;
-        if (isAllDay(start, end)) {
-          font('bold', 10.5);
-          color(INK);
-          doc.text('All day', timeX, ty);
-        } else {
-          font('bold', 12);
-          color(INK);
-          doc.text(clock(start), timeX, ty);
-          if (end) {
-            ty += 4.4;
-            font('medium', 7.8);
-            color(MUTED);
-            doc.text(multi ? `until ${end.getDate()} ${monthShort(end)}` : `to ${clock(end)}`, timeX, ty);
-          }
-        }
-        if (multi && end) {
-          ty += 3.2;
-          const label = `${dayCountInclusive(start, end)} DAYS`;
-          font('bold', 5.8);
-          const w = doc.getTextWidth(label) + 0.3 * (label.length - 1) + 4.2;
-          pill(timeX, ty, w, 4.2, RED_TINT, RED_TINT_BORDER);
-          color(RED);
-          spaced(label, timeX + 2.1, ty + 2.95, 0.3);
-        }
-        stroke(BORDER, 0.25);
-        doc.line(dividerX, y + PAD_Y, dividerX, y + h - PAD_Y);
-
-        // Category + repeat chip
-        let cy = y + PAD_Y + 2.6;
-        const catLabel = txt(ev.category || 'Event').toUpperCase();
+        // Time, then category and chips; "+ Outlook" / "+ Google" on the right (screen only)
+        let cy = y + PAD_Y + 2.8;
         let buttonsLeft = mainRight;
         font('semibold', 6.2);
-        const buttons: Array<{ label: string; url: string; fg: Rgb; bg: Rgb }> = [
-          { label: '+ Google', url: createGoogleCalendarUrl(ev), fg: GOOGLE_BLUE, bg: GOOGLE_BG },
-          { label: '+ Outlook', url: createOutlookWebUrl(ev), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG }
-        ];
-        screenOnly(() => buttons.forEach((b) => {
+        screenOnly(() => calendarLinks(ev).reverse().forEach((b) => {
           const bw = doc.getTextWidth(b.label) + 5.4;
           const bx = buttonsLeft - bw;
           pill(bx, cy - 3.45, bw, BTN_H, b.bg, BORDER);
@@ -1160,19 +1159,28 @@ export const generateEventsDigestPDF = async (
           doc.link(bx, cy - 3.45, bw, BTN_H, { url: b.url });
           buttonsLeft = bx - 1.5;
         }));
-        categoryMark(ev.category, mainX + 1, cy - 1.1, 1, false);
+        font('bold', 9);
+        color(INK);
+        doc.text(when, mainX, cy);
+        let mx = mainX + doc.getTextWidth(when) + 2.6;
+        stroke(BORDER, 0.3);
+        doc.line(mx, cy - 2.6, mx, cy + 0.3);
+        mx += 2.6;
+        font('bold', 5.8);
+        const chipW = chips.reduce((sum, c) => sum + doc.getTextWidth(c) + 0.3 * (c.length - 1) + 4.2 + 1.5, 0);
+        categoryMark(ev.category, mx + 1, cy - 1.1, 1, false);
         font('bold', 6.3);
         color(cat.accent);
-        const catW = spaced(truncate(catLabel, buttonsLeft - mainX - 20), mainX + 3.1, cy, 0.35);
-        if (group.occurrences.length > 1) {
-          const chip = `${group.occurrences.length} DATES`;
+        const catLabel = txt(ev.category || 'Event').toUpperCase();
+        mx += 3.1 + spaced(truncate(catLabel, Math.max(10, buttonsLeft - mx - 3.1 - chipW - 2)), mx + 3.1, cy, 0.35) + 2;
+        chips.forEach((c) => {
           font('bold', 5.8);
-          const cw = doc.getTextWidth(chip) + 0.3 * (chip.length - 1) + 4.2;
-          const cx = mainX + 3.1 + catW + 2.5;
-          pill(cx, cy - 3.05, cw, 4.2, RED_TINT, RED_TINT_BORDER);
+          const cw = doc.getTextWidth(c) + 0.3 * (c.length - 1) + 4.2;
+          pill(mx, cy - 3.05, cw, 4.2, RED_TINT, RED_TINT_BORDER);
           color(RED);
-          spaced(chip, cx + 2.1, cy - 0.1, 0.3);
-        }
+          spaced(c, mx + 2.1, cy - 0.1, 0.3);
+          mx += cw + 1.5;
+        });
 
         // Title
         cy += 1.6 + TITLE_LH - 0.6;
@@ -1226,8 +1234,7 @@ export const generateEventsDigestPDF = async (
           spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
           const timeX = left + alsoDateW;
           const placeX = timeX + alsoTimeW;
-          const iconsW = ICON * 2 + ICON * 0.35;
-          const placeW = right - iconsW - 2.5 - placeX - 3.6;
+          const placeW = right - rowButtonsWidth(ALSO_BTN_FS) - 2.5 - placeX - 3.6;
           otherDates.forEach((o, i) => {
             const rowY = top + ALSO_PAD + ALSO_LABEL_H + i * ALSO_ROW_H + 3.2;
             if (i > 0) {
@@ -1241,27 +1248,27 @@ export const generateEventsDigestPDF = async (
             color(BODY);
             doc.text(o.time, timeX, rowY);
             const place = txt(o.place);
-            if (place) {
+            if (place && placeW > 8) {
               drawPin(placeX, rowY, LINK);
               color(LINK);
               const shown = truncate(place, placeW);
               doc.text(shown, placeX + 3.6, rowY);
               doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place) });
             }
-            calendarIcons(right, rowY, o.calendarEvent, ICON);
+            rowButtons(right, rowY, o.calendarEvent, ALSO_BTN_FS, 3.6);
           });
         }
 
         // Flyer thumbnail
         if (flyer) {
           try {
-            const fx = M + CW - 5 - FLYER_W + (FLYER_W - flyerW) / 2;
+            const fx = CARD_X + CARD_W - 5 - FLYER_W + (FLYER_W - flyerW) / 2;
             const fy = y + PAD_Y;
             doc.saveGraphicsState();
             doc.roundedRect(fx, fy, flyerW, flyerH, 1.6, 1.6, null);
             doc.clip();
             doc.discardPath();
-            doc.addImage(flyer.dataUrl, flyer.format, fx, fy, flyerW, flyerH, `flyer-${ev.id}`, 'FAST');
+            doc.addImage(flyer.dataUrl, flyer.format, fx, fy, flyerW, flyerH, flyer.alias, 'FAST');
             doc.restoreGraphicsState();
             stroke(BORDER, 0.3);
             doc.roundedRect(fx, fy, flyerW, flyerH, 1.6, 1.6, 'S');
@@ -1273,6 +1280,7 @@ export const generateEventsDigestPDF = async (
         }
       }
     };
+    return block;
   };
 
   // Compact table geometry
@@ -1315,7 +1323,7 @@ export const generateEventsDigestPDF = async (
     // "Also on" table under the row, across the event and venue columns
     const otherDates = otherDatesOf(group);
     const A_ROW = 3.9;
-    const A_ICON = 2.9;
+    const A_BTN_FS = 5;
     font('semibold', 6.6);
     const aDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3;
     font('regular', 6.6);
@@ -1389,7 +1397,7 @@ export const generateEventsDigestPDF = async (
           spaced('ALSO ON', left, ay, 0.3);
           const timeX = left + aDateW;
           const placeX = timeX + aTimeW;
-          const placeW = right - (A_ICON * 2.35 + 2) - placeX - 3.4;
+          const placeW = right - rowButtonsWidth(A_BTN_FS) - 2 - placeX - 3.4;
           otherDates.forEach((o) => {
             ay += A_ROW;
             font('semibold', 6.6);
@@ -1399,14 +1407,14 @@ export const generateEventsDigestPDF = async (
             color(BODY);
             doc.text(o.time, timeX, ay);
             const place = txt(o.place);
-            if (place) {
+            if (place && placeW > 8) {
               drawPin(placeX, ay, LINK);
               color(LINK);
               const shown = truncate(place, placeW);
               doc.text(shown, placeX + 3.4, ay);
               doc.link(placeX, ay - 2.7, doc.getTextWidth(shown) + 3.4, 3.5, { url: createGoogleMapsUrl(o.place) });
             }
-            calendarIcons(right, ay, o.calendarEvent, A_ICON);
+            rowButtons(right, ay, o.calendarEvent, A_BTN_FS, 3.2);
           });
         }
 
@@ -1422,11 +1430,45 @@ export const generateEventsDigestPDF = async (
     };
   };
 
+  // Closing note: where to send an event for the next digest (a public form, no login)
+  const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
+  const CLOSING_H = 18;
+  const drawClosing = (y: number) => {
+    if (!submitUrl) return;
+    const top = y + 5;
+    fill(BG);
+    stroke(BORDER, 0.25);
+    doc.roundedRect(M, top, CW, 12, 2, 2, 'FD');
+    font('semibold', 8.2);
+    color(INK);
+    doc.text('Running an event? Get it into the next digest.', M + 4, top + 5);
+    font('regular', 7.6);
+    color(BODY);
+    const lead = 'Send it in at ';
+    doc.text(lead, M + 4, top + 9.1);
+    const lx = M + 4 + doc.getTextWidth(lead);
+    const shown = submitUrl.replace(/^https?:\/\//, '');
+    color(LINK);
+    doc.text(shown, lx, top + 9.1);
+    const sw = doc.getTextWidth(shown);
+    stroke(LINK, 0.15);
+    doc.line(lx, top + 9.7, lx + sw, top + 9.7);
+    doc.link(lx, top + 6.5, sw, 3.4, { url: submitUrl });
+    color(BODY);
+    doc.text(' (no login needed).', lx + sw, top + 9.1);
+  };
+
+  const dayCounts = new Map<string, number>();
+  groups.forEach((g) => {
+    const key = dayKeyOf(startOfLocalDay(toDate(g.event.date) || periodStart));
+    dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+  });
+
   const buildBlocks = (density: Density): Block[] => {
     const blocks: Block[] = [];
     let lastWeek = -1;
     let lastDay = '';
-    groups.forEach((group) => {
+    groups.forEach((group, i) => {
       const d = toDate(group.event.date) || periodStart;
       const day = startOfLocalDay(d);
       const key = dayKeyOf(day);
@@ -1437,20 +1479,111 @@ export const generateEventsDigestPDF = async (
           blocks.push(weekBanner(wi, density.weekBannerH));
         }
       }
+      if (isExecutive) {
+        // The date sits beside the card (no header row of its own)
+        blocks.push(executiveCard(group, i, density));
+        return;
+      }
       if (key !== lastDay) {
         lastDay = key;
-        const count = groups.filter((g) => dayKeyOf(startOfLocalDay(toDate(g.event.date) || periodStart)) === key).length;
-        blocks.push(dayHeader(day, count, density.dayHeaderH));
+        blocks.push(dayHeader(day, dayCounts.get(key) ?? 1));
       }
-      blocks.push(isExecutive ? executiveCard(group, key, density) : compactRow(group, key));
+      blocks.push(compactRow(group, key));
     });
+    if (submitUrl) blocks.push({ h: CLOSING_H, draw: drawClosing });
     return blocks;
   };
 
   // --- Render ------------------------------------------------------------
   const HERO_BOTTOM = 57;
+
+  // "In this digest": periods too long for "At a glance" list every event with its page
+  const showIndex = isExecutive && !showGlance && groups.length > 1;
+  const INDEX_HEAD_H = 7;
+  const INDEX_ROW_H = 5.2;
+  const INDEX_MAX_ROWS = Math.floor((PAGE_BOTTOM - 8 - HERO_BOTTOM - INDEX_HEAD_H) / INDEX_ROW_H);
+  const indexCols = groups.length > INDEX_MAX_ROWS ? 2 : 1;
+  const indexCapacity = INDEX_MAX_ROWS * indexCols;
+  const indexShown = showIndex ? (groups.length > indexCapacity ? indexCapacity - 1 : groups.length) : 0;
+  const indexMore = showIndex ? groups.length - indexShown : 0;
+  const indexRows = Math.ceil((indexShown + (indexMore ? 1 : 0)) / indexCols);
+  const indexHeight = showIndex ? INDEX_HEAD_H + indexRows * INDEX_ROW_H + 6 : 0;
+
+  const drawIndex = (top: number, cardAt: Map<number, { page: number; y: number }>) => {
+    const gutter = 6;
+    const colW = indexCols === 2 ? (CW - gutter) / 2 : CW;
+    font('semibold', 7);
+    color(MUTED);
+    spaced('IN THIS DIGEST', M, top + 3, 0.5);
+    for (let c = 0; c < indexCols; c++) {
+      font('semibold', 6.3);
+      color(FAINT);
+      spaced('PAGE', M + c * (colW + gutter) + colW, top + 3, 0.4, 'right');
+    }
+    const rowsTop = top + INDEX_HEAD_H - 1.5;
+    stroke(BORDER, 0.3);
+    doc.line(M, rowsTop, M + CW, rowsTop);
+
+    const cell = (i: number) => {
+      const col = Math.floor(i / indexRows);
+      const row = i % indexRows;
+      return { x: M + col * (colW + gutter), y: rowsTop + row * INDEX_ROW_H };
+    };
+
+    for (let i = 0; i < indexShown; i++) {
+      const g = groups[i];
+      const { x, y } = cell(i);
+      const base = y + 3.6;
+      if (i % indexRows > 0) {
+        stroke(BORDER, 0.15);
+        doc.line(x, y, x + colW, y);
+      }
+      const s = toDate(g.event.date) || periodStart;
+      font('semibold', 7.3);
+      color(INK);
+      doc.text(`${WEEKDAYS_LONG[s.getDay()].slice(0, 3)} ${s.getDate()} ${monthShort(s)}`, x, base);
+      font('medium', 7.3);
+      color(MUTED);
+      doc.text(isAllDay(s, toDate(g.event.endDate)) ? 'All day' : clock(s), x + 19, base);
+      categoryMark(g.event.category, x + 32, base - 1.05, 0.95, false);
+
+      const at = cardAt.get(i);
+      const pageLabel = at ? String(at.page) : '';
+      font('semibold', 7.3);
+      const pageW = doc.getTextWidth(pageLabel);
+      const extraCount = g.occurrences.length - 1;
+      const extra = extraCount > 0 ? `+${extraCount} more ${extraCount === 1 ? 'date' : 'dates'}` : '';
+      font('regular', 6.8);
+      const extraW = extra ? doc.getTextWidth(extra) + 2 : 0;
+      font('medium', 7.6);
+      const title = truncate(txt(g.event.title) || 'Untitled event', colW - 34.5 - pageW - 4 - extraW);
+      color(INK);
+      doc.text(title, x + 34.5, base);
+      if (extra) {
+        const tx = x + 34.5 + doc.getTextWidth(title) + 2;
+        font('regular', 6.8);
+        color(MUTED);
+        doc.text(extra, tx, base);
+      }
+      font('semibold', 7.3);
+      color(MUTED);
+      doc.text(pageLabel, x + colW, base, { align: 'right' });
+      if (at) doc.link(x, y, colW, INDEX_ROW_H, { pageNumber: at.page, top: Math.max(0, at.y - 4) });
+    }
+    if (indexMore) {
+      const { x, y } = cell(indexShown);
+      stroke(BORDER, 0.15);
+      doc.line(x, y, x + colW, y);
+      font('medium', 7.3);
+      color(MUTED);
+      doc.text(`and ${indexMore} more ${indexMore === 1 ? 'event' : 'events'} on the following pages`, x, y + 3.6);
+    }
+    stroke(BORDER, 0.3);
+    doc.line(M, rowsTop + indexRows * INDEX_ROW_H, M + CW, rowsTop + indexRows * INDEX_ROW_H);
+  };
+
   const listTop = (density: Density) =>
-    showGlance ? HERO_BOTTOM + glanceHeight(density) + 2 + LEGEND_H + 5 : HERO_BOTTOM;
+    showGlance ? HERO_BOTTOM + glanceHeight(density) + 2 + LEGEND_H + 5 : HERO_BOTTOM + indexHeight;
   const tableHeadSpace = isExecutive ? 0 : TABLE_HEAD_H + 1;
 
   const layoutFor = (density: Density) => paginate(buildBlocks(density), {
@@ -1458,11 +1591,14 @@ export const generateEventsDigestPDF = async (
     pageTop: PAGE_TOP + tableHeadSpace,
     pageBottom: PAGE_BOTTOM,
     gapAfter: (block, next) => {
+      // Executive: a little more air before the first card of the next day
+      if (isExecutive) {
+        return block.group !== undefined && next?.group !== undefined && next.dayKey !== block.dayKey ? density.dayGap : 0;
+      }
       if (!next?.isDayHeader) return 0;
-      if (isExecutive) return 2;
       return block.dayKey && !block.isDayHeader ? 1.5 : 0;
     },
-    continued: continuedHeader
+    continued: isExecutive ? undefined : continuedHeader
   });
 
   // The compact table has short rows, so it never leaves much of a gap
@@ -1471,6 +1607,22 @@ export const generateEventsDigestPDF = async (
   const chosen = pickLayout(layouts);
   const density = candidates[chosen];
   const { pages } = layouts[chosen];
+
+  // Each day's date goes beside its first card, and again on a page the day carries over onto
+  const cardAt = new Map<number, { page: number; y: number }>();
+  if (isExecutive) {
+    let prevDay = '';
+    pages.forEach((placements, p) => {
+      let firstOnPage = true;
+      placements.forEach(({ block, y }) => {
+        if (block.group === undefined) return;
+        cardAt.set(block.group, { page: p + 1, y });
+        block.tile = block.dayKey !== prevDay ? 'first' : firstOnPage ? 'continued' : undefined;
+        prevDay = block.dayKey ?? '';
+        firstOnPage = false;
+      });
+    });
+  }
 
   drawHero();
   drawStats();
@@ -1492,15 +1644,22 @@ export const generateEventsDigestPDF = async (
     font('regular', 8.5);
     color(MUTED);
     doc.text('New events submitted to the calendar will appear in the next digest.', W / 2, boxY + 21.5, { align: 'center' });
+    drawClosing(boxY + 34);
   } else {
     pages.forEach((placements, p) => {
       if (p > 0) {
         doc.addPage();
         drawPageHeader();
       }
-      if (!isExecutive) drawTableHead(p === 0 ? listTop(density) : PAGE_TOP);
+      // A page holding only the closing note gets no table header
+      if (!isExecutive && placements.some(({ block }) => block.dayKey)) drawTableHead(p === 0 ? listTop(density) : PAGE_TOP);
       placements.forEach(({ block, y }) => block.draw(y));
     });
+    if (showIndex) {
+      // Drawn last: it needs the page each card landed on
+      doc.setPage(1);
+      drawIndex(HERO_BOTTOM, cardAt);
+    }
   }
 
   drawFooters();
@@ -1524,27 +1683,18 @@ export const digestFileName = (startDate: Date, endDate: Date): string =>
 
 /**
  * Generate a preformatted text digest for WhatsApp groups (clean plain text without * or _ formatting).
+ * `baseUrl` (the site) adds links to the live calendar and the submission form at the end.
  */
 export const generateWhatsAppSummary = (
   events: Event[],
   startDate: Date | string,
-  endDate: Date | string
+  endDate: Date | string,
+  baseUrl?: string
 ): string => {
   const cleanWa = (val?: string | null) => (val || '').replace(/[*_]/g, '').trim();
 
-  const startMs = (toDate(startDate) || new Date()).getTime();
-  const endMs = (toDate(endDate) || new Date()).getTime();
   // Repeated occurrences of one event are listed once, on their first date, with "Also on" dates
-  const groups = groupDigestOccurrences(
-    events.filter((e) => {
-      // Exclude drafts and pending submissions
-      if (e.status && e.status !== 'published') return false;
-      const d = toDate(e.date);
-      if (!d) return false;
-      const t = d.getTime();
-      return t >= startMs && t <= endMs;
-    })
-  );
+  const groups = digestGroupsFor(events, startDate, endDate);
 
   const dateRangeStr = cleanWa(formatDateRange(startDate, endDate));
 
@@ -1552,9 +1702,18 @@ export const generateWhatsAppSummary = (
   text += `Schedule: ${dateRangeStr}\n`;
   text += `────────────────────────────\n\n`;
 
+  const calendarUrl = toAbsoluteHttpUrl('/', baseUrl);
+  const submitUrl = toAbsoluteHttpUrl('/submit', baseUrl);
+  const links = () => {
+    let out = `────────────────────────────\n`;
+    if (calendarUrl) out += `📌 Live calendar: ${calendarUrl}\n`;
+    if (submitUrl) out += `✍️ Running an event? Send it in (no login needed): ${submitUrl}`;
+    return out.trimEnd();
+  };
+
   if (groups.length === 0) {
     text += `No upcoming events scheduled for this period.\n\n`;
-    return text;
+    return calendarUrl ? text + links() : text;
   }
 
   // Group by date
@@ -1601,13 +1760,11 @@ export const generateWhatsAppSummary = (
       }
     }
     if (ev.submitterName) {
-      text += `👤 Contact: ${cleanWa(ev.submitterName)}\n`;
+      // The email lets people ask the organiser directly
+      text += `👤 Contact: ${cleanWa(ev.submitterName)}${ev.submitterEmail ? ` (${ev.submitterEmail.trim()})` : ''}\n`;
     }
     text += `\n`;
   });
 
-  text += `────────────────────────────\n`;
-  text += `📌 PDF Digest & Calendar: Check company portal.`;
-
-  return text;
+  return text + (calendarUrl ? links() : `────────────────────────────\n📌 PDF Digest & Calendar: Check company portal.`);
 };

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus
+  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail
 } from 'lucide-react';
 import { Event } from '../types';
-import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
+import { generateEventsDigestPDF, generateWhatsAppSummary, generateDigestEmail, digestFileName } from '../utils/pdfExport';
 import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { groupDigestOccurrences, formatAlsoOnDates } from '../utils/digestGrouping';
@@ -19,6 +19,8 @@ interface FortnightlyBulletinModalProps {
   recurrenceExceptions?: Map<string, Date[]>;
   /** Admins: open the submissions inbox (shown when pending events fall in the period) */
   onOpenSubmissions?: () => void;
+  /** Signs the covering email */
+  senderName?: string;
 }
 
 const PRESETS: Array<{ id: DateRangePreset; label: string }> = [
@@ -89,7 +91,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   onClose,
   events,
   recurrenceExceptions,
-  onOpenSubmissions
+  onOpenSubmissions,
+  senderName
 }) => {
   const { showToast } = useToast();
 
@@ -98,7 +101,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [endDateStr, setEndDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).endDateStr);
   const [format, setFormat] = useState<'executive' | 'compact'>(() => (readPref(FORMAT_KEY) === 'compact' ? 'compact' : 'executive'));
   const [busy, setBusy] = useState<'download' | 'preview' | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'whatsapp' | 'email' | null>(null);
   const [showList, setShowList] = useState(true);
 
   // Always start from the default fortnight when the dialog opens
@@ -180,8 +183,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     }
   };
 
-  const handleCopyWhatsApp = async () => {
-    const text = generateWhatsAppSummary(periodEvents, startDate, endDate);
+  const copyText = async (text: string, kind: 'whatsapp' | 'email', message: string) => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -192,20 +194,37 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       document.execCommand('copy');
       document.body.removeChild(input);
     }
-    setCopied(true);
-    showToast('WhatsApp summary copied — paste it into the group chat', 'success');
-    setTimeout(() => setCopied(false), 2500);
+    setCopied(kind);
+    showToast(message, 'success');
+    setTimeout(() => setCopied((c) => (c === kind ? null : c)), 2500);
+  };
+
+  const handleCopyWhatsApp = () =>
+    copyText(
+      generateWhatsAppSummary(periodEvents, startDate, endDate, window.location.origin),
+      'whatsapp',
+      'WhatsApp summary copied — paste it into the group chat'
+    );
+
+  // Subject on the first line, then the message: pastes straight into a new email
+  const handleCopyEmail = () => {
+    const { subject, body } = generateDigestEmail(periodEvents, startDate, endDate, { baseUrl: window.location.origin, senderName });
+    copyText(
+      `Subject: ${subject}\n\n${body}`,
+      'email',
+      'Email text copied — paste it into a new email and attach the PDF'
+    );
   };
 
   const disabled = !rangeValid || busy !== null;
 
   const footer = (
-    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+    <div className="grid grid-cols-3 sm:flex sm:items-center gap-2">
       <button
         type="button"
         onClick={handleDownloadPDF}
         disabled={disabled}
-        className="col-span-2 sm:order-4 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50"
+        className="col-span-3 sm:order-5 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50"
       >
         {busy === 'download' ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
         {busy === 'download' ? 'Generating…' : 'Download PDF'}
@@ -214,22 +233,34 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         type="button"
         onClick={handlePreviewPDF}
         disabled={disabled}
-        className="sm:order-3 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+        className="sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
       >
         {busy === 'preview' ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="w-4 h-4" />}
         Preview
       </button>
       <button
         type="button"
+        onClick={handleCopyEmail}
+        disabled={!rangeValid}
+        title="Copies a ready-to-send email for the Board and staff, listing every event"
+        className="sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-medium text-sky-800 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/30 dark:hover:bg-sky-900/40 border border-sky-200 dark:border-sky-800/60 transition-colors disabled:opacity-50"
+      >
+        {copied === 'email' ? <Check className="w-4 h-4 shrink-0" /> : <Mail className="w-4 h-4 shrink-0" />}
+        <span className="sm:hidden">{copied === 'email' ? 'Copied!' : 'Email'}</span>
+        <span className="hidden sm:inline">{copied === 'email' ? 'Copied!' : 'Email text'}</span>
+      </button>
+      <button
+        type="button"
         onClick={handleCopyWhatsApp}
         disabled={!rangeValid}
-        className="sm:order-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/60 transition-colors disabled:opacity-50"
+        title="Copies a plain-text summary for WhatsApp groups"
+        className="sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/60 transition-colors disabled:opacity-50"
       >
-        {copied ? <Check className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
-        <span className="sm:hidden">{copied ? 'Copied!' : 'WhatsApp text'}</span>
-        <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy WhatsApp text'}</span>
+        {copied === 'whatsapp' ? <Check className="w-4 h-4 shrink-0" /> : <MessageSquare className="w-4 h-4 shrink-0" />}
+        <span className="sm:hidden">{copied === 'whatsapp' ? 'Copied!' : 'WhatsApp'}</span>
+        <span className="hidden sm:inline">{copied === 'whatsapp' ? 'Copied!' : 'WhatsApp text'}</span>
       </button>
-      <div className="hidden sm:block sm:order-2 flex-1" />
+      <div className="hidden sm:block sm:order-3 flex-1" />
     </div>
   );
 
@@ -238,7 +269,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Upcoming Events Digest"
-      subtitle="A branded PDF and WhatsApp summary for the Board & staff"
+      subtitle="A branded PDF, plus email and WhatsApp text, for the Board & staff"
       icon={<FileText className="w-5 h-5" />}
       size="lg"
       footer={footer}
@@ -301,7 +332,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           </h3>
           <div className="grid grid-cols-2 gap-3">
             {([
-              { id: 'executive', icon: LayoutGrid, name: 'Executive cards', hint: 'Overview calendar, full descriptions & flyers. Best for the Board.' },
+              { id: 'executive', icon: LayoutGrid, name: 'Executive cards', hint: 'Overview of the period, full descriptions & flyers. Best for the Board.' },
               { id: 'compact', icon: List, name: 'Compact table', hint: 'A dense agenda that fits the most events per page.' }
             ] as const).map((opt) => {
               const active = format === opt.id;

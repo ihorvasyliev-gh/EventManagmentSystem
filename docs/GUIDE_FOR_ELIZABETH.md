@@ -156,15 +156,23 @@ Once submissions are approved, you can generate both the **branded PDF** and the
   `CCP-Events-Digest-YYYY-MM-DD.pdf`
 
 ### 5. Copy the WhatsApp Digest
-* Click **"Copy Formatted WhatsApp Summary"**.
-* A green toast notification will appear: `Copied WhatsApp Text to Clipboard!`.
-* You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes bold titles, dates, times, Google Maps venue links, and descriptions.
+* Click **"WhatsApp text"**.
+* A green message confirms it was copied.
+* You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end links to the live calendar and the submission form.
+
+### 6. Copy the covering email
+* Click **"Email text"**. It copies a ready-to-send email: the subject on the first line, then a greeting, one line per event (day, time, title, venue and any other dates), where to send in an event, and your name.
+* Paste it into a new email, move the first line into the subject, attach the PDF and send. You no longer need to type the highlights by hand.
+
+> **Long periods:** for more than six weeks, page 1 of the Executive digest shows an *In this digest* list with page numbers instead of the month grid; clicking a row jumps to that event.
 
 ---
 
 ## Step 4: Friday Morning — Distribute to Board & Staff
 
 ### Email to the Board of Directors & Staff:
+
+The **Email text** button (Step 3.6) fills in this email for you, events included. The template below is the same message, for reference:
 
 ```text
 Subject: Cork City Partnership — Upcoming Events Digest (Next 2 Weeks)

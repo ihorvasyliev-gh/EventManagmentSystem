@@ -21,7 +21,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). |
 | 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. Updates arrive in real time. |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
-| 📲 **WhatsApp summary** | One click copies a formatted, emoji-friendly text version of the digest. |
+| 📲 **WhatsApp & email text** | One click copies an emoji-friendly WhatsApp version of the digest, or a ready-to-send covering email for the Board that lists every event. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
 | 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. You can delete a single occurrence. |
 | ✅ **RSVPs & comments** | Both are tracked per occurrence. The browser reminds you the day before an event you've joined. |
@@ -35,16 +35,16 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
  Wednesday              Thursday                   Friday
  ─────────              ────────                   ──────
  Staff submit events →  Admins review the inbox →  Generate the digest
- via /submit            approve · edit · decline   PDF + WhatsApp text
+ via /submit            approve · edit · decline   PDF + email / WhatsApp text
 ```
 
 1. **Submit.** Staff open [`/submit`](https://ccp-event-calendar.pages.dev/submit) on any device. Each new event is saved as a *pending* draft.
 2. **Review.** Admins see a badge on **Submissions**. From there they check the details and poster, then approve, edit or decline. An approved event appears on the calendar straight away.
 3. **Circulate.** Open **Events Digest**, pick the period (the next 14 days by default) and choose a layout:
-   - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title and an *At a glance* month grid. After that, each day gets its own cards with category colours, descriptions, contact details, flyers and add-to-calendar buttons.
+   - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title, then an overview: an *At a glance* month grid for periods up to six weeks, or an *In this digest* list with page numbers (click a row to jump to the event) for longer ones. Events follow week by week (*This week*, *Next week*, then dates), each day's date beside its cards, with category colours, descriptions, contact details, flyers and add-to-calendar buttons. The last page says where to send in an event for the next digest.
    - **Compact table.** A dense day-by-day agenda that fits the most events per page.
 
-   **Preview** opens the PDF in a new tab and **Download PDF** saves it. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
+   **Preview** opens the PDF in a new tab and **Download PDF** saves it. **Email text** copies the covering email (subject, one line per event, your name) and **WhatsApp text** the group-chat version. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
 
 Step-by-step instructions, including email templates, are in the [coordinator guide](docs/GUIDE_FOR_ELIZABETH.md).
 
@@ -147,6 +147,7 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 ├── services/                Supabase access: auth, events, RSVPs, categories
 ├── utils/
 │   ├── pdfExport.ts         Events Digest PDF and WhatsApp text
+│   ├── digestText.ts        Covering email for the digest (and helpers the PDF shares)
 │   ├── digestGrouping.ts    Merges repeated occurrences into one digest entry
 │   ├── recurrence.ts        Expands recurring events
 │   └── export.ts            ICS and Excel export

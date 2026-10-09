@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateDigestEmail, formatPeriodShort, toAbsoluteHttpUrl } from '../utils/digestText.ts';
+import { generateDigestEmail, generateDigestMailto, MAILTO_MAX_LENGTH, formatPeriodShort, toAbsoluteHttpUrl } from '../utils/digestText.ts';
 import type { Event } from '../types.ts';
 
 const BASE = 'https://ccp-event-calendar.pages.dev';
@@ -31,7 +31,7 @@ test('email lists published events in date order with time, venue and repeat dat
     ],
     start,
     end,
-    { baseUrl: BASE, senderName: 'Elizabeth' }
+    { baseUrl: BASE }
   );
 
   assert.equal(subject, 'Cork City Partnership: Upcoming Events Digest, 9 – 23 October 2026');
@@ -44,7 +44,8 @@ test('email lists published events in date order with time, venue and repeat dat
   assert.ok(!body.includes('Not approved yet'));
   assert.ok(!body.includes('Outside the period'));
   assert.ok(body.includes(`${BASE}/submit (no login needed)`));
-  assert.ok(body.endsWith('Kind regards,\nElizabeth\nCork City Partnership CLG'));
+  // Signed by the organisation, not a person
+  assert.ok(body.endsWith('\n\nKind regards,\nCork City Partnership CLG'));
 });
 
 test('email says how long a multi-day event runs and leaves the time off all-day events', () => {
@@ -66,6 +67,52 @@ test('email names the first 20 events and counts the rest', () => {
   const items = body.split('\n').filter((l) => l.startsWith('• '));
   assert.equal(items.length, 21);
   assert.equal(items[20], '• …and 3 more events in the attached PDF');
+});
+
+/** Splits a mailto: link into its recipient, subject and body */
+const parseMailto = (link: string) => {
+  assert.ok(link.startsWith('mailto:'));
+  const [to, query] = link.slice('mailto:'.length).split('?');
+  const params = new Map(query.split('&').map((p) => {
+    const [k, v] = p.split('=');
+    return [k, decodeURIComponent(v)] as [string, string];
+  }));
+  return { to, subject: params.get('subject'), body: params.get('body'), keys: [...params.keys()] };
+};
+
+test('mailto link has no recipient, only the subject and the email text', () => {
+  const events = [makeEvent('dance', new Date(2026, 9, 18, 15, 0), { title: 'Sunday Tea Dance', location: 'The HUT' })];
+  const link = generateDigestMailto(events, start, end, { baseUrl: BASE });
+  const { to, subject, body, keys } = parseMailto(link);
+  const email = generateDigestEmail(events, start, end, { baseUrl: BASE });
+  assert.equal(to, '');
+  assert.deepEqual(keys, ['subject', 'body']);
+  assert.equal(subject, email.subject);
+  assert.equal(body, email.body.replace(/\n/g, '\r\n'));
+  // Spaces must be %20: a "+" would show up in the email
+  assert.ok(!link.includes('+'));
+});
+
+test('mailto link names fewer events when the full list would be too long to open', () => {
+  const many = Array.from({ length: 23 }, (_, i) =>
+    makeEvent(`e${i}`, new Date(2026, 9, 10 + (i % 10), 9, i), { title: `Community event number ${i}`, location: 'Cork City Partnership, Heron House, Blackpool Park' })
+  );
+  const link = generateDigestMailto(many, start, end, { baseUrl: BASE });
+  assert.ok(link.length <= MAILTO_MAX_LENGTH, `link is ${link.length} characters`);
+  const { body } = parseMailto(link);
+  const items = body!.split('\r\n').filter((l) => l.startsWith('• '));
+  const named = items.length - 1;
+  assert.ok(named >= 1 && named < 20, `named ${named} events`);
+  assert.equal(items[items.length - 1], `• …and ${23 - named} more events in the attached PDF`);
+  assert.match(body!, /It has 23 events:/);
+  assert.ok(body!.endsWith('Kind regards,\r\nCork City Partnership CLG'));
+});
+
+test('mailto link keeps the whole list when it fits', () => {
+  const few = Array.from({ length: 3 }, (_, i) => makeEvent(`e${i}`, new Date(2026, 9, 10, 9, i)));
+  const { body } = parseMailto(generateDigestMailto(few, start, end, { baseUrl: BASE }));
+  assert.equal(body!.split('\r\n').filter((l) => l.startsWith('• ')).length, 3);
+  assert.ok(!body!.includes('more event'));
 });
 
 test('email for an empty period says so instead of listing nothing', () => {

@@ -1191,7 +1191,7 @@ const areExceptionsEqual = (a: Map<string, Date[]>, b: Map<string, Date[]>): boo
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
-            senderName={user.fullName}
+            canEmail={user.role === UserRole.ADMIN}
             onOpenSubmissions={user.role === UserRole.ADMIN ? () => {
               setIsBulletinModalOpen(false);
               setIsSubmissionsModalOpen(true);

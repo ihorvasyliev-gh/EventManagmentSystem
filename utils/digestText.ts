@@ -93,17 +93,19 @@ const EMAIL_LIST_LIMIT = 20;
 
 /**
  * Covering email for the PDF (the routine sends it to the Board and staff every fortnight):
- * subject, greeting, one line per event, how to send in an event, and a sign-off.
+ * subject, greeting, one line per event, how to send in an event, and a sign-off from the
+ * organisation. No one's name is in it. `listLimit` caps how many events are named.
  */
 export const generateDigestEmail = (
   events: Event[],
   startDate: Date,
   endDate: Date,
-  options: { baseUrl?: string; senderName?: string } = {}
+  options: { baseUrl?: string; listLimit?: number } = {}
 ): DigestEmail => {
   const groups = digestGroupsFor(events, startDate, endDate);
   const period = formatPeriodShort(startDate, endDate);
   const subject = `Cork City Partnership: Upcoming Events Digest, ${period}`;
+  const listLimit = Math.max(1, options.listLimit ?? EMAIL_LIST_LIMIT);
 
   const lines: string[] = ['Dear Board Members and Colleagues,', ''];
   if (groups.length === 0) {
@@ -114,7 +116,7 @@ export const generateDigestEmail = (
       (groups.length === 1 ? 'It has one event:' : `It has ${groups.length} events:`),
       ''
     );
-    groups.slice(0, EMAIL_LIST_LIMIT).forEach((group) => {
+    groups.slice(0, listLimit).forEach((group) => {
       const ev = group.event;
       const s = toDate(ev.date) || startDate;
       const e = toDate(ev.endDate);
@@ -124,8 +126,8 @@ export const generateDigestEmail = (
       const until = e && isMultiDayEvent(s, e) ? ` (until ${WEEKDAYS_LONG[e.getDay()].slice(0, 3)} ${e.getDate()} ${monthShort(e)})` : '';
       lines.push(`• ${when} – ${ev.title.trim()}${until}${venue}${alsoOn ? ` (also ${alsoOn})` : ''}`);
     });
-    if (groups.length > EMAIL_LIST_LIMIT) {
-      const more = groups.length - EMAIL_LIST_LIMIT;
+    if (groups.length > listLimit) {
+      const more = groups.length - listLimit;
       lines.push(`• …and ${more} more ${more === 1 ? 'event' : 'events'} in the attached PDF`);
     }
     lines.push(
@@ -137,9 +139,38 @@ export const generateDigestEmail = (
   if (submitUrl) {
     lines.push('', `Running an event? Send it in at ${submitUrl} (no login needed) and it will be in the next digest.`);
   }
-  lines.push('', 'Kind regards,');
-  if (options.senderName?.trim()) lines.push(options.senderName.trim());
-  lines.push('Cork City Partnership CLG');
+  lines.push('', 'Kind regards,', 'Cork City Partnership CLG');
 
   return { subject, body: lines.join('\n') };
+};
+
+/**
+ * Chrome and Edge on Windows ignore a mailto: link over 2,048 characters, so for a busy period
+ * the email app would not open at all. 2,000 leaves a margin.
+ */
+export const MAILTO_MAX_LENGTH = 2000;
+
+/** mailto: link with no recipient, the subject and the text (line breaks as CRLF, RFC 6068) */
+const toMailto = ({ subject, body }: DigestEmail): string =>
+  `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`;
+
+/**
+ * Link that opens a new email with the subject and text filled in and no recipient; the PDF is
+ * attached by hand (a link cannot carry a file). When the full list makes the link too long,
+ * fewer events are named and the rest counted ("…and 6 more events in the attached PDF").
+ */
+export const generateDigestMailto = (
+  events: Event[],
+  startDate: Date,
+  endDate: Date,
+  options: { baseUrl?: string; maxLength?: number } = {}
+): string => {
+  const maxLength = options.maxLength ?? MAILTO_MAX_LENGTH;
+  let limit = Math.min(EMAIL_LIST_LIMIT, digestGroupsFor(events, startDate, endDate).length);
+  let link = toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit: limit }));
+  while (link.length > maxLength && limit > 1) {
+    limit -= 1;
+    link = toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit: limit }));
+  }
+  return link;
 };

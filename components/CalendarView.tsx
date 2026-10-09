@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Event, ViewMode, UserRole } from '../types';
-import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths, isMultiDayEvent } from '../utils/date';
+import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import {
   ChevronLeft,
@@ -34,6 +34,14 @@ const clickableProps = (onActivate: () => void) => ({
   }
 });
 
+/** Drafts are only visible to admins: say plainly that they aren't published yet */
+const PendingBadge: React.FC<{ event: Event }> = ({ event }) =>
+  event.status === 'draft' ? (
+    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+      Pending review
+    </span>
+  ) : null;
+
 const VIEW_MODE_STORAGE_KEY = 'ccp_calendar_view_mode';
 
 const readStoredViewMode = (isMobile: boolean): ViewMode | null => {
@@ -47,14 +55,14 @@ const readStoredViewMode = (isMobile: boolean): ViewMode | null => {
 
 const formatEventRangeText = (event: Event): string => {
   if (!event.endDate || !isMultiDayEvent(event.date, event.endDate)) return '';
-  const sStr = event.date.toLocaleDateString([], { day: 'numeric', month: 'short' });
-  const eStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  const sStr = event.date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' });
+  const eStr = event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' });
   return `${sStr} – ${eStr}`;
 };
 
 const formatWeekRange = (start: Date, end: Date): string => {
-  const startMonth = start.toLocaleDateString('default', { month: 'short' });
-  const endMonth = end.toLocaleDateString('default', { month: 'short' });
+  const startMonth = start.toLocaleDateString(APP_LOCALE, { month: 'short' });
+  const endMonth = end.toLocaleDateString(APP_LOCALE, { month: 'short' });
   const startYear = start.getFullYear();
   const endYear = end.getFullYear();
   // The year is only noise while browsing the current year
@@ -291,7 +299,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return days;
   }, [currentDate, daysInMonth, firstDay]);
 
-  const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthName = currentDate.toLocaleString(APP_LOCALE, { month: 'long', year: 'numeric' });
 
   const headerTitle = useMemo(() => {
     if (viewMode === 'week') {
@@ -406,8 +414,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return Array.from(groups.entries()).map(([dateKey, dayEvents]) => {
       const date = new Date(dateKey);
       const isToday = isSameDay(date, new Date());
-      const dayOfWeek = date.toLocaleDateString('default', { weekday: 'short' });
-      const month = date.toLocaleDateString('default', { month: 'short' });
+      const dayOfWeek = date.toLocaleDateString(APP_LOCALE, { weekday: 'short' });
+      const month = date.toLocaleDateString(APP_LOCALE, { month: 'short' });
 
       return (
         <div key={dateKey} className={isMuted ? 'opacity-75' : ''}>
@@ -449,15 +457,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     {/* Time */}
                     <div className="flex-shrink-0 w-16 sm:w-20 text-right">
                       <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        {event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatClock(event.date)}
                       </div>
                       {isMulti && event.endDate ? (
                         <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold whitespace-nowrap">
-                          until {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                          until {event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}
                         </div>
                       ) : event.endDate ? (
                         <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                          to {event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          to {formatClock(event.endDate)}
                         </div>
                       ) : null}
                     </div>
@@ -471,13 +479,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
                               {event.category || 'Event'}
                             </span>
+                            <PendingBadge event={event} />
                             <h3 className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">
                               {event.title}
                             </h3>
                           </div>
                           {isMulti && event.endDate && (
                             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                              <span>🗓 {event.date.toLocaleDateString([], { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                              <span>🗓 {event.date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}</span>
                             </div>
                           )}
                           {event.description && (
@@ -506,7 +515,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   return (
     <div
-      className={`rounded-2xl overflow-hidden animate-fade-in border border-slate-200 dark:border-slate-800 ${theme === 'dark' ? 'glass-panel-dark' : 'bg-white shadow-sm'}`}
+      className={`rounded-2xl overflow-hidden animate-fade-in border border-slate-200 dark:border-slate-800 ${theme === 'dark' ? 'panel-dark' : 'bg-white shadow-sm'}`}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -517,7 +526,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <h2 className="text-base sm:text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:min-w-48 truncate">
             {viewMode === 'week' ? headerTitle : (
               <>
-                <span className="min-[400px]:hidden">{currentDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
+                <span className="min-[400px]:hidden">{currentDate.toLocaleString(APP_LOCALE, { month: 'short', year: 'numeric' })}</span>
                 <span className="hidden min-[400px]:inline">{headerTitle}</span>
               </>
             )}
@@ -683,17 +692,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           const colorClass = getCategoryColor(ev.category);
                           const statusClass = ev.status === 'draft' ? 'opacity-70 dashed-border' : '';
                           const rangeStr = formatEventRangeText(ev);
-                          const itemTitle = rangeStr ? `${ev.title} (${rangeStr})` : ev.title;
-                          const timeStr = ev.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          const itemTitle = `${ev.title}${rangeStr ? ` (${rangeStr})` : ''}${ev.status === 'draft' ? ' — pending review' : ''}`;
+                          const timeStr = formatClock(ev.date);
+                          // Later days of a multi-day event: its start time belongs to the first day only
+                          const isContinuation = !!rangeStr && !isSameDay(ev.date, day);
 
                           return (
                             <div
                               key={ev.instanceKey ?? ev.id}
                               {...clickableProps(() => onEventClick(ev))}
-                              className={`w-full text-left ${colorClass} text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-[4px] truncate font-medium transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
+                              className={`w-full text-left ${colorClass} text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-[4px] truncate lg:whitespace-normal lg:line-clamp-2 lg:break-words leading-snug font-medium transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                               title={itemTitle}
                             >
-                              <span className="hidden lg:inline font-bold mr-1 opacity-80">{timeStr}</span>
+                              {!isContinuation && <span className="hidden lg:inline font-bold mr-1 opacity-80">{timeStr}</span>}
                               {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                               {ev.title}
                             </div>
@@ -730,7 +741,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-slate-900 dark:text-white">
-                      {selectedMobileDay.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {selectedMobileDay.toLocaleDateString(APP_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' })}
                     </span>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       ({selectedMobileDayEvents.length} {selectedMobileDayEvents.length === 1 ? 'event' : 'events'})
@@ -766,11 +777,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     selectedMobileDayEvents.map(event => {
                       const colorClass = getCategoryColor(event.category);
                       const isMulti = isMultiDayEvent(event.date, event.endDate);
-                      const timeStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const timeStr = formatClock(event.date);
                       const endStr = event.endDate
                         ? isMulti
-                          ? `until ${event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
-                          : event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          ? `until ${event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}`
+                          : formatClock(event.endDate)
                         : '';
 
                       return (
@@ -780,8 +791,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm active:scale-[0.99] transition-all cursor-pointer space-y-1.5 touch-manipulation min-h-[44px]"
                         >
                           <div className="flex items-center justify-between gap-1 flex-wrap">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
-                              {event.category || 'Event'}
+                            <span className="flex items-center gap-1 flex-wrap">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+                                {event.category || 'Event'}
+                              </span>
+                              <PendingBadge event={event} />
                             </span>
                             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
@@ -890,14 +904,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={popoverDay.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' })}
+            aria-label={popoverDay.toLocaleDateString(APP_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' })}
             className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  {popoverDay.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                  {popoverDay.toLocaleDateString(APP_LOCALE, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {popoverDayEvents.length} {popoverDayEvents.length === 1 ? 'event' : 'events'}
@@ -935,11 +949,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               {popoverDayEvents.map(ev => {
                 const colorClass = getCategoryColor(ev.category);
                 const isMulti = isMultiDayEvent(ev.date, ev.endDate);
-                const timeStr = ev.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const timeStr = formatClock(ev.date);
                 const endStr = ev.endDate
                   ? isMulti
-                    ? `until ${ev.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
-                    : ev.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    ? `until ${ev.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}`
+                    : formatClock(ev.endDate)
                   : '';
 
                 return (
@@ -952,8 +966,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 shadow-xs hover:shadow hover:border-brand-400 dark:hover:border-brand-500 transition-all cursor-pointer space-y-1.5 min-h-[44px]"
                   >
                     <div className="flex items-center justify-between gap-1 flex-wrap">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
-                        {ev.category || 'Event'}
+                      <span className="flex items-center gap-1 flex-wrap">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+                          {ev.category || 'Event'}
+                        </span>
+                        <PendingBadge event={ev} />
                       </span>
                       <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />

@@ -28,21 +28,19 @@ export const isMultiDayEvent = (start: Date | string, end?: Date | string | null
   return !isNaN(s.getTime()) && !isNaN(e.getTime()) && !isSameDay(s, e);
 };
 
-export const formatDate = (date: Date): string => {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  }).format(date);
-};
+/** Irish English throughout ("Tuesday 13 October 2026"), whatever language the browser uses */
+export const APP_LOCALE = 'en-IE';
 
-export const formatTime = (date: Date): string => {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date);
-};
+const LONG_DATE = new Intl.DateTimeFormat(APP_LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+/** "Tuesday 13 October 2026" */
+export const formatDate = (date: Date): string => LONG_DATE.format(date);
+
+/** 24-hour clock, "13:00" — the same as the digest PDF (an en-US browser would show "01:00 PM") */
+export const formatClock = (date: Date): string =>
+  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+export const formatTime = formatClock;
 
 /**
  * Formats a Date object into YYYY-MM-DD string using local browser date components.

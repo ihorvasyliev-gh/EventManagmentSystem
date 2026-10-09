@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry } from '../types';
 import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
-import { formatDate, formatTime, isSameDay, formatLocalDate } from '../utils/date';
+import { formatDate, formatTime, isSameDay, formatLocalDate, formatClock, APP_LOCALE } from '../utils/date';
 import { uploadPosterToR2, addComment, deleteComment, fetchEventDetails } from '../services/eventService';
 import { rsvpToEvent, cancelRsvp } from '../services/rsvpService';
 import { createCategory } from '../services/categoryService';
@@ -16,7 +16,7 @@ import MultiDatePicker from './MultiDatePicker';
 import SessionPlaces from './SessionPlaces';
 import { makeSlot, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
 import { useEventSchedule } from '../hooks/useEventSchedule';
-import { getEventLocations } from '../utils/recurrence';
+import { getEventLocations, expandRecurringEvents } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { supabase } from '../lib/supabase';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
@@ -135,6 +135,20 @@ const EventModal: React.FC<EventModalProps> = ({
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [showCalendarDropdown, setShowCalendarDropdown] = useState(false);
   const [showPosterPreview, setShowPosterPreview] = useState(false);
+
+  // The other upcoming dates of a repeating or multi-date event (the calendar shows one at a time)
+  const SERIES_DATES_SHOWN = 6;
+  const seriesDates = useMemo(() => {
+    if (!event || !isRecurringEvent(event)) return { upcoming: [] as Event[], more: 0 };
+    const master = events.find((e) => e.id === event.id) ?? event;
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const to = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+    const others = expandRecurringEvents([master], from, to, recurrenceExceptions)
+      .filter((o) => o.date.getTime() !== event.date.getTime())
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    return { upcoming: others.slice(0, SERIES_DATES_SHOWN), more: Math.max(0, others.length - SERIES_DATES_SHOWN) };
+  }, [event, events, recurrenceExceptions]);
 
   // Available categories: standard EVENT_CATEGORIES, current event's category, plus any custom
   const availableCategories = useMemo(() => {
@@ -766,7 +780,7 @@ const EventModal: React.FC<EventModalProps> = ({
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
         {/* Modal Panel - Full Screen on Mobile */}
-        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'glass-panel-dark' : 'bg-white'}`}>
+        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
 
           {/* Header */}
           <div className="px-4 sm:px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
@@ -908,6 +922,29 @@ const EventModal: React.FC<EventModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {seriesDates.upcoming.length > 0 && (
+                  <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1.5">
+                      <Repeat className="h-3 w-3" /> Other upcoming dates
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {seriesDates.upcoming.map((o) => (
+                        <li key={o.instanceKey ?? o.date.getTime()} className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 tabular-nums">
+                          {o.date.toLocaleDateString(APP_LOCALE, { weekday: 'short', day: 'numeric', month: 'short' })} · {formatClock(o.date)}
+                          {o.location?.trim() && o.location.trim() !== event.location?.trim() && (
+                            <span className="font-normal text-slate-500 dark:text-slate-400"> · {o.location.trim()}</span>
+                          )}
+                        </li>
+                      ))}
+                      {seriesDates.more > 0 && (
+                        <li className="px-1 py-1 text-xs text-slate-500 dark:text-slate-400">
+                          +{seriesDates.more} more in the next 12 months
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
 
                 {event.tags && event.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2">

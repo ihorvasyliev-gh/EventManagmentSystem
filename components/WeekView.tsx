@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Event, UserRole, EventCategory } from '../types';
-import { isSameDay, isMultiDayEvent } from '../utils/date';
+import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -87,13 +87,13 @@ export const getCategoryDotColor = (category?: EventCategory): string => {
 };
 
 const formatTimeRange = (event: Event): string => {
-  const startStr = event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const startStr = formatClock(event.date);
   if (event.endDate) {
     if (isMultiDayEvent(event.date, event.endDate)) {
-      const endDayStr = event.endDate.toLocaleDateString([], { day: 'numeric', month: 'short' });
+      const endDayStr = event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' });
       return `${startStr} – ${endDayStr}`;
     }
-    const endStr = event.endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const endStr = formatClock(event.endDate);
     return `${startStr} – ${endStr}`;
   }
   return startStr;
@@ -184,7 +184,7 @@ const WeekView: React.FC<WeekViewProps> = ({
             const isSelected = idx === selectedMobileDayIndex;
             const isToday = isSameDay(group.day, today);
             const count = group.events.length;
-            const dayName = group.day.toLocaleDateString('default', { weekday: 'narrow' });
+            const dayName = group.day.toLocaleDateString(APP_LOCALE, { weekday: 'narrow' });
 
             return (
               <button
@@ -198,11 +198,11 @@ const WeekView: React.FC<WeekViewProps> = ({
                     ? 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
                 }`}
-                aria-label={`${group.day.toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' })}, ${count} events`}
+                aria-label={`${group.day.toLocaleDateString(APP_LOCALE, { weekday: 'long', month: 'short', day: 'numeric' })}, ${count} events`}
               >
                 <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
                   <span className="sm:hidden">{dayName}</span>
-                  <span className="hidden sm:inline">{group.day.toLocaleDateString('default', { weekday: 'short' })}</span>
+                  <span className="hidden sm:inline">{group.day.toLocaleDateString(APP_LOCALE, { weekday: 'short' })}</span>
                 </span>
                 <span className="text-sm font-extrabold">{group.day.getDate()}</span>
                 <div className="h-1.5 flex items-center justify-center gap-0.5 mt-0.5">
@@ -242,7 +242,7 @@ const WeekView: React.FC<WeekViewProps> = ({
 
               <div className="flex items-center gap-2">
                 <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                  {activeMobileGroup.day.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {activeMobileGroup.day.toLocaleDateString(APP_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
                 {isSameDay(activeMobileGroup.day, today) && (
                   <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
@@ -329,7 +329,7 @@ const WeekView: React.FC<WeekViewProps> = ({
       <div className="hidden lg:grid lg:grid-cols-7 gap-2 xl:gap-3">
         {eventsByDay.map((group, idx) => {
           const isToday = isSameDay(group.day, today);
-          const dayName = group.day.toLocaleDateString('default', { weekday: 'short' });
+          const dayName = group.day.toLocaleDateString(APP_LOCALE, { weekday: 'short' });
 
           return (
             <div

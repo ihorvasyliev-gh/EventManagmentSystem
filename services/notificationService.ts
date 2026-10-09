@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { formatClock } from '../utils/date';
 
 // Request browser notification permission
 const requestNotificationPermission = async (): Promise<boolean> => {
@@ -78,7 +79,7 @@ export const checkTomorrowRSVPEvents = async (userId: string): Promise<void> => 
       const eventDate = rsvp ? new Date(rsvp.occurrence_date) : new Date(event.date);
 
       showBrowserNotification(`Upcoming Event: ${event.title}`, {
-        body: `You have an event tomorrow at ${eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${event.location || 'No location'}`,
+        body: `You have an event tomorrow at ${formatClock(eventDate)}: ${event.location || 'No location'}`,
         icon: event.poster_url || '/favicon.ico'
       });
       notifiedEvents.push(event.id);

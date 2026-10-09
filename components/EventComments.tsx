@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MessageCircle, Send, User, Trash2 } from 'lucide-react';
 import { EventComment } from '../types';
+import { formatClock, APP_LOCALE } from '../utils/date';
 
 interface EventCommentsProps {
   comments: EventComment[];
@@ -58,8 +59,8 @@ const EventComments: React.FC<EventCommentsProps> = ({
                 <div className="flex items-center space-x-2">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{comment.userName}</p>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(comment.createdAt).toLocaleDateString()} at{' '}
-                    {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(comment.createdAt).toLocaleDateString(APP_LOCALE)} at{' '}
+                    {formatClock(new Date(comment.createdAt))}
                   </span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap">{comment.content}</p>

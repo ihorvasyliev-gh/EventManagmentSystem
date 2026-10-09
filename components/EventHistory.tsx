@@ -1,6 +1,7 @@
 import React from 'react';
 import { History, User, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { EventHistoryEntry } from '../types';
+import { APP_LOCALE } from '../utils/date';
 
 interface EventHistoryProps {
   history: EventHistoryEntry[];
@@ -114,7 +115,7 @@ const EventHistory: React.FC<EventHistoryProps> = ({ history }) => {
               </div>
               {formatChanges(entry.changes)}
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                {new Date(entry.timestamp).toLocaleString()}
+                {new Date(entry.timestamp).toLocaleString(APP_LOCALE, { dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' })}
               </p>
             </div>
           </div>

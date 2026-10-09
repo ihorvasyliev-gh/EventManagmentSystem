@@ -93,8 +93,8 @@ const EMAIL_LIST_LIMIT = 20;
 
 /**
  * Covering email for the PDF (the routine sends it to the Board and staff every fortnight):
- * subject, greeting, one line per event, how to send in an event, and a sign-off from the
- * organisation. No one's name is in it. `listLimit` caps how many events are named.
+ * subject, greeting, one line per event, how to send in an event, and "Kind regards," with no
+ * name under it. `listLimit` caps how many events are named.
  */
 export const generateDigestEmail = (
   events: Event[],
@@ -139,7 +139,7 @@ export const generateDigestEmail = (
   if (submitUrl) {
     lines.push('', `Running an event? Send it in at ${submitUrl} (no login needed) and it will be in the next digest.`);
   }
-  lines.push('', 'Kind regards,', 'Cork City Partnership CLG');
+  lines.push('', 'Kind regards,');
 
   return { subject, body: lines.join('\n') };
 };

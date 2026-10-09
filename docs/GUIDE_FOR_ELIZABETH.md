@@ -161,7 +161,7 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 * You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end links to the live calendar and the submission form.
 
 ### 6. Open the covering email
-* Click **"Email"** (only admins see this button). Your email app (e.g. Outlook) opens a new email with the subject and text filled in: a greeting, one line per event (day, time, title, venue and any other dates), where to send in an event, and a sign-off from Cork City Partnership. No one's name is in it.
+* Click **"Email"** (only admins see this button). Your email app (e.g. Outlook) opens a new email with the subject and text filled in: a greeting, one line per event (day, time, title, venue and any other dates), where to send in an event, and *Kind regards,* with no name under it.
 * Add the recipients, attach the PDF you downloaded in Step 4, and send. You no longer need to type the highlights by hand.
 * In a busy period the email names the first few events and adds *"…and N more events in the attached PDF"*: a longer email would not open from the browser.
 
@@ -195,7 +195,6 @@ https://ccp-event-calendar.pages.dev/
 If you have any questions about a specific event, please contact the event organizer listed or feel free to reach out to me.
 
 Warm regards,
-Cork City Partnership CLG
 ```
 
 ---

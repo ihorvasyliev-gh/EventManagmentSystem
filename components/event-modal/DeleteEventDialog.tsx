@@ -19,7 +19,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDark, is
         <h3 id="delete-event-title" className={`text-lg font-semibold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
           Delete Event
         </h3>
-        <button onClick={() => !isDeleting && onCancel()} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none" disabled={isDeleting}>
+        <button onClick={() => !isDeleting && onCancel()} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none" disabled={isDeleting}>
           <X className="h-5 w-5" />
         </button>
       </div>

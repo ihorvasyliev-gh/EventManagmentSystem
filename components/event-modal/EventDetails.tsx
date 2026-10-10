@@ -37,22 +37,22 @@ const EventDetails: React.FC<EventDetailsProps> = ({
           </span>
         )}
         {(event.submitterName || event.submitterEmail) && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
-            <User className="w-3 h-3 text-slate-400" />
-            <span>{event.submitterName || 'Staff Member'}</span>
-            {event.submitterEmail && <span className="text-slate-400 text-[11px]">({event.submitterEmail})</span>}
+          <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+            <User className="w-3 h-3 shrink-0 text-slate-400" />
+            <span className="shrink-0">{event.submitterName || 'Staff Member'}</span>
+            {event.submitterEmail && <span className="min-w-0 truncate text-slate-400 text-[11px]">({event.submitterEmail})</span>}
           </span>
         )}
       </div>
 
       <div className="flex justify-between items-start gap-3">
-        <h2 className={`text-2xl sm:text-[1.75rem] font-semibold leading-tight break-words text-slate-900 dark:text-white`}>
+        <h2 className={`min-w-0 text-2xl sm:text-[1.75rem] font-semibold leading-tight [overflow-wrap:anywhere] text-slate-900 dark:text-white`}>
           {event.title}
         </h2>
         {onCopyLink && (
           <button
             onClick={onCopyLink}
-            className="shrink-0 p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
+            className="shrink-0 -mt-1 p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
             title="Copy link to this event"
             aria-label="Copy link to this event"
           >
@@ -123,7 +123,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({
               </>
             ) : event.endDate ? (
               <>
-                {formatDate(event.date)}, {formatTime(event.date)} – {formatTime(event.endDate)}
+                {formatDate(event.date)}, <span className="whitespace-nowrap">{formatTime(event.date)} – {formatTime(event.endDate)}</span>
               </>
             ) : (
               <>
@@ -179,7 +179,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({
     )}
 
     <div className="prose prose-sm max-w-none text-slate-600 dark:text-slate-300">
-      <p className="whitespace-pre-line leading-relaxed">{event.description}</p>
+      <p className="whitespace-pre-line leading-relaxed [overflow-wrap:anywhere]">{event.description}</p>
     </div>
 
     <AddToCalendarMenu event={event} open={calendarOpen} onToggle={onToggleCalendar} onClose={onCloseCalendar} />

@@ -228,7 +228,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         disabled={disabled}
         className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-brand-600 dark:text-brand-300 bg-white dark:bg-transparent border border-brand-600 dark:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors disabled:opacity-50"
       >
-        {busy === 'preview' ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="w-4 h-4" />}
+        {busy === 'preview' ? <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
         Preview
       </button>
       {canEmail && (
@@ -239,7 +239,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           title="Opens a new email for the Board and staff with the subject and text filled in. Add the recipients and attach the PDF."
           className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
         >
-          <Mail className="w-4 h-4 shrink-0" />
+          <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />
           Email
         </button>
       )}
@@ -250,7 +250,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         title="Copies a plain-text summary for WhatsApp groups"
         className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 border border-ccp-green-600 hover:border-ccp-green-700 transition-colors disabled:opacity-50"
       >
-        {copied ? <Check className="w-4 h-4 shrink-0" /> : <MessageSquare className="w-4 h-4 shrink-0" />}
+        {/* Under 400px the three small buttons are words only: with icons "WhatsApp" didn't fit */}
+        {copied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <MessageSquare className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
         <span className="sm:hidden">{copied ? 'Copied!' : 'WhatsApp'}</span>
         <span className="hidden sm:inline">{copied ? 'Copied!' : 'WhatsApp text'}</span>
       </button>
@@ -298,7 +299,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 type="date"
                 value={startDateStr}
                 onChange={(e) => { setStartDateStr(e.target.value); setActivePreset('custom'); }}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                className="w-full px-2 sm:px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
               />
             </label>
             <label className="block">
@@ -308,7 +309,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 value={endDateStr}
                 min={startDateStr}
                 onChange={(e) => { setEndDateStr(e.target.value); setActivePreset('custom'); }}
-                className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                className="w-full px-2 sm:px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
               />
             </label>
           </div>
@@ -344,7 +345,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 >
                   <LayoutThumb kind={opt.id} active={active} />
                   <span className="mt-2.5 flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                    <opt.icon className={`w-4 h-4 ${active ? 'text-brand-600 dark:text-brand-300' : 'text-slate-400'}`} />
+                    <opt.icon className={`w-4 h-4 shrink-0 ${active ? 'text-brand-600 dark:text-brand-300' : 'text-slate-400'}`} />
                     {opt.name}
                   </span>
                   <span className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{opt.hint}</span>

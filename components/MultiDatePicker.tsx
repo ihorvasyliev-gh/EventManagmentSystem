@@ -106,9 +106,9 @@ const AddTimeButton: React.FC<{ onClick: () => void; disabled: boolean; label: s
     type="button"
     disabled={disabled}
     onClick={onClick}
-    className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-40 min-h-[32px]"
+    className="inline-flex items-center gap-1 text-left text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-40 min-h-[32px]"
   >
-    <Plus className="w-3.5 h-3.5" /> {label}
+    <Plus className="w-3.5 h-3.5 shrink-0" /> {label}
   </button>
 );
 
@@ -267,8 +267,10 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
             <CalendarIcon className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
-            <span className="text-sm font-bold text-slate-900 dark:text-white">
-              {MONTH_NAMES[viewMonth]} {viewYear}
+            {/* "Sep 2026" on the narrowest phones: the full name wrapped onto two lines there */}
+            <span className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">
+              <span className="min-[360px]:hidden">{MONTH_NAMES[viewMonth].slice(0, 3)} {viewYear}</span>
+              <span className="hidden min-[360px]:inline">{MONTH_NAMES[viewMonth]} {viewYear}</span>
             </span>
           </div>
 

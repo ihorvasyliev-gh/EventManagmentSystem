@@ -111,7 +111,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
             onClick={() => onEdit()}
             className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
           >
-            <ArrowLeft className="w-5 h-5" /> Back to form
+            <ArrowLeft className="w-5 h-5 shrink-0" /> <span className="sr-only min-[340px]:not-sr-only">Back to form</span>
           </button>
           <ThemeToggle className="ml-auto" />
           <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
@@ -251,9 +251,9 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
         <button
           type="button"
           onClick={() => onEdit()}
-          className="cta inline-flex items-center justify-center gap-1.5 h-12 px-4 rounded border border-brand-600 dark:border-brand-400 bg-white dark:bg-transparent text-brand-600 dark:text-brand-300"
+          className="cta inline-flex items-center justify-center gap-1.5 h-12 px-3 min-[360px]:px-4 rounded border border-brand-600 dark:border-brand-400 bg-white dark:bg-transparent text-brand-600 dark:text-brand-300"
         >
-          <Pencil className="w-4 h-4" /> Edit
+          <Pencil className="w-4 h-4 shrink-0" /> Edit
         </button>
         <SendButton isSubmitting={isSubmitting} disabled={!canSend} onSend={onSend} full />
       </div>
@@ -266,7 +266,7 @@ const SendButton: React.FC<{ isSubmitting: boolean; disabled?: boolean; onSend: 
     type="button"
     onClick={onSend}
     disabled={isSubmitting || disabled}
-    className={`cta ${full ? 'flex-1' : ''} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
+    className={`cta ${full ? 'flex-1 px-4' : 'px-6'} inline-flex items-center justify-center gap-2 h-12 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
   >
     {isSubmitting ? (
       <>
@@ -274,7 +274,8 @@ const SendButton: React.FC<{ isSubmitting: boolean; disabled?: boolean; onSend: 
       </>
     ) : (
       <>
-        <Send className="w-4 h-4" /> Send for review
+        {/* No icon on the narrowest phones, where the words only just fit beside Edit */}
+        <Send className="hidden min-[360px]:block w-4 h-4 shrink-0" /> Send for review
       </>
     )}
   </button>

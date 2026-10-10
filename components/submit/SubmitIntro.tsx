@@ -12,8 +12,9 @@ export const SubmitTopBar: React.FC<{ onBack?: () => void; backLabel: string }> 
           onClick={onBack}
           className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
         >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="hidden min-[340px]:inline">{backLabel}</span>
+          <ArrowLeft className="w-5 h-5 shrink-0" />
+          {/* Read out even where only the arrow shows */}
+          <span className="sr-only min-[340px]:not-sr-only">{backLabel}</span>
         </button>
       )}
       <ThemeToggle className="ml-auto" />
@@ -44,7 +45,7 @@ export const SubmitIntro: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => (
         <summary className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer list-none select-none">
           <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
           <span>What can be included? Guidelines from CEO</span>
-          <ChevronDown className="w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
+          <ChevronDown className="w-4 h-4 shrink-0 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
         </summary>
         <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
           <p>

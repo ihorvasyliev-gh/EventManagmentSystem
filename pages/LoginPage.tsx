@@ -89,7 +89,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4 pt-16 sm:p-6">
-      <ThemeToggle className="absolute top-3 right-3 z-10 bg-white/80 dark:bg-slate-800/80 shadow-sm" />
+      <ThemeToggle className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-10 bg-white/80 dark:bg-slate-800/80 shadow-sm" />
       <div className="w-full max-w-md lg:max-w-4xl grid lg:grid-cols-2 bg-white dark:bg-slate-800 rounded-leaf shadow-xl overflow-hidden border border-slate-200/70 dark:border-slate-700">
         {/* Brand panel: flat raspberry like the site's "Our Mission" box, with its green top bar */}
         <div className="relative overflow-hidden bg-brand-600 px-6 py-7 sm:px-8 lg:p-10 text-white flex flex-col border-t-[6px] border-ccp-green-500">
@@ -119,7 +119,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
         </div>
 
         {/* Sign in */}
-        <div className="px-6 py-7 sm:px-8 lg:p-10">
+        <div className="px-5 min-[400px]:px-6 py-7 sm:px-8 lg:p-10">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <h2 className="text-2xl font-medium text-slate-900 dark:text-white">Sign in</h2>

@@ -25,3 +25,7 @@ export const CATEGORY_SHORT_LABELS: Record<EventCategoryName, string> = {
   'Health & Wellbeing': 'Health',
   Other: 'Other'
 };
+
+/** The short name of a category; other (older or custom) names as they are */
+export const shortCategoryLabel = (category?: string): string =>
+  !category ? 'Event' : CATEGORY_SHORT_LABELS[category as EventCategoryName] ?? category;

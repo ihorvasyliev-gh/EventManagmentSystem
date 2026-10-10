@@ -271,7 +271,7 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, currentUserId 
                         onClick={() => { setConfirmResetId(account.id); setResetError(null); }}
                         className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
                       >
-                        <RotateCcw className="w-4 h-4" /> <span>Reset password</span>
+                        <RotateCcw className="w-4 h-4 shrink-0" /> <span>Reset<span className="sr-only sm:not-sr-only"> password</span></span>
                       </button>
                     )}
                   </div>

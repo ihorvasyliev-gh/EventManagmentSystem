@@ -325,6 +325,12 @@ a,
     }
 }
 
+/* A phone held sideways: page content clears the notch (viewport-fit=cover in index.html) */
+body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+}
+
 /* Keep fixed bottom bars clear of the iPhone home indicator */
 .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);

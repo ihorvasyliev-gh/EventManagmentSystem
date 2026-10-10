@@ -50,6 +50,11 @@ export default {
     "./utils/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
+  // hover: styles only for a mouse: on phones and tablets a tapped card or button kept its hover
+  // colour until something else was tapped
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       // Tailwind v4 names used across components (not built into v3)

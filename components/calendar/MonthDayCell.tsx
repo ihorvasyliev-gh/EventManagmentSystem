@@ -67,7 +67,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onAddEventForDate(day); }}
-            className="p-1 min-w-0 min-h-0 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-md text-slate-400 hover:text-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/30 dark:hover:text-brand-400 transition-all"
+            className="p-1 min-w-0 min-h-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:hidden flex items-center justify-center rounded-md text-slate-400 hover:text-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/30 dark:hover:text-brand-400 transition-all"
             title="Add event"
             aria-label="Add event"
           >
@@ -111,11 +111,12 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               <div
                 key={ev.instanceKey ?? ev.id}
                 {...clickableProps(() => onEventClick(ev))}
-                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
+                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[9px] sm:text-[10px] 2xl:text-xs px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                 title={itemTitle}
               >
-                {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding */}
-                <span className="block truncate lg:whitespace-normal lg:line-clamp-2 lg:[overflow-wrap:anywhere]">
+                {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding.
+                    Two lines from tablets up; below that the cells are too narrow for more than a word or two */}
+                <span className="block truncate md:whitespace-normal md:line-clamp-2 md:[overflow-wrap:anywhere]">
                   {!isContinuation && <span className="hidden lg:inline font-bold tabular-nums mr-1">{timeStr}</span>}
                   {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                   {ev.title}
@@ -130,7 +131,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
                 e.stopPropagation();
                 onOpenDay(day);
               }}
-              className="w-full text-left text-[9px] sm:text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 py-0.5 px-1 rounded hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
+              className="w-full text-left text-[9px] sm:text-[10px] 2xl:text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 py-0.5 px-1 rounded hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
             >
               +{dayEvents.length - 3} more
             </button>

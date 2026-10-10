@@ -33,7 +33,8 @@ const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, muted = false
         return (
           <div key={dateKey} className={muted ? 'opacity-75' : ''}>
             {/* Day Header */}
-            <div className={`sticky top-0 z-10 px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/30' : 'bg-slate-50 dark:bg-slate-800/50'} backdrop-blur-sm`}>
+            {/* Sticks under the navbar while the day's events scroll by; opaque so they don't show through */}
+            <div className={`sticky top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-16 z-10 px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 ${isToday ? 'bg-brand-50 dark:bg-[#361B26]' : 'bg-slate-50 dark:bg-slate-850'}`}>
               <div className="flex items-baseline gap-2">
                 <span className={`text-2xl sm:text-3xl font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-900 dark:text-white'}`}>
                   {date.getDate()}
@@ -86,17 +87,18 @@ const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, muted = false
                       {/* Event Details */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-2">
-                          <div className={`w-1 h-full min-h-[2.5rem] rounded-full ${getCategoryDotColor(event.category)}`}></div>
+                          <div className={`w-1 self-stretch min-h-[2.5rem] rounded-full ${getCategoryDotColor(event.category)}`}></div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
                                 {event.category || 'Event'}
                               </span>
                               <PendingBadge event={event} />
-                              <h3 className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">
-                                {event.title}
-                              </h3>
                             </div>
+                            {/* Its own line: in the badges' row a short title sat beside them and a long one under them */}
+                            <h3 className="mt-1 text-sm font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere]">
+                              {event.title}
+                            </h3>
                             {isMulti && event.endDate && (
                               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
                                 <span>🗓 {event.date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}</span>

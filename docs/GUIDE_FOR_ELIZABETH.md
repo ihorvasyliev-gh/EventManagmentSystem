@@ -101,6 +101,8 @@ Cork City Partnership CLG
 
 When staff submit events, they arrive directly in your **Submissions Inbox** with status `Pending Review`.
 
+> 📧 If email notifications are switched on, you also get an email for each new submission. The link in it opens the Submissions Inbox straight away (sign in first if asked).
+
 ### How to Moderate:
 
 1. **Log in to the Calendar:**
@@ -123,10 +125,10 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
      * **Flyer preview** (click the thumbnail to view the full image).
 
 5. **Take Action:**
-   * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest.
+   * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest. If email notifications are on, the submitter is told it was published.
    * **Edit (Pencil Icon):** Need to fix a typo, clarify the venue, or refine the time? Click **Edit** to modify the event details, then save.
-   * **Reject / Delete (Trash Icon):** If a submission is a duplicate or spam, click **Reject** to remove it.
-   * **Approve All:** If you have verified all entries at once, click **"Approve All"** in the top right of the modal.
+   * **Decline (Trash Icon):** If a submission is a duplicate, spam or not suitable, click **Decline**. You can type a short reason (optional) — with email notifications on, it is sent to the submitter so they know what to change. Click **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
+   * **Approve All:** If you have verified all entries at once, click **"Approve all"** in the top right of the modal.
 
 ---
 
@@ -218,6 +220,35 @@ You can simply approve the submission in the **Submissions Inbox**, then click *
 
 ### Can staff view the submissions inbox?
 No. The **Submissions** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff only see published events on the public calendar.
+
+### An event repeats with small changes — do I have to type it all again?
+No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact and flyer. Pick the new date, change anything else that is different and click **Publish event**.
+
+### The Board asks how many events we ran this quarter
+Open the **account menu** (your name, top right) → **Statistics**. Pick a period (this quarter, last quarter, this year, …, or your own dates) to see the number of events and dates held, by category, by month and by venue. **Copy as text** puts a short summary on the clipboard for an email or report.
+
+---
+
+## 👥 Staff Accounts & Passwords
+
+Most staff never need an account — the `/submit` form works without one. Colleagues who should see the full calendar or manage events can have a login.
+
+### Add a staff account
+1. **Account menu** (your name, top right) → **Staff accounts** → **Add staff account**.
+2. Enter their **display name**, **login email** and a **first password**, then save.
+3. Share the email and password with them privately (in person, by phone, or in a separate message). When they first sign in, the calendar asks them to choose their own password.
+
+New accounts are always **Staff**. If someone should become an administrator, ask Ihor.
+
+### Someone forgot their password
+There is no "reset by email" link. Instead:
+1. They contact you or Ihor (the login page's **Forgot your password?** shows who to write to).
+2. **Account menu → Staff accounts →** find the person → **Reset password**, then confirm.
+3. A **temporary password** is shown once — click **Copy** and pass it on privately. Their old password stops working straight away.
+4. When they sign in with the temporary password, the calendar asks them to choose a new one before they can continue.
+
+### Change your own password
+**Account menu → Change password.** Enter your current password and the new one (at least 8 characters) twice.
 
 ---
 

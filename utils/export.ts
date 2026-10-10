@@ -287,8 +287,8 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
         bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
         right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
       };
-      // Centered columns: Poster (1), Start Date (4), Start Time (5), End Date (6), End Time (7), Status (10), Recurrence (11), RSVP (14)
-      const isCentered = [1, 4, 5, 6, 7, 10, 11, 14].includes(colNumber);
+      // Centered columns: Poster (1), Start Date (4), Start Time (5), End Date (6), End Time (7), Status (10), Recurrence (11)
+      const isCentered = [1, 4, 5, 6, 7, 10, 11].includes(colNumber);
       cell.alignment = {
         vertical: 'middle',
         horizontal: isCentered ? 'center' : 'left',

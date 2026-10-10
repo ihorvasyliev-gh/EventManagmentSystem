@@ -1,302 +1,179 @@
 # 🗄️ Настройка Supabase для CCP Event Calendar
 
-Этот файл содержит пошаговые инструкции по настройке базы данных Supabase для проекта календаря событий.
+Пошаговая настройка базы данных и входа. Деплой сайта — в [`DEPLOY.md`](DEPLOY.md).
 
 ## 📋 Содержание
 
-1. [Создание проекта Supabase](#1-создание-проекта-supabase)
-2. [Выполнение SQL скрипта](#2-выполнение-sql-скрипта)
-3. [Настройка аутентификации](#3-настройка-аутентификации)
-4. [Получение ключей API](#4-получение-ключей-api)
-5. [Проверка настройки](#5-проверка-настройки)
-6. [Создание тестовых пользователей](#6-создание-тестовых-пользователей)
+1. [Создание проекта](#1-создание-проекта)
+2. [Схема базы данных](#2-схема-базы-данных)
+3. [Аутентификация](#3-аутентификация)
+4. [Первый администратор](#4-первый-администратор)
+5. [Ключи API](#5-ключи-api)
+6. [Проверка](#6-проверка)
 
 ---
 
-## 1. Создание проекта Supabase
+## 1. Создание проекта
 
-1. Перейдите на [https://supabase.com](https://supabase.com)
-2. Войдите в свой аккаунт (или создайте новый)
-3. Нажмите **"New Project"**
-4. Заполните форму:
-   - **Name:** `CCP Event Calendar` (или любое другое имя)
-   - **Database Password:** Придумайте надежный пароль и **сохраните его!**
-   - **Region:** Выберите ближайший регион (например, `West Europe` для Ирландии)
-   - **Pricing Plan:** Выберите подходящий план (Free tier подходит для начала)
-5. Нажмите **"Create new project"**
-6. Дождитесь создания проекта (обычно 2-3 минуты)
+1. [https://supabase.com](https://supabase.com) → **New Project**.
+2. **Name:** `CCP Event Calendar`, **Database Password:** надёжный (сохраните), **Region:** `West Europe` (ближе к Ирландии).
+3. Дождитесь создания (2–3 минуты).
 
 ---
 
-## 2. Выполнение SQL скрипта
+## 2. Схема базы данных
 
-После создания проекта:
+### Новый проект
 
-1. В Supabase Dashboard перейдите в **SQL Editor** (в левом меню)
-2. Нажмите **"New query"**
-3. Откройте файл `supabase-setup.sql` из этого проекта
-4. Скопируйте **весь** содержимое файла
-5. Вставьте в SQL Editor в Supabase
-6. Нажмите **"Run"** (или `Ctrl+Enter` / `Cmd+Enter`)
+1. **SQL Editor** → **New query**.
+2. Вставьте **весь** файл [`supabase/setup.sql`](supabase/setup.sql) и нажмите **Run**.
+3. Ожидаемый результат: «Success. No rows returned».
 
-✅ Если все прошло успешно, вы увидите сообщение "Success. No rows returned"
+Скрипт можно запускать повторно — он ничего не ломает. Миграции из `supabase/migrations/` для нового проекта **не нужны**:
+`setup.sql` уже содержит их итог.
 
-### Что создается:
+### Существующий проект (обновление)
 
-- ✅ Таблицы: `users`, `events`, `event_attachments`, `event_comments`, `event_history`, `rsvps`
-- ✅ Индексы для оптимизации запросов
-- ✅ Триггеры для автоматического обновления `updated_at`
-- ✅ Row Level Security (RLS) политики для безопасности
-- ✅ Функции для удобной работы с данными
-- ✅ Автоматическая синхронизация с `auth.users`
+Выполните по порядку те файлы из [`supabase/migrations/`](supabase/migrations/), которые ещё не запускали:
 
----
+| Файл | Что делает |
+|---|---|
+| `001`–`010` | повторяющиеся события, свои даты/места, заявки сотрудников, Realtime, категории |
+| `011_security_hardening.sql` | роли только через админа, закрытые политики |
+| `012_access_accounts_and_cleanup.sql` | закрывает анониму доступ к таблицам, флаг смены пароля, журнал ошибок, убирает комментарии и RSVP |
 
-## 3. Настройка аутентификации
+> ⚠️ **012 — только после деплоя новой версии сайта** (см. «Порядок релиза» в `DEPLOY.md`).
+> Старая версия сайта читает таблицы напрямую под anon key и после 012 перестанет работать.
 
-1. В Supabase Dashboard перейдите в **Authentication** → **Settings**
-2. Настройте **Email Auth:**
-   - ⚠️ **Отключите публичную регистрацию:** **Allow new users to sign up** → OFF.
-     Формы регистрации в приложении нет, а anon key публичный (он в JS-бандле) — с включённой
-     регистрацией любой человек из интернета может создать себе аккаунт через API.
-     Сотрудников добавляйте через **Authentication** → **Users** → **Add user** (см. `CREATE_ADMIN_USER.md`) —
-     это работает и при выключенной регистрации.
-   - ⚠️ **КРИТИЧЕСКИ ВАЖНО: Отключите подтверждение email:**
-     - Найдите опцию **"Confirm email"** 
-     - **ОБЯЗАТЕЛЬНО отключите** её (переключите в положение OFF)
-     - Это позволит пользователям регистрироваться и сразу входить без подтверждения почты
-     - Без этого пользователи не смогут войти после регистрации до подтверждения email
-   - Настройте **Email Templates** (опционально)
-   - Настройте **SMTP Settings** для отправки писем (опционально)
+Миграции `011` и `012` можно запускать повторно; старые `001`–`010` — по одному разу.
 
-3. **URL Configuration:**
-   - **Site URL:** Укажите URL вашего приложения (например, `https://your-app.pages.dev`)
-   - **Redirect URLs:** Добавьте URL для редиректа после входа
+### Что получается
 
-4. **OAuth Providers** (опционально):
-   - Можно настроить Google, GitHub и другие провайдеры
-   - Следуйте инструкциям в документации Supabase
-
-> 💡 **Примечание:** Если вы хотите, чтобы пользователи подтверждали email, оставьте "Confirm email" включенным. В этом случае после регистрации пользователь получит письмо с подтверждением и сможет войти только после подтверждения.
+- **Таблицы:** `users`, `events`, `event_attachments`, `event_history`, `event_categories`,
+  `recurrence_exceptions`, `client_errors`.
+- **Триггеры:** `updated_at`; запись в историю при создании события; создание строки в `users`
+  для каждого нового входа (всегда с ролью `staff`); запрет менять роль кому-либо, кроме админа.
+- **Доступ (RLS):**
+  - анониму таблицы недоступны вовсе — форма `/submit` и календарные ленты работают через Pages Functions
+    с service role key;
+  - сотрудник видит опубликованные события, создаёт черновики и правит только свою строку в `users` (кроме роли);
+  - админ видит и меняет всё;
+  - `client_errors` пишет только сервер (функция `log_client_error`), хранятся 90 дней, не больше 5000 строк.
+- **Realtime:** таблица `events` в публикации `supabase_realtime` — изменения приходят в открытые вкладки сразу.
 
 ---
 
-## 4. Получение ключей API
+## 3. Аутентификация
 
-1. В Supabase Dashboard перейдите в **Settings** → **API**
-2. Найдите секцию **Project API keys**
-3. Скопируйте следующие значения:
+**Authentication → Sign In / Providers:**
 
-   - **Project URL** 
-     ```
-     https://xxxxx.supabase.co
-     ```
-     → Используйте как `VITE_SUPABASE_URL`
+- ⚠️ **Allow new users to sign up → OFF.** Формы регистрации в приложении нет, а anon key публичный
+  (он в JS-бандле): с включённой регистрацией кто угодно может создать себе аккаунт через API.
+  Аккаунты создаёт админ в приложении (**Staff accounts**) — это работает и при выключенной регистрации.
+- **Confirm email** — не важно: аккаунты из приложения и из Dashboard (с галочкой **Auto Confirm User**)
+  создаются уже подтверждёнными.
 
-   - **anon public** key (длинная строка)
-     ```
-     eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-     ```
-     → Используйте как `VITE_SUPABASE_ANON_KEY`
+**Authentication → URL Configuration:**
 
-⚠️ **Важно:** 
-- `anon` key - публичный ключ, безопасно использовать во frontend
-- `service_role` key - секретный ключ, **НИКОГДА** не используйте во frontend!
+- **Site URL:** адрес сайта, например `https://ccp-event-calendar.pages.dev`.
+
+Восстановления пароля по почте нет: если сотрудник забыл пароль, админ в **Staff accounts** нажимает
+**Reset password**, получает временный пароль и передаёт его. При следующем входе приложение попросит
+придумать новый пароль. Подробнее — в `README.md`, раздел «Roles».
 
 ---
 
-## 5. Проверка настройки
+## 4. Первый администратор
 
-### Проверка таблиц
-
-1. Перейдите в **Table Editor** в Supabase Dashboard
-2. Убедитесь, что видны все таблицы:
-   - `users`
-   - `events`
-   - `event_attachments`
-   - `event_comments`
-   - `event_history`
-   - `rsvps`
-
-### Проверка RLS политик
-
-1. Откройте любую таблицу в **Table Editor**
-2. Нажмите на вкладку **Policies**
-3. Убедитесь, что политики созданы и активны
-
-### Тестовый запрос
-
-В **SQL Editor** выполните:
-
-```sql
--- Проверка структуры таблицы events
-SELECT column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_name = 'events'
-ORDER BY ordinal_position;
-```
-
-Должны увидеть все колонки таблицы `events`.
-
----
-
-## 6. Создание тестовых пользователей
-
-### Вариант 1: Через Supabase Dashboard
-
-1. Перейдите в **Authentication** → **Users**
-2. Нажмите **"Add user"** → **"Create new user"**
-3. Заполните:
-   - **Email:** `admin@ccp.com`
-   - **Password:** (придумайте пароль)
-   - **Auto Confirm User:** ✅ Включите (если подтверждение email отключено, пользователь будет подтвержден автоматически)
-4. Нажмите **"Create user"**
-
-5. После создания пользователя, обновите его роль в таблице `users`:
+1. **Authentication → Users → Add user → Create new user.**
+2. Email и пароль, галочка **Auto Confirm User** включена → **Create user**.
+3. **SQL Editor:**
    ```sql
    UPDATE public.users
-   SET role = 'admin', full_name = 'CCP Administrator'
-   WHERE email = 'admin@ccp.com';
+   SET role = 'admin', full_name = 'Ihor Vasyliev'
+   WHERE email = 'admin@example.com';
    ```
+   (из SQL Editor роль менять можно; из приложения — только админу.)
 
-6. Повторите для сотрудника:
-   - Email: `staff@ccp.com`
-   - Role: `staff`
+Остальных сотрудников админ добавляет в приложении: меню аккаунта → **Staff accounts** → **Add**.
+Новый аккаунт всегда `staff` и при первом входе просит сменить временный пароль.
+Сделать сотрудника админом — тот же `UPDATE` в SQL Editor.
 
-> 💡 **Примечание:** Если подтверждение email отключено (см. раздел 3), пользователи могут регистрироваться через форму регистрации в приложении без необходимости подтверждения почты.
+---
 
-### Вариант 2: Через SQL (только для тестирования)
+## 5. Ключи API
 
-⚠️ **Внимание:** Этот метод создает пользователя без пароля. Используйте только для тестирования!
+**Settings → API:**
+
+| Значение | Куда |
+|---|---|
+| **Project URL** (`https://xxxxx.supabase.co`) | `VITE_SUPABASE_URL` — в `.env.local` и в Cloudflare |
+| **anon public** key | `VITE_SUPABASE_ANON_KEY` — в `.env.local` и в Cloudflare |
+| **service_role** key | `SUPABASE_SERVICE_ROLE_KEY` — **только** секретом в Cloudflare |
+
+⚠️ `service_role` обходит все правила доступа. Никогда не кладите его в `.env.local`, в код или в переменные `VITE_*`.
+
+---
+
+## 6. Проверка
+
+**Table Editor:** видны таблицы из раздела 2, у каждой на вкладке **Policies** есть политики, RLS включён.
+
+**SQL Editor:**
 
 ```sql
--- Создание тестового пользователя через SQL
--- НЕ рекомендуется для продакшена!
+-- Колонки событий
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'events' ORDER BY ordinal_position;
 
--- Сначала создайте пользователя в auth.users
-INSERT INTO auth.users (
-  instance_id,
-  id,
-  aud,
-  role,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  created_at,
-  updated_at
-)
-VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  gen_random_uuid(),
-  'authenticated',
-  'authenticated',
-  'admin@ccp.com',
-  crypt('your-password-here', gen_salt('bf')),
-  NOW(),
-  NOW(),
-  NOW()
-)
-RETURNING id;
+-- Политики: у anon не должно быть ни одной
+SELECT tablename, policyname, roles FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename;
 
--- Затем обновите public.users (триггер должен создать запись автоматически)
--- Если не создалась, выполните:
-INSERT INTO public.users (id, email, full_name, role)
-SELECT id, email, 'CCP Administrator', 'admin'
-FROM auth.users
-WHERE email = 'admin@ccp.com'
-ON CONFLICT (id) DO UPDATE
-SET role = 'admin', full_name = 'CCP Administrator';
+-- Роли пользователей
+SELECT email, role, must_change_password FROM public.users ORDER BY role, email;
 ```
 
 ---
 
-## 🔧 Дополнительные настройки
+## ✅ Чеклист
 
-### Настройка Storage (опционально)
-
-Если вы хотите использовать Supabase Storage вместо Cloudflare R2:
-
-1. Перейдите в **Storage** в Supabase Dashboard
-2. Создайте bucket `event-posters`
-3. Настройте публичный доступ
-4. Обновите код для использования Supabase Storage API
-
-### Настройка Edge Functions (для R2 upload)
-
-Если вы используете Cloudflare R2, вам может понадобиться Supabase Edge Function для получения presigned URLs:
-
-1. Установите Supabase CLI: `npm install -g supabase`
-2. Инициализируйте проект: `supabase init`
-3. Создайте функцию: `supabase functions new r2-upload`
-4. Следуйте документации Supabase для настройки
-
----
-
-## ✅ Чеклист настройки
-
-- [ ] Проект Supabase создан
-- [ ] SQL скрипт `supabase-setup.sql` выполнен успешно
-- [ ] Все таблицы созданы и видны в Table Editor
-- [ ] RLS политики активны
-- [ ] Выполнены миграции: `submission-migration.sql`, `recurrence-exceptions-migration.sql`, `realtime-events-migration.sql`, `custom-dates-migration.sql`, `add-custom-end-dates-migration.sql`, `add-custom-locations-migration.sql`, `rsvp-occurrence-migration.sql`, `event-comments-occurrence-migration.sql`
-- [ ] **Выполнен `security-hardening-migration.sql`** (последним)
-- [ ] **Публичная регистрация отключена** (Authentication → Sign In / Providers → Allow new users to sign up: OFF)
-- [ ] Получены Project URL и anon key
-- [ ] Настроена аутентификация
-- [ ] **Подтверждение email отключено** (Authentication → Settings → Email Auth → Confirm email: OFF)
-- [ ] Созданы тестовые пользователи
-- [ ] Переменные окружения добавлены в `.env.local`
-- [ ] Приложение подключено к Supabase
+- [ ] Проект создан
+- [ ] `supabase/setup.sql` выполнен (новый проект) **или** все миграции по `012` включительно (обновление, 012 — после деплоя)
+- [ ] **Allow new users to sign up: OFF**
+- [ ] Site URL указан
+- [ ] Первый администратор создан, роль `admin`
+- [ ] `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` — в `.env.local` и в Cloudflare
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` — секретом в Cloudflare
 
 ---
 
 ## 🆘 Troubleshooting
 
 ### Ошибка при выполнении SQL
+- Скопирован не весь файл, или проект ещё создаётся. `setup.sql` можно запустить ещё раз.
 
-- Убедитесь, что скопировали весь скрипт
-- Проверьте, что проект полностью создан (не в процессе создания)
-- Попробуйте выполнить скрипт по частям
-
-### Пользователи не создаются автоматически
-
-- Проверьте, что триггер `on_auth_user_created` создан
-- Убедитесь, что функция `handle_new_user()` существует
-- Проверьте логи в Supabase Dashboard → Logs
-
-### RLS блокирует запросы
-
-- Убедитесь, что пользователь авторизован
-- Проверьте политики в Table Editor → Policies
-- Временно отключите RLS для тестирования (не для продакшена!):
+### Пользователь вошёл, но событий нет / «permission denied»
+- Нет строки в `public.users`. Проверьте, что триггер `on_auth_user_created` существует, и создайте строку вручную:
   ```sql
-  ALTER TABLE public.events DISABLE ROW LEVEL SECURITY;
+  INSERT INTO public.users (id, email, full_name, role)
+  SELECT id, email, email, 'staff' FROM auth.users WHERE email = 'person@example.com'
+  ON CONFLICT (id) DO NOTHING;
   ```
 
-### Не могу подключиться из приложения
+### Форма `/submit` или одобрение заявок отвечают ошибкой
+- В Cloudflare нет `SUPABASE_SERVICE_ROLE_KEY` (см. `CLOUDFLARE_SETUP.md`).
 
-- Проверьте правильность URL и ключа
-- Убедитесь, что переменные окружения начинаются с `VITE_`
-- Проверьте CORS настройки (должны быть настроены автоматически)
+### Изменения не приходят в открытые вкладки
+- `events` не в публикации Realtime: **Database → Publications → supabase_realtime** → включите `events`.
+- Или задайте `VITE_SUPABASE_REALTIME=false` — приложение будет обновлять события раз в минуту.
+
+### Старые таблицы `event_comments` и `rsvps`
+- После 012 ими никто не пользуется. Удалить — раскомментировать строки `DROP TABLE` в конце файла 012 и выполнить их.
 
 ---
 
 ## 📚 Полезные ссылки
 
 - [Supabase Documentation](https://supabase.com/docs)
-- [Supabase Auth Guide](https://supabase.com/docs/guides/auth)
+- [Supabase Auth](https://supabase.com/docs/guides/auth)
 - [Row Level Security](https://supabase.com/docs/guides/auth/row-level-security)
-- [Supabase JavaScript Client](https://supabase.com/docs/reference/javascript/introduction)
-
----
-
-## 🎉 Готово!
-
-После выполнения всех шагов ваша база данных Supabase готова к использованию. Теперь вы можете:
-
-1. Обновить код приложения для работы с Supabase
-2. Установить `@supabase/supabase-js`: `npm install @supabase/supabase-js`
-3. Создать клиент Supabase в вашем приложении
-4. Заменить моки на реальные запросы к базе данных
-
-Удачи! 🚀

@@ -18,15 +18,17 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 
 | | |
 |---|---|
-| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). |
-| 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. Updates arrive in real time. |
+| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). An optional Cloudflare Turnstile check keeps bots out. |
+| 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. A declined submission can carry a reason. Updates arrive in real time. |
+| ✉️ **Emails (optional)** | Admins hear about new submissions; submitters hear when their event is approved or declined (with the reason). |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp & email text** | One click copies an emoji-friendly WhatsApp version of the digest, or a ready-to-send covering email for the Board that lists every event. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
 | 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. You can delete a single occurrence. |
-| ✅ **RSVPs & comments** | Both are tracked per occurrence. The browser reminds you the day before an event you've joined. |
+| 👥 **Staff accounts** | Admins add staff and reset forgotten passwords: the person gets a temporary password and chooses their own at the next sign-in. Everyone can change their password from the account menu. |
+| 📊 **Statistics** | Events, dates and venues per period, by category and month, ready to paste into a Board report. |
 | 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
-| 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar. |
+| 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar, for all events or chosen categories. |
 | 🎨 **Cork City Partnership look** | Colours, Lato type, buttons and leaf-shaped boxes follow [corkcitypartnership.ie](https://corkcitypartnership.ie/), in light and dark mode, on screen and in the PDF. |
 | 🌙 **Comfort features** | Dark mode, keyboard shortcuts (`/` `←` `→` `T` `C` `E` `Esc`), pull-to-refresh and offline caching. |
 
@@ -68,19 +70,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database in the Supabase SQL Editor. Run `supabase-setup.sql` first, then these migrations:
-
-| File | Adds |
-|---|---|
-| `recurrence-exceptions-migration.sql` | Deleting single occurrences |
-| `custom-dates-migration.sql` | Hand-picked recurrence dates |
-| `rsvp-occurrence-migration.sql` | RSVPs per occurrence |
-| `event-comments-occurrence-migration.sql` | Comments per occurrence |
-| `submission-migration.sql` | Anonymous `/submit` drafts |
-| `realtime-events-migration.sql` | Live updates without refreshing |
-| `add-custom-end-dates-migration.sql` | A different time on each date of a multi-date event (and several times on one date) |
-| `add-custom-locations-migration.sql` | A different address on each date / time of a multi-date event |
-| `fix-category-constraint.sql`, `update-categories-to-standard.sql` | The standard CCP category list |
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `012_access_accounts_and_cleanup.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -97,7 +87,10 @@ The app runs at <http://localhost:3000>.
 | `npm run dev` | Starts the Vite dev server on port 3000 |
 | `npm run build` | Builds for production into `dist/` |
 | `npm run preview` | Serves the production build |
-| `npm test` | Runs the unit tests (Node's built-in test runner, no extra dependencies) |
+| `npm test` | Unit tests (Node's built-in test runner): the app's logic and the Cloudflare functions |
+| `npm run test:e2e` | End-to-end tests (Playwright) on the production build, with Supabase mocked: submitting, reviewing, passwords, the event window, accessibility (axe) and the Content-Security-Policy |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript for the app and for the functions (Workers types) |
 
 ## Roles
 
@@ -110,13 +103,17 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | | Staff | Admin |
 |---|:---:|:---:|
 | View, search and filter published events | ✅ | ✅ |
-| RSVP, comment, add to a personal calendar, export, subscribe | ✅ | ✅ |
+| Add to a personal calendar, export, subscribe | ✅ | ✅ |
 | Submit events for review | ✅ | ✅ |
-| Create, edit and delete events and occurrences | | ✅ |
+| Change their own password | ✅ | ✅ |
+| Create, edit, duplicate and delete events and occurrences | | ✅ |
 | Review submissions and see drafts | | ✅ |
 | Manage categories | | ✅ |
+| Add staff accounts, reset passwords, see statistics | | ✅ |
 
-Row-level security enforces these rules in the database. Staff can only ever read published events.
+Row-level security enforces these rules in the database: staff read published events (and their own drafts) and can only create drafts. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
+
+**Forgotten password:** the person emails the contact on the login page (*Forgot your password?* fills in the email). An admin opens **account menu → Staff accounts → Reset password** and passes on the temporary password shown; at their next sign-in they choose a new one.
 
 ## Deployment (Cloudflare Pages)
 
@@ -124,38 +121,53 @@ Row-level security enforces these rules in the database. Staff can only ever rea
 |---|---|
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Environment variables | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
-| R2 binding | Bind a bucket as **`BUCKET`** under *Settings → Functions → R2 bucket bindings* |
+| Build variables | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (required); `VITE_TURNSTILE_SITE_KEY` (bot check, optional) |
+| Secrets | `SUPABASE_SERVICE_ROLE_KEY` (required); `TURNSTILE_SECRET_KEY`, `RESEND_API_KEY` (optional) |
+| Other variables | `NOTIFY_FROM`, `NOTIFY_ADMIN_EMAILS`, `APP_URL` (for the emails, optional) |
+| R2 binding | A bucket bound as **`BUCKET`** |
 
-The Pages Functions read the same Supabase variables at runtime. If the server side needs different values, set `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+Step by step, including the order for this release (deploy first, then run migration 012): [`DEPLOY.md`](DEPLOY.md) and [`CLOUDFLARE_SETUP.md`](CLOUDFLARE_SETUP.md).
+
+Every page gets security headers from `public/_headers`: a Content-Security-Policy (scripts only from the site and Turnstile, data only from the site and Supabase), HSTS and no framing.
 
 ### API (Pages Functions)
 
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/upload` | `PUT` | Uploads a poster or attachment to R2 |
-| `/api/file/:key` | `GET` | Serves a file from R2 |
-| `/api/calendar` | `GET` | Live ICS feed of published events, with recurrences expanded (Europe/Dublin) |
+| Endpoint | Method | Who | Purpose |
+|---|---|---|---|
+| `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish) |
+| `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
+| `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
+| `/api/file/:key` | `GET` | anyone | Serves a poster or attachment from R2 |
+| `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
+| `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
+| `/api/submissions` | `POST` | admins | Approve (and email the submitter) or decline (email the reason, delete) |
+| `/api/staff` | `GET` / `POST` | admins | List accounts / create a staff account |
+| `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |
+| `/api/client-error` | `POST` | anyone | Error reports from browsers (stored in `client_errors`) |
 
-**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab.
+**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab, where you can pick categories.
+
+**Errors in people's browsers** are reported to `/api/client-error` and land in the `client_errors` table (Supabase → Table Editor), one row per error per day with a count.
 
 ## Project layout
 
 ```
-├── App.tsx                  App shell: session, data sync, modals
+├── App.tsx                  App shell: modals and event actions
+├── hooks/                   useSession, useEventsSync (load, cache, live updates), form helpers
 ├── pages/                   Login and the public /submit form
-├── components/              Calendar and week views, event modal, digest and export dialogs, inbox
-├── services/                Supabase access: auth, events, RSVPs, categories
+├── components/              Calendar and week views, event window, digest, export, inbox, staff, statistics
+├── services/                Supabase and /api access: events, submissions, files, staff, auth
 ├── utils/
-│   ├── pdfExport.ts         Events Digest PDF and WhatsApp text
+│   ├── pdf/                 Events Digest PDF (digest.ts and its parts) and WhatsApp text
 │   ├── digestText.ts        Covering email for the digest (and helpers the PDF shares)
-│   ├── digestGrouping.ts    Merges repeated occurrences into one digest entry
 │   ├── recurrence.ts        Expands recurring events
 │   └── export.ts            ICS and Excel export
-├── functions/api/           Cloudflare Pages Functions (upload, files, ICS feed)
-├── public/                  Logo, Lato fonts (site and PDF), PWA manifest, service worker
+├── functions/api/           Cloudflare Pages Functions (see API above)
+├── server/                  What the functions share: Supabase access, emails, files, feed, checks
+├── supabase/                setup.sql (new projects) and migrations/ (existing ones)
+├── public/                  Icons, Lato fonts, PWA manifest, service worker, _headers
 ├── tests/                   Unit tests (node --test)
-├── *.sql                    Database setup and migrations
+├── e2e/                     End-to-end tests (Playwright)
 └── docs/                    Coordinator and staff guides
 ```
 
@@ -168,6 +180,8 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 | Files | Cloudflare R2 |
 | Hosting | Cloudflare Pages and Pages Functions |
 | Documents | jsPDF (digest), ExcelJS (`.xlsx`), PDF.js (PDF flyers → print-quality PNG) |
+| Optional services | Cloudflare Turnstile (bot check), Resend (emails) |
+| Tests | Node test runner, Playwright with axe, ESLint |
 
 ## Support
 

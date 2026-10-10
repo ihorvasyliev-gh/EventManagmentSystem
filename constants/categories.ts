@@ -14,3 +14,14 @@ export const EVENT_CATEGORIES = [
 ] as const;
 
 export type EventCategoryName = (typeof EVENT_CATEGORIES)[number];
+
+/** Short names for tight spots (the calendar's category filter); the full name stays in the tooltip */
+export const CATEGORY_SHORT_LABELS: Record<EventCategoryName, string> = {
+  'Enterprise & Employment': 'Enterprise',
+  'Community & Family': 'Community',
+  'Education & Training': 'Education',
+  'Special Visits & Celebrations': 'Special visits',
+  'Public Information Session': 'Info sessions',
+  'Health & Wellbeing': 'Health',
+  Other: 'Other'
+};

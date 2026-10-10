@@ -122,7 +122,7 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 h-10 sm:h-11 px-3 sm:px-4 rounded-xl border transition-colors ${
+        className={`flex items-center gap-2 h-10 px-3 sm:px-4 rounded-xl border transition-colors ${
           hasActiveFilters
             ? 'bg-brand-50 dark:bg-brand-950/40 border-brand-300 dark:border-brand-800 text-brand-700 dark:text-brand-300'
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'

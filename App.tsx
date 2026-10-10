@@ -184,9 +184,14 @@ const AppContent: React.FC = () => {
           <SubmissionsBanner submissions={pendingSubmissions} onOpen={openInbox} />
         )}
 
-        {/* Search and Filters Bar */}
-        <div className="mb-3 sm:mb-4 flex gap-2 sm:gap-3 items-center">
+        {/* Search, categories and Filters: one row from 1024px; below that the categories get their own row */}
+        <div className="mb-4 flex flex-wrap lg:flex-nowrap items-center gap-2">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
+          <CategoryPills
+            className="order-last w-full lg:order-none lg:w-auto"
+            selected={filters.category}
+            onSelect={(category) => setFilters(prev => ({ ...prev, category }))}
+          />
           <EventFiltersComponent
             filters={filters}
             onFiltersChange={setFilters}
@@ -194,8 +199,6 @@ const AppContent: React.FC = () => {
             availableSubmitterEmails={availableSubmitterEmails}
           />
         </div>
-
-        <CategoryPills selected={filters.category} onSelect={(category) => setFilters(prev => ({ ...prev, category }))} />
 
         {hasActiveFilters && !loadingEvents && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/30 px-4 py-2.5 text-sm text-brand-800 dark:text-brand-200" role="status">

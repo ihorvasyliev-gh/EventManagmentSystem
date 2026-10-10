@@ -421,7 +421,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                         </div>
 
                         {/* Title */}
-                        <h4 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
+                        <h4 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere] leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
                           {isMulti && <span className="mr-1 text-brand-600 dark:text-brand-400 font-bold">↔</span>}
                           {event.title}
                         </h4>

@@ -111,12 +111,15 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               <div
                 key={ev.instanceKey ?? ev.id}
                 {...clickableProps(() => onEventClick(ev))}
-                className={`w-full text-left ${colorClass} border-l-2 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm truncate lg:whitespace-normal lg:line-clamp-2 lg:break-words leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
+                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                 title={itemTitle}
               >
-                {!isContinuation && <span className="hidden lg:inline font-bold mr-1">{timeStr}</span>}
-                {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
-                {ev.title}
+                {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding */}
+                <span className="block truncate lg:whitespace-normal lg:line-clamp-2 lg:[overflow-wrap:anywhere]">
+                  {!isContinuation && <span className="hidden lg:inline font-bold tabular-nums mr-1">{timeStr}</span>}
+                  {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
+                  {ev.title}
+                </span>
               </div>
             );
           })}

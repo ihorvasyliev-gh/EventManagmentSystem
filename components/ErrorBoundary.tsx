@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import { reportError } from '../utils/errorReporting';

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart3, Check, Copy } from 'lucide-react';
 import ModalShell from './ModalShell';
-import { Event } from '../types';
+import { type Event } from '../types';
 import { computePeriodStats, statsSummaryText } from '../utils/eventStats';
 import { formatLocalDate } from '../utils/date';
 import { getCategoryDotColor } from './WeekView';

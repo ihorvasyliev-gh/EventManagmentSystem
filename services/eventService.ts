@@ -1,7 +1,7 @@
-import { Event, Attachment, EventHistoryEntry, RecurrenceRule } from '../types';
+import { type Event, type Attachment, type EventHistoryEntry, type RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
 import { fetchAllPages } from './paging';
-import { EVENT_COLUMNS, EventRow, AttachmentRow, HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, eventToRow, toIsoList } from './eventMapper';
+import { EVENT_COLUMNS, type EventRow, type AttachmentRow, type HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, eventToRow, toIsoList } from './eventMapper';
 import { deleteStoredFiles } from './fileService';
 
 export { uploadPoster as uploadPosterToR2 } from './fileService';

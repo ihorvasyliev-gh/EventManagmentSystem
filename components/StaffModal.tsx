@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Copy, Eye, EyeOff, KeyRound, Loader2, Mail, RotateCcw, User, UserPlus, Users } from 'lucide-react';
 import ModalShell from './ModalShell';
-import { createStaffAccount, listStaff, resetStaffPassword, StaffAccount } from '../services/staffService';
+import { createStaffAccount, listStaff, resetStaffPassword, type StaffAccount } from '../services/staffService';
 
 interface StaffModalProps {
   isOpen: boolean;

@@ -1,4 +1,4 @@
-import { Event } from '../types';
+import { type Event } from '../types';
 
 const EVENTS_CACHE_KEY = 'ccp_events_cache';
 const EVENTS_CACHE_TIMESTAMP_KEY = 'ccp_events_cache_timestamp';

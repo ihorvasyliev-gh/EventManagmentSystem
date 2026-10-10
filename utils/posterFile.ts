@@ -255,7 +255,7 @@ export const openPdf = async (file: File, bytes: Promise<ArrayBuffer> = file.arr
   } catch (err) {
     void task?.destroy();
     if (err instanceof Error && err.name === 'PasswordException') {
-      throw new Error('That PDF is password-protected. Please remove the password or save the flyer as an image (PNG or JPG).');
+      throw new Error('That PDF is password-protected. Please remove the password or save the flyer as an image (PNG or JPG).', { cause: err });
     }
     const message = cutShort
       ? 'Your browser only handed over part of this PDF. Please try again in a moment, try another browser (such as Chrome), or save the flyer as an image (PNG or JPG).'

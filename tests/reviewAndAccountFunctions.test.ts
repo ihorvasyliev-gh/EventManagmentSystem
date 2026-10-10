@@ -60,7 +60,7 @@ test('a flyer another event still uses is kept when a submission is declined', a
     ...authRoutes,
     ({ url, method }) => (method === 'GET' && url.includes('/rest/v1/events?id=in.') ? json([draft]) : undefined),
     ({ url }) => (url.includes('/rest/v1/event_attachments?event_id=in.') ? json([]) : undefined),
-    ({ url, method }) => (method === 'DELETE' ? new Response(null, { status: 204 }) : undefined),
+    ({ method }) => (method === 'DELETE' ? new Response(null, { status: 204 }) : undefined),
     ({ url }) => (url.includes('select=id&poster_url=eq.') ? json([{ id: 'other' }]) : undefined),
     ({ url }) => (url.includes('select=id&url=eq.') ? json([]) : undefined)
   ]);

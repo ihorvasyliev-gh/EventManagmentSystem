@@ -1,13 +1,13 @@
 import type jsPDF from 'jspdf';
 import { createScreenOnlyLayer } from './pdfScreenOnly.ts';
 import { type LayoutBlock, paginate, pickLayout } from './pdfLayout.ts';
-import { Event } from '../types';
+import { type Event } from '../types';
 import { formatLocalDate, isMultiDayEvent } from './date';
-import { getCategoryRgb, Rgb } from '../constants/categoryColors';
+import { getCategoryRgb, type Rgb } from '../constants/categoryColors';
 import {
   groupDigestOccurrences,
   formatAlsoOnDates,
-  DigestEventGroup,
+  type DigestEventGroup,
   monthShort,
   monthShortUpper
 } from './digestGrouping';
@@ -257,8 +257,8 @@ const normaliseWhitespace = (text: string, preserveNewlines: boolean): string =>
 const stripEmoji = (text: string): string =>
   String(text)
     .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
-    .replace(/[☀-➿]/g, '')
-    .replace(/[︀-️​-‍]/g, '');
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[\uFE00-\uFE0F\u200B-\u200D]/g, '');
 
 /**
  * Sanitizes strings for jsPDF standard fonts (Helvetica) to prevent switching to 16-bit encoding

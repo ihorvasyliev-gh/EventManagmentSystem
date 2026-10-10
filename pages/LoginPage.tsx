@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { login } from '../services/authService';
-import { User } from '../types';
+import { type User } from '../types';
 import { Lock, Loader2, Mail, Eye, EyeOff, AlertCircle, CalendarPlus, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import ThemeToggle from '../components/ThemeToggle';

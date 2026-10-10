@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy } from 'lucide-react';
-import { Event } from '../types';
+import { type Event } from '../types';
 import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
 import { getCategoryDotColor } from './WeekView';

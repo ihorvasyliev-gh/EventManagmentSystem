@@ -11,7 +11,7 @@ import UpdateBanner from './components/UpdateBanner';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { Event, EventFilters, UserRole, EventStatus } from './types';
+import { type Event, type EventFilters, UserRole, type EventStatus } from './types';
 import { updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions } from './services/eventService';
 import { approveSubmissions, declineSubmissions } from './services/submissionService';
 import { filterEvents } from './utils/filterEvents';

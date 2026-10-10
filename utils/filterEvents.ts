@@ -1,4 +1,4 @@
-import { Event, EventFilters, UserRole } from '../types.ts';
+import { type Event, type EventFilters, UserRole } from '../types.ts';
 import { expandRecurringEvents, getEventLocations } from './recurrence.ts';
 
 // Open-ended date filters still need a finite window to look for occurrences in

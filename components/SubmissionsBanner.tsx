@@ -1,6 +1,6 @@
 import React from 'react';
 import { Inbox, ArrowRight } from 'lucide-react';
-import { Event } from '../types';
+import { type Event } from '../types';
 
 /** Admins: submissions waiting for review, above the calendar */
 const SubmissionsBanner: React.FC<{ submissions: Event[]; onOpen: () => void }> = ({ submissions, onOpen }) => (

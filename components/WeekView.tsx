@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Event, UserRole, EventCategory } from '../types';
+import { type Event, UserRole, type EventCategory } from '../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';

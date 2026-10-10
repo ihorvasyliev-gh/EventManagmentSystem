@@ -18,9 +18,9 @@ import {
   addSlotAfter,
   removeSlot,
   copySlots,
-  PerDateTimes,
-  TimeRange,
-  TimeSlot,
+  type PerDateTimes,
+  type TimeRange,
+  type TimeSlot,
 } from '../utils/multiDateUtils';
 import { formatLocalDate } from '../utils/date';
 

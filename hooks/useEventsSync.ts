@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Event } from '../types';
+import { type Event } from '../types';
 import { supabase } from '../lib/supabase';
 import { getEvents, getAllRecurrenceExceptions } from '../services/eventService';
 import { getCachedEvents, cacheEvents, getCachedExceptions, cacheExceptions, touchEventsCache } from '../utils/eventsCache';
 import { areEventsEqual, areExceptionsEqual } from '../utils/eventsEqual';
-import { applyEventChanges, touchesSeries, EventChange } from '../utils/realtimeEvents';
+import { applyEventChanges, touchesSeries, type EventChange } from '../utils/realtimeEvents';
 
 export const REALTIME_ENABLED = import.meta.env.VITE_SUPABASE_REALTIME !== 'false';
 

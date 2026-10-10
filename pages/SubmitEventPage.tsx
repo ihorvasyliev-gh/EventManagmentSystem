@@ -4,28 +4,28 @@ import {
   ImageIcon, Info, RotateCcw, Sparkles, ChevronDown, Loader2
 } from 'lucide-react';
 import { submitEvent, getPublishedEventsForSubmitters } from '../services/submissionService';
-import { User as AuthUser, UserRole, Event } from '../types';
+import { type User as AuthUser, UserRole, type Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import SessionPlaces from '../components/SessionPlaces';
 import {
-  TimeRange, TimeSlot, SessionPlaces as SessionPlacesMap, ScheduleState, makeSlot, formatTimeRange,
+  type TimeRange, type TimeSlot, type SessionPlaces as SessionPlacesMap, type ScheduleState, makeSlot, formatTimeRange,
   compareByStartTime, getSlotsForDate
 } from '../utils/multiDateUtils';
 import { useEventSchedule } from '../hooks/useEventSchedule';
 import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
-import { EVENT_CATEGORIES, EventCategoryName } from '../constants/categories';
+import { EVENT_CATEGORIES, type EventCategoryName } from '../constants/categories';
 import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import ThemeToggle from '../components/ThemeToggle';
 import OverlapList from '../components/OverlapList';
 import { groupOverlaps } from '../utils/duplicateDetection';
-import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../components/SubmitReview';
+import SubmitReview, { ScheduleList, type SubmissionSummary, type ReviewField } from '../components/SubmitReview';
 import PdfPagePicker from '../components/PdfPagePicker';
 import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
 import { usePosterFile } from '../hooks/usePosterFile';
-import TurnstileWidget, { TURNSTILE_ENABLED, TurnstileHandle } from '../components/TurnstileWidget';
+import TurnstileWidget, { TURNSTILE_ENABLED, type TurnstileHandle } from '../components/TurnstileWidget';
 
 const CATEGORIES = EVENT_CATEGORIES;
 const DESCRIPTION_SOFT_LIMIT = 600;
@@ -267,7 +267,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   // Staff see what they entered before it is sent; admins publish straight away
   const [reviewing, setReviewing] = useState(false);
   const [focusField, setFocusField] = useState<ReviewField | 'top' | null>(null);
-  const placeValues = samePlace ? [] : sessions.map((s) => places[s.key] ?? '');
+  const placeValues = useMemo(() => (samePlace ? [] : sessions.map((s) => places[s.key] ?? '')), [samePlace, sessions, places]);
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
   // Autosave the draft (text fields only — files can't be stored)
@@ -291,7 +291,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [title, category, location, description, selectedDates, sharedTimes, sameTimeForAll, perDateTimes, samePlace, places, submitterName, submitterEmail, submitted]);
+  }, [title, category, location, description, selectedDates, sharedTimes, sameTimeForAll, perDateTimes, samePlace, places, placeValues, submitterName, submitterEmail, submitted]);
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });

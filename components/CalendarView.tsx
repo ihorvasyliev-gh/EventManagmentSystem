@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Event, ViewMode, UserRole } from '../types';
+import { type Event, type ViewMode, UserRole } from '../types';
 import { getDaysInMonth, getFirstDayOfMonth, isSameDay, addMonths, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import {

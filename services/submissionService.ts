@@ -1,8 +1,8 @@
-import { Event, RecurrenceRule } from '../types';
+import { type Event, type RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
 import { callApi } from './apiClient';
 import { fetchAllPages } from './paging';
-import { EVENT_COLUMNS, EventRow, mapEventRow, toIsoList } from './eventMapper';
+import { EVENT_COLUMNS, type EventRow, mapEventRow, toIsoList } from './eventMapper';
 
 export interface SubmissionData {
   title: string;

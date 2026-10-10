@@ -1,4 +1,4 @@
-import { User, UserRole } from '../types';
+import { type User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 import { cacheUser, clearUserCache } from '../utils/sessionCache';
 import { setRememberMe, clearAllAuthTokens } from '../utils/authStorage';
@@ -92,11 +92,10 @@ export const login = async (email: string, password: string, rememberMe: boolean
 
       // Парсим специфичные ошибки Supabase
       if (authError.status === 400) {
-        if (authError.message?.includes('Invalid login credentials') ||
-          authError.message?.includes('Email not confirmed')) {
-          errorMessage = 'Invalid email or password. Please check your credentials or confirm your email.';
-        } else if (authError.message?.includes('Email not confirmed')) {
+        if (authError.message?.includes('Email not confirmed')) {
           errorMessage = 'Please confirm your email address before signing in. Check your inbox for a confirmation email.';
+        } else if (authError.message?.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check your credentials or confirm your email.';
         } else if (authError.message?.includes('User not found')) {
           errorMessage = 'User not found. Please contact ivasyliev@partnershipcork.ie or your administrator.';
         } else {
@@ -148,7 +147,7 @@ export const login = async (email: string, password: string, rememberMe: boolean
 
     // Обрабатываем AbortError отдельно
     if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('cancelled')) {
-      throw new Error('Request was cancelled. Please try again.');
+      throw new Error('Request was cancelled. Please try again.', { cause: error });
     }
 
     // Если это уже наша ошибка (таймаут или другая обработанная), просто пробрасываем её
@@ -157,7 +156,7 @@ export const login = async (email: string, password: string, rememberMe: boolean
     }
 
     // Для других ошибок пробрасываем с понятным сообщением
-    throw new Error(error.message || 'Login failed. Please check your connection and try again.');
+    throw new Error(error.message || 'Login failed. Please check your connection and try again.', { cause: error });
   }
 };
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { OpenedPdf, PreparedPoster, checkPosterFile, isPdfFile, openPdf, prepareImagePoster } from '../utils/posterFile';
+import { type OpenedPdf, type PreparedPoster, checkPosterFile, isPdfFile, openPdf, prepareImagePoster } from '../utils/posterFile';
 
 const messageOf = (err: unknown): string =>
   err instanceof Error && err.message ? err.message : 'That file could not be used as a poster.';

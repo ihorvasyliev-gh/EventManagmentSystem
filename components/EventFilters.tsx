@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SlidersHorizontal, X, Calendar, MapPin, Mail } from 'lucide-react';
-import { EventFilters, EventCategory, EventStatus } from '../types';
+import { type EventFilters, type EventCategory, type EventStatus } from '../types';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { formatLocalDate } from '../utils/date';
 
@@ -22,15 +22,13 @@ interface EventFiltersProps {
   onFiltersChange: (filters: EventFilters) => void;
   availableLocations: string[];
   availableSubmitterEmails: string[];
-  onClose?: () => void;
 }
 
 const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   filters,
   onFiltersChange,
   availableLocations,
-  availableSubmitterEmails,
-  onClose
+  availableSubmitterEmails
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -359,7 +357,6 @@ export default React.memo(EventFiltersComponent, (prevProps, nextProps) => {
   if (prevProps.availableSubmitterEmails.join(',') !== nextProps.availableSubmitterEmails.join(',')) return false;
   
   if (prevProps.onFiltersChange !== nextProps.onFiltersChange) return false;
-  if (prevProps.onClose !== nextProps.onClose) return false;
   
   return true; // Props are equal, skip re-render
 });

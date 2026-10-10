@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail
 } from 'lucide-react';
-import { Event } from '../types';
+import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestMailto } from '../utils/digestText';
-import { calculatePresetDateRange, DateRangePreset } from '../utils/date';
+import { calculatePresetDateRange, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { groupDigestOccurrences, formatAlsoOnDates } from '../utils/digestGrouping';
 import { useToast } from '../contexts/ToastContext';
@@ -113,7 +113,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       setStartDateStr(range.startDateStr);
       setEndDateStr(range.endDateStr);
     }
-  }, [isOpen]); // reset only when the dialog opens, not on every events refresh
+    // Reset only when the dialog opens, not on every events refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleSelectPreset = (preset: DateRangePreset) => {
     setActivePreset(preset);

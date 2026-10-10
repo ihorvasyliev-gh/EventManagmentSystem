@@ -1,6 +1,6 @@
 import React from 'react';
 import { History, User, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
-import { EventHistoryEntry } from '../types';
+import { type EventHistoryEntry } from '../types';
 import { APP_LOCALE } from '../utils/date';
 
 interface EventHistoryProps {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Event, UserRole, EventCategory, EventStatus, Attachment, EventHistoryEntry } from '../types';
+import { type Event, UserRole, type EventCategory, type EventStatus, type Attachment, type EventHistoryEntry } from '../types';
 import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, CheckCircle, Trash2, Plus, ChevronDown, Copy, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
 import { formatDate, formatTime, isSameDay, formatLocalDate, formatClock, APP_LOCALE } from '../utils/date';
 import { uploadPosterToR2, fetchEventDetails } from '../services/eventService';
@@ -280,6 +280,9 @@ const EventModal: React.FC<EventModalProps> = ({
         };
       }
     }
+    // Re-initialise only when the dialog opens, the event changes or Cancel resets it: the form
+    // helpers (poster, schedule) are new objects every render and must not reset the user's edits
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, event, initialMode, autoApproveOnSave, formResetKey]);
 
   // Restore unsaved form data (e.g. the save failed and the modal was reopened)
@@ -302,6 +305,8 @@ const EventModal: React.FC<EventModalProps> = ({
       setRecurrenceEndDate(draft.recurrence.endDate ? formatLocalDate(new Date(draft.recurrence.endDate)) : '');
     }
     if (event) setIsEditing(true);
+    // Applied once per draft (see above)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, draft]);
 
   // Unsaved-changes tracking: snapshot of the form right after it was initialised
@@ -483,7 +488,7 @@ const EventModal: React.FC<EventModalProps> = ({
           finalPosterUrl = await uploadPosterToR2(posterFile);
         } catch (uploadErr) {
           const reason = uploadErr instanceof Error ? uploadErr.message : '';
-          throw new Error(`the poster could not be uploaded${reason ? ` (${reason})` : ''}. Your changes are still here — please try again`);
+          throw new Error(`the poster could not be uploaded${reason ? ` (${reason})` : ''}. Your changes are still here — please try again`, { cause: uploadErr });
         }
       }
 

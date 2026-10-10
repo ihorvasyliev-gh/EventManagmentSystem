@@ -46,7 +46,7 @@ export const storeFile = async (bucket: FileBucket, file: File, contentType: str
 /** The R2 key behind a stored file's URL (relative or absolute), or null for any other URL */
 export const fileKeyFromUrl = (url: string | null | undefined): string | null => {
   if (!url) return null;
-  let path = url;
+  let path: string;
   try {
     path = new URL(url, 'https://app.invalid').pathname;
   } catch {

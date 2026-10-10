@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
-import { MAX_PICKER_PAGES, OpenedPdf } from '../utils/posterFile';
+import { MAX_PICKER_PAGES, type OpenedPdf } from '../utils/posterFile';
 
 interface PdfPagePickerProps {
   pdf: OpenedPdf;

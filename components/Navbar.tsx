@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserRole } from '../types';
+import { type User, UserRole } from '../types';
 import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 

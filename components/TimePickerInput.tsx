@@ -62,20 +62,6 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
     setInputValue(value);
   }, [value]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handlePointerDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        // Normalize a typed value on close. Untouched pickers stay quiet, so several pickers
-        // sharing one state object don't overwrite each other with stale copies.
-        if (inputValue !== value) commitTypedValue(inputValue);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [inputValue, value]);
-
   // Scroll into view when opening
   useEffect(() => {
     if (isOpen && selectedItemRef.current && listRef.current) {
@@ -95,12 +81,12 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
 
     // Match patterns like "9", "9:00", "09:30", "1430", "9.30", "9am", "9pm"
     let clean = trimmed.toLowerCase().replace(/\s+/g, '');
-    let isPM = clean.includes('pm');
-    let isAM = clean.includes('am');
+    const isPM = clean.includes('pm');
+    const isAM = clean.includes('am');
     clean = clean.replace(/am|pm/g, '');
 
-    let hours = 0;
-    let minutes = 0;
+    let hours: number;
+    let minutes: number;
 
     if (clean.includes(':') || clean.includes('.')) {
       const [hPart, mPart] = clean.split(/[:.]/);
@@ -124,6 +110,24 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
     setInputValue(formatted);
     onChange(formatted);
   };
+
+  // The latest commit (it reads the current props), for the outside-click listener
+  const commitRef = useRef(commitTypedValue);
+  commitRef.current = commitTypedValue;
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handlePointerDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        // Normalize a typed value on close. Untouched pickers stay quiet, so several pickers
+        // sharing one state object don't overwrite each other with stale copies.
+        if (inputValue !== value) commitRef.current(inputValue);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [inputValue, value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {

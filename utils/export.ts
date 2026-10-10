@@ -1,4 +1,4 @@
-import { Event } from '../types';
+import { type Event } from '../types';
 import { foldICSLine } from './icsFold.ts';
 
 interface LoadedPoster {

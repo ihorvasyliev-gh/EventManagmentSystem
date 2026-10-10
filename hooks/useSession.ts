@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User } from '../types';
+import { type User } from '../types';
 import { supabase } from '../lib/supabase';
 import { logout as logoutService, getCurrentUser } from '../services/authService';
 import { getCachedUser, cacheUser, clearUserCache } from '../utils/sessionCache';

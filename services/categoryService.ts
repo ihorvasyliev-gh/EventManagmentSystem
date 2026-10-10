@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { EventCategoryItem } from '../types';
+import { type EventCategoryItem } from '../types';
 
 /**
  * Получить все категории событий

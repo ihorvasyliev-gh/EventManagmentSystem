@@ -1,30 +1,30 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import {
-  MapPin, User, Mail, AlertCircle, UploadCloud, X, ArrowLeft, Send, Info, RotateCcw, ChevronDown, Loader2
-} from 'lucide-react';
+import { MapPin, AlertCircle } from 'lucide-react';
 import { submitEvent, getPublishedEventsForSubmitters } from '../services/submissionService';
 import { type User as AuthUser, UserRole, type Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import SessionPlaces from '../components/SessionPlaces';
-import {
-  type TimeRange, type TimeSlot, type SessionPlaces as SessionPlacesMap, type ScheduleState, makeSlot, formatTimeRange,
-  compareByStartTime, getSlotsForDate
-} from '../utils/multiDateUtils';
+import { type TimeSlot, formatTimeRange, compareByStartTime, getSlotsForDate } from '../utils/multiDateUtils';
 import { useEventSchedule } from '../hooks/useEventSchedule';
 import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import { EVENT_CATEGORIES, type EventCategoryName } from '../constants/categories';
 import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
-import { getCategoryDotColor } from '../components/WeekView';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
-import ThemeToggle from '../components/ThemeToggle';
 import OverlapList from '../components/OverlapList';
 import { groupOverlaps } from '../utils/duplicateDetection';
 import SubmitReview, { type SubmissionSummary, type ReviewField } from '../components/SubmitReview';
 import SubmitSuccess from '../components/submit/SubmitSuccess';
 import SubmitPreview from '../components/submit/SubmitPreview';
-import PdfPagePicker from '../components/PdfPagePicker';
-import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
+import { SubmitTopBar, SubmitIntro, RestoredDraftNotice } from '../components/submit/SubmitIntro';
+import { Section, FieldError, inputClass } from '../components/submit/formParts';
+import CategoryPicker from '../components/submit/CategoryPicker';
+import PosterUpload from '../components/submit/PosterUpload';
+import ContactFields from '../components/submit/ContactFields';
+import SubmitButton, { SUBMIT_FORM_ID } from '../components/submit/SubmitButton';
+import {
+  type SavedDraft, readSavedSubmitter, saveSubmitter, readDraft, clearDraft, scheduleFromDraft, useDraftAutosave
+} from '../components/submit/draft';
 import { usePosterFile } from '../hooks/usePosterFile';
 import TurnstileWidget, { TURNSTILE_ENABLED, type TurnstileHandle } from '../components/TurnstileWidget';
 
@@ -32,61 +32,6 @@ const CATEGORIES = EVENT_CATEGORIES;
 const DESCRIPTION_SOFT_LIMIT = 600;
 /** The server refuses longer descriptions (server/submission.ts) */
 const DESCRIPTION_MAX = 2000;
-
-// Staff submit most weeks: remember who they are on this device
-const SUBMITTER_STORAGE_KEY = 'ccp_submitter_details';
-// Unsent form, so a closed tab or lost connection doesn't cost the user their typing
-const DRAFT_STORAGE_KEY = 'ccp_submit_draft';
-
-const readSavedSubmitter = (): { name: string; email: string } => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(SUBMITTER_STORAGE_KEY) || '{}');
-    return { name: typeof parsed.name === 'string' ? parsed.name : '', email: typeof parsed.email === 'string' ? parsed.email : '' };
-  } catch {
-    return { name: '', email: '' };
-  }
-};
-
-interface SavedDraft {
-  title: string;
-  category: EventCategoryName;
-  dates: string[];
-  /** Times used on every day (older drafts have one `startTime`/`endTime` instead) */
-  sharedTimes?: TimeSlot[];
-  startTime?: string;
-  endTime?: string;
-  /** false when each date has its own time (older drafts don't have it) */
-  sameTime?: boolean;
-  /** Each date's own times (older drafts hold one time range per date) */
-  perDateTimes?: Record<string, TimeSlot[] | TimeRange>;
-  /** false when each date and time has its own address */
-  samePlace?: boolean;
-  places?: SessionPlacesMap;
-  location: string;
-  description: string;
-  submitterName?: string;
-  submitterEmail?: string;
-}
-
-const readDraft = (): SavedDraft | null => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY) || 'null');
-    if (!parsed || typeof parsed !== 'object') return null;
-    const places = parsed.places && typeof parsed.places === 'object' ? Object.values(parsed.places) : [];
-    const hasContent = [parsed.title, parsed.location, parsed.description, ...places].some((v) => typeof v === 'string' && v.trim());
-    return hasContent ? parsed as SavedDraft : null;
-  } catch {
-    return null;
-  }
-};
-
-const clearDraft = () => {
-  try {
-    localStorage.removeItem(DRAFT_STORAGE_KEY);
-  } catch {
-    // Nothing to clear
-  }
-};
 
 type FieldName = 'title' | 'dates' | 'location' | 'description' | 'name' | 'email' | 'poster';
 
@@ -100,69 +45,9 @@ interface SubmitEventPageProps {
   template?: Event | null;
 }
 
-const inputBase =
-  'w-full rounded-xl border bg-white dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 text-[15px] sm:text-sm transition-colors';
-const inputClass = (hasError: boolean) =>
-  `${inputBase} ${hasError ? 'border-red-400 dark:border-red-500 bg-red-50/40 dark:bg-red-950/20' : 'border-slate-300 dark:border-slate-600'}`;
-
-const FieldError: React.FC<{ id: string; message?: string }> = ({ id, message }) =>
-  message ? (
-    <p id={id} className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-      {message}
-    </p>
-  ) : null;
-
-const Section: React.FC<{ step: number; title: string; hint?: string; children: React.ReactNode }> = ({ step, title, hint, children }) => (
-  <section className="bg-white dark:bg-slate-800 rounded-leaf-sm sm:rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
-    <div className="flex items-start gap-3 mb-4 sm:mb-5">
-      <span className="shrink-0 w-7 h-7 rounded-leaf-xs bg-brand-600 text-white text-sm font-bold flex items-center justify-center">{step}</span>
-      <div>
-        <h2 className="text-lg sm:text-xl font-medium text-slate-900 dark:text-white leading-7">{title}</h2>
-        {hint && <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{hint}</p>}
-      </div>
-    </div>
-    <div className="space-y-5">{children}</div>
-  </section>
-);
-
 const fmtChipDate = (d: Date) => formatOccurrenceLabel(d);
 
-const isSlot = (v: unknown): v is TimeRange =>
-  !!v && typeof v === 'object' && typeof (v as TimeRange).start === 'string' && typeof (v as TimeRange).end === 'string';
-
-/** Draft times, in the current shape */
-const readDraftSlots = (value: unknown): TimeSlot[] => {
-  const list = Array.isArray(value) ? value : [value];
-  return list.filter(isSlot).map((s, i) => makeSlot(s.start, s.end, typeof (s as TimeSlot).id === 'string' ? (s as TimeSlot).id : `t${i + 1}`));
-};
-
-const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date | null): ScheduleState => {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  // Dates that have passed since the draft was saved are dropped
-  const future = (draft?.dates || [])
-    .map((s) => new Date(s))
-    .filter((d) => !isNaN(d.getTime()) && d >= startOfToday);
-  const shared = readDraftSlots(draft?.sharedTimes);
-  const perDate: Record<string, TimeSlot[]> = {};
-  if (draft?.perDateTimes && typeof draft.perDateTimes === 'object') {
-    Object.entries(draft.perDateTimes).forEach(([key, value]) => {
-      const slots = readDraftSlots(value);
-      if (slots.length > 0) perDate[key] = slots;
-    });
-  }
-  return {
-    dates: future.length ? future : defaultDate ? [defaultDate] : [],
-    shared: shared.length ? shared : [makeSlot(draft?.startTime || '10:00', draft?.endTime ?? '11:30', 't1')],
-    sameTime: draft?.sameTime ?? true,
-    perDate,
-    samePlace: draft?.samePlace ?? true,
-    location: draft?.location ?? '',
-    places: draft?.places && typeof draft.places === 'object' ? draft.places : {},
-  };
-};
-
+/** The event form for staff (sent for review) and admins (published straight away) */
 const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate, template }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
@@ -245,20 +130,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const poster = usePosterFile((message) =>
     setErrors((prev) => (prev.poster === (message ?? undefined) ? prev : { ...prev, poster: message ?? undefined }))
   );
-  const { file: posterFile, preview: posterPreview, pdf: posterPdf } = poster;
+  const { file: posterFile, preview: posterPreview } = poster;
   // Duplicating: start with the original's poster (it stays shared until replaced)
   const templatePosterUrl = template?.posterUrl ?? null;
   useEffect(() => {
     if (templatePosterUrl) poster.reset(templatePosterUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the template
   }, [templatePosterUrl]);
-  const [isDragging, setIsDragging] = useState(false);
 
   // Anti-spam check for people without an account (only when Turnstile is set up)
   const needsHumanCheck = TURNSTILE_ENABLED && !currentUser;
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileHandle>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Status
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -272,47 +155,21 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
   // Autosave the draft (text fields only — files can't be stored)
-  useEffect(() => {
-    if (submitted) return;
-    const timer = setTimeout(() => {
-      try {
-        const draft: SavedDraft = {
-          title, category, location, description,
-          dates: selectedDates.map((d) => d.toISOString()),
-          sharedTimes,
-          sameTime: sameTimeForAll, perDateTimes,
-          samePlace, places,
-          submitterName, submitterEmail
-        };
-        if ([title, location, description, ...placeValues].some((v) => v.trim())) {
-          localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-        }
-      } catch {
-        // Storage unavailable — no autosave
-      }
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [title, category, location, description, selectedDates, sharedTimes, sameTimeForAll, perDateTimes, samePlace, places, placeValues, submitterName, submitterEmail, submitted]);
+  const draftToSave: SavedDraft = {
+    title, category, location, description,
+    dates: selectedDates.map((d) => d.toISOString()),
+    sharedTimes,
+    sameTime: sameTimeForAll, perDateTimes,
+    samePlace, places,
+    submitterName, submitterEmail
+  };
+  useDraftAutosave(draftToSave, [title, location, description, ...placeValues].some((v) => v.trim()), !submitted);
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [submitError]);
 
   const clearError = (field: FieldName) => setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
-
-  // Cleared just before the file dialog opens, not after a pick: the same file can be picked
-  // again, and a file still being read stays readable (clearing it can break reading on phones)
-  const openFilePicker = () => {
-    const input = fileInputRef.current;
-    if (!input) return;
-    input.value = '';
-    input.click();
-  };
-
-  const handleRemovePoster = () => {
-    poster.reset();
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
 
   const sortedDates = useMemo(() => [...selectedDates].sort((a, b) => a.getTime() - b.getTime()), [selectedDates]);
 
@@ -432,13 +289,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       setSubmitted(buildSummary());
       setReviewing(false);
       window.scrollTo({ top: 0 });
-      if (!currentUser) {
-        try {
-          localStorage.setItem(SUBMITTER_STORAGE_KEY, JSON.stringify({ name: submitterName.trim(), email: submitterEmail.trim() }));
-        } catch {
-          // Storage unavailable — details just won't be prefilled next time
-        }
-      }
+      if (!currentUser) saveSubmitter(submitterName.trim(), submitterEmail.trim());
     } catch (err: unknown) {
       console.error('Submission error:', err);
       // A check token works once; the next attempt needs a new one
@@ -458,7 +309,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setTitle('');
     setDescription('');
     setCategory(CATEGORIES[0]);
-    handleRemovePoster();
+    poster.reset();
     scheduleControls.reset(scheduleFromDraft(null, defaultDate));
     setErrors({});
     setSubmitError(null);
@@ -524,79 +375,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-white/85 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center gap-3">
-          {onBackToLogin && (
-            <button
-              type="button"
-              onClick={onBackToLogin}
-              className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden min-[340px]:inline">{backLabel}</span>
-            </button>
-          )}
-          <ThemeToggle className="ml-auto" />
-          <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
-            <img src="/assets/ccp-logo-v2.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
-          </span>
-        </div>
-      </header>
+      <SubmitTopBar onBack={onBackToLogin} backLabel={backLabel} />
 
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-8 pb-32 lg:pb-12">
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10 lg:items-start">
           <div className="min-w-0">
-            {/* Intro */}
-            <div className="mb-5 sm:mb-6">
-              <p className="eyebrow max-w-md">
-                <span>{isAdmin ? 'Admin · publishes immediately' : 'Staff event form · no login needed'}</span>
-              </p>
-              <h1 className="mt-2 text-2xl sm:text-[2.375rem] sm:leading-tight font-medium text-slate-900 dark:text-white">
-                {isAdmin ? 'Create a new event' : 'Submit an upcoming event'}
-              </h1>
-              <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
-                {isAdmin
-                  ? 'It goes straight onto the calendar and into the next Upcoming Events Digest.'
-                  : 'Any CCP, co-hosted, or CCP-funded event you’d be happy for colleagues, Board members, or City Hall to attend or share — fill in the four short steps below (takes ~2 mins).'}
-              </p>
-
-              {!isAdmin && (
-                <details className="mt-3 group rounded-leaf-sm border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/50 p-3.5 sm:p-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition-colors">
-                  <summary className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer list-none select-none">
-                    <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
-                    <span>What can be included? Guidelines from CEO</span>
-                    <ChevronDown className="w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
-                  </summary>
-                  <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70 space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
-                    <p>
-                      <strong className="text-slate-800 dark:text-slate-200">Eligible events:</strong> Any event held exclusively by CCP, co-hosted with another organisation, or held by a third party that was funded by CCP.
-                    </p>
-                    <p>
-                      <strong className="text-slate-800 dark:text-slate-200">Who it’s for:</strong> Any event that you would be happy for a colleague, a Board member, or staff member from City Hall to attend — e.g. award ceremonies, Culture Night, information talks, family fun days, Christmas markets, visits by the Lord Mayor, etc.
-                    </p>
-                    <p>
-                      <strong className="text-slate-800 dark:text-slate-200">Community & local activities:</strong> Things like coffee mornings — while Board members or City Hall may not attend personally, colleagues might wish to notify other staff or their community that it is taking place in their area.
-                    </p>
-                  </div>
-                </details>
-              )}
-            </div>
+            <SubmitIntro isAdmin={isAdmin} />
 
             {showDraftNotice && (
-              <div className="mb-5 flex items-center gap-3 p-3 sm:p-4 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 text-sm text-sky-900 dark:text-sky-100" role="status">
-                <RotateCcw className="w-4 h-4 shrink-0 text-sky-600 dark:text-sky-400" />
-                <span className="flex-1">We restored the event you hadn’t sent yet.</span>
-                <button type="button" onClick={handleDiscardDraft} className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline">
-                  Start fresh
-                </button>
-                <button type="button" onClick={() => setShowDraftNotice(false)} aria-label="Dismiss" className="shrink-0 p-1 -m-1 rounded-lg text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              <RestoredDraftNotice onStartFresh={handleDiscardDraft} onDismiss={() => setShowDraftNotice(false)} />
             )}
 
-            <form id="submit-event-form" onSubmit={handleSubmit} noValidate className="space-y-4 sm:space-y-5">
+            <form id={SUBMIT_FORM_ID} onSubmit={handleSubmit} noValidate className="space-y-4 sm:space-y-5">
               {/* 1. What */}
               <Section step={1} title="What’s the event?">
                 <div>
@@ -617,35 +407,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   <FieldError id="err-title" message={errors.title} />
                 </div>
 
-                <fieldset>
-                  <legend className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">Category</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {CATEGORIES.map((cat) => {
-                      const selected = category === cat;
-                      return (
-                        <label
-                          key={cat}
-                          className={`relative inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded border text-sm font-medium cursor-pointer select-none transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
-                            selected
-                              ? 'border-brand-600 bg-brand-600 text-white'
-                              : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/40 text-slate-700 dark:text-slate-200 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-700 dark:hover:text-brand-300'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="category"
-                            value={cat}
-                            checked={selected}
-                            onChange={() => setCategory(cat)}
-                            className="sr-only"
-                          />
-                          <span className={`w-2.5 h-2.5 rounded-full ${getCategoryDotColor(cat)} ${selected ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
-                          {cat}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
+                <CategoryPicker value={category} onChange={setCategory} />
               </Section>
 
               {/* 2. When */}
@@ -747,72 +509,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   )}
                 </div>
 
-                <div id="field-poster" tabIndex={-1} className="outline-none scroll-mt-24">
-                  <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Poster or flyer <span className="font-normal text-slate-400">(optional)</span>
-                  </span>
-                  {poster.choosing ? (
-                    <PdfPagePicker pdf={poster.choosing} busy={poster.busy} onPick={poster.choosePage} onCancel={poster.cancelChoice} />
-                  ) : poster.busy ? (
-                    <div role="status" className="w-full flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/20 p-6 text-center">
-                      <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reading your PDF…</span>
-                      <span className="text-xs text-slate-400">This only takes a moment</span>
-                    </div>
-                  ) : posterPreview ? (
-                    <div className="flex items-center gap-4 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
-                      <img src={posterPreview} alt="Poster preview" className="w-20 h-20 object-cover rounded-lg border border-slate-200 dark:border-slate-600" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{posterPdf?.name || posterFile?.name || 'Uploaded flyer'}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {posterPdf && (posterPdf.pages > 1 ? `Page ${posterPdf.page} of ${posterPdf.pages} · ` : 'Converted from PDF · ')}
-                          {posterFile ? `${Math.max(1, Math.round(posterFile.size / 1024))} KB` : ''}
-                        </p>
-                        <button type="button" onClick={openFilePicker} className="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                          Replace
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRemovePoster}
-                        className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                        aria-label="Remove poster"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={openFilePicker}
-                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                      onDragLeave={() => setIsDragging(false)}
-                      onDrop={(e) => { e.preventDefault(); setIsDragging(false); void poster.accept(e.dataTransfer.files?.[0]); }}
-                      className={`w-full flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
-                        isDragging
-                          ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30'
-                          : errors.poster
-                          ? 'border-red-300 dark:border-red-700'
-                          : 'border-slate-300 dark:border-slate-600 hover:border-brand-400 dark:hover:border-brand-500 bg-slate-50/60 dark:bg-slate-900/30'
-                      }`}
-                    >
-                      <UploadCloud className={`w-8 h-8 ${isDragging ? 'text-brand-500' : 'text-slate-400'}`} />
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        <span className="sm:hidden">Tap to add an image or PDF</span>
-                        <span className="hidden sm:inline">Click to choose, or drop an image or PDF here</span>
-                      </span>
-                      <span className="text-xs text-slate-400">PNG, JPG or WEBP up to {MAX_POSTER_IMAGE_MB}MB · PDF up to {MAX_POSTER_PDF_MB}MB</span>
-                    </button>
-                  )}
-                  <FieldError id="err-poster" message={errors.poster} />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={POSTER_ACCEPT}
-                    className="hidden"
-                    onChange={(e) => void poster.accept(e.target.files?.[0])}
-                  />
-                </div>
+                <PosterUpload poster={poster} error={errors.poster} />
               </Section>
 
               {/* 4. Who */}
@@ -826,49 +523,14 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     Filled in from your last submission on this device.
                   </p>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="field-name" className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                      Full name <span className="text-red-500" aria-hidden="true">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        id="field-name"
-                        type="text"
-                        autoComplete="name"
-                        value={submitterName}
-                        onChange={(e) => { setSubmitterName(e.target.value); clearError('name'); }}
-                        placeholder="e.g. Sarah Murphy"
-                        aria-invalid={!!errors.name}
-                        aria-describedby={errors.name ? 'err-name' : undefined}
-                        className={`${inputClass(!!errors.name)} pl-10 pr-3 py-3`}
-                      />
-                    </div>
-                    <FieldError id="err-name" message={errors.name} />
-                  </div>
-                  <div>
-                    <label htmlFor="field-email" className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                      Work email <span className="text-red-500" aria-hidden="true">*</span>
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        id="field-email"
-                        type="email"
-                        inputMode="email"
-                        autoComplete="email"
-                        value={submitterEmail}
-                        onChange={(e) => { setSubmitterEmail(e.target.value); clearError('email'); }}
-                        placeholder="name@partnershipcork.ie"
-                        aria-invalid={!!errors.email}
-                        aria-describedby={errors.email ? 'err-email' : undefined}
-                        className={`${inputClass(!!errors.email)} pl-10 pr-3 py-3`}
-                      />
-                    </div>
-                    <FieldError id="err-email" message={errors.email} />
-                  </div>
-                </div>
+                <ContactFields
+                  name={submitterName}
+                  onNameChange={(value) => { setSubmitterName(value); clearError('name'); }}
+                  nameError={errors.name}
+                  email={submitterEmail}
+                  onEmailChange={(value) => { setSubmitterEmail(value); clearError('email'); }}
+                  emailError={errors.email}
+                />
               </Section>
 
               {submitError && (
@@ -918,26 +580,5 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     </div>
   );
 };
-
-const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; full?: boolean }> = ({ isAdmin, isSubmitting, full }) => (
-  <button
-    type="submit"
-    form="submit-event-form"
-    disabled={isSubmitting}
-    className={`cta ${full ? 'w-full' : 'shrink-0'} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
-  >
-    {isSubmitting ? (
-      <>
-        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        {isAdmin ? 'Publishing…' : 'Sending…'}
-      </>
-    ) : (
-      <>
-        <Send className="w-4 h-4" />
-        {isAdmin ? 'Publish event' : 'Check & submit'}
-      </>
-    )}
-  </button>
-);
 
 export default SubmitEventPage;

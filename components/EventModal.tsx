@@ -8,11 +8,11 @@ import EventForm from './event-modal/EventForm';
 import EventModalFooter from './event-modal/EventModalFooter';
 import DeleteEventDialog from './event-modal/DeleteEventDialog';
 import AddCategoryDialog from './event-modal/AddCategoryDialog';
-import { type EventInput, isRecurringEvent, useEventForm } from './event-modal/useEventForm';
+import { type EventInput, useEventForm } from './event-modal/useEventForm';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import PosterLightbox from './PosterLightbox';
-import { expandRecurringEvents } from '../utils/recurrence';
+import { expandRecurringEvents, isRecurringEvent } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { useToast } from '../contexts/ToastContext';
 

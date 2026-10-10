@@ -67,6 +67,10 @@ const periodsBefore = (base: Date, target: Date, type: RecurrenceRule['type']): 
  * True when a custom-dates series stores its own times for every date
  * (`customDates` hold each start, `customEndDates` each end).
  */
+/** A repeating or multi-date event (anything but a one-off) */
+export const isRecurringEvent = (event?: Event | null): boolean =>
+  !!event?.recurrence && event.recurrence.type !== 'none';
+
 export const hasPerDateTimes = (rule?: RecurrenceRule): boolean =>
   !!rule && rule.type === 'custom' &&
   !!rule.customDates && rule.customDates.length > 0 &&

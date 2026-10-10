@@ -1,14 +1,14 @@
 import React, { useMemo } from 'react';
 import { AlertCircle, CheckCircle, MapPin, Plus, Repeat } from 'lucide-react';
 import { type Event, type EventCategory, type EventStatus, UserRole } from '../../types';
-import { getEventLocations } from '../../utils/recurrence';
+import { getEventLocations, isRecurringEvent } from '../../utils/recurrence';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../../utils/conflictDetection';
 import MultiDatePicker from '../MultiDatePicker';
 import SessionPlaces from '../SessionPlaces';
 import PosterField from './PosterField';
 import SubmitterFields from './SubmitterFields';
 import RecurrenceFields from './RecurrenceFields';
-import { type EventFormState, isRecurringEvent } from './useEventForm';
+import { type EventFormState } from './useEventForm';
 
 export const EVENT_FORM_ID = 'event-form';
 

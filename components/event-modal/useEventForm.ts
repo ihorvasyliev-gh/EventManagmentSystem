@@ -5,6 +5,7 @@ import { uploadPosterToR2 } from '../../services/eventService';
 import { validateEvent } from '../../utils/validation';
 import { makeSlot, readScheduleFromEvent, materializeCustomSchedule } from '../../utils/multiDateUtils';
 import { useEventSchedule } from '../../hooks/useEventSchedule';
+import { isRecurringEvent } from '../../utils/recurrence';
 import { usePosterFile } from '../../hooks/usePosterFile';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -14,9 +15,6 @@ const parseLocalDateInput = (value: string): Date | undefined => {
   if (!y || !m || !d) return undefined;
   return new Date(y, m - 1, d);
 };
-
-export const isRecurringEvent = (ev?: Event | null): boolean =>
-  !!ev?.recurrence && ev.recurrence.type !== 'none';
 
 export type EventInput = Omit<Event, 'id' | 'createdAt'>;
 

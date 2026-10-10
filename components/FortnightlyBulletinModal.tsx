@@ -142,7 +142,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
 
   const dayCount = rangeValid ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0;
 
-  const pdfOptions = { startDate, endDate, format, baseUrl: window.location.origin };
+  const pdfOptions = { startDate, endDate, format };
 
   const handleDownloadPDF = async () => {
     setBusy('download');

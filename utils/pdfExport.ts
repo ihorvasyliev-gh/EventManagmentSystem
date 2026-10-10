@@ -29,7 +29,6 @@ export interface BulletinOptions {
   startDate: Date;
   endDate: Date;
   format: 'executive' | 'compact';
-  baseUrl?: string;
   /** 'save' downloads the file (default); 'blob' returns it, e.g. for an in-browser preview */
   output?: 'save' | 'blob';
 }
@@ -1481,33 +1480,6 @@ export const generateEventsDigestPDF = async (
     };
   };
 
-  // Closing note: where to send an event for the next digest (a public form, no login)
-  const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
-  const CLOSING_H = 18;
-  const drawClosing = (y: number) => {
-    if (!submitUrl) return;
-    const top = y + 5;
-    // Raspberry box with white text, like the site's "Our Mission"
-    fill(BRAND);
-    leaf(M, top, CW, 12, 4, 'F');
-    font('bold', 8.4);
-    color(WHITE);
-    doc.text('Running an event? Get it into the next digest.', M + 5, top + 5);
-    font('regular', 7.6);
-    const lead = 'Send it in at ';
-    doc.text(lead, M + 5, top + 9.1);
-    const lx = M + 5 + doc.getTextWidth(lead);
-    const shown = submitUrl.replace(/^https?:\/\//, '');
-    font('bold', 7.6);
-    doc.text(shown, lx, top + 9.1);
-    const sw = doc.getTextWidth(shown);
-    stroke(WHITE, 0.2);
-    doc.line(lx, top + 9.7, lx + sw, top + 9.7);
-    doc.link(lx, top + 6.5, sw, 3.4, { url: submitUrl });
-    font('regular', 7.6);
-    doc.text(' (no login needed).', lx + sw, top + 9.1);
-  };
-
   const dayCounts = new Map<string, number>();
   groups.forEach((g) => {
     const key = dayKeyOf(startOfLocalDay(toDate(g.event.date) || periodStart));
@@ -1540,7 +1512,6 @@ export const generateEventsDigestPDF = async (
       }
       blocks.push(compactRow(group, key));
     });
-    if (submitUrl) blocks.push({ h: CLOSING_H, draw: drawClosing });
     return blocks;
   };
 
@@ -1691,15 +1662,14 @@ export const generateEventsDigestPDF = async (
     doc.text('No events scheduled for this period', W / 2, boxY + 15, { align: 'center' });
     font('regular', 8.5);
     color(MUTED);
-    doc.text('New events submitted to the calendar will appear in the next digest.', W / 2, boxY + 21.5, { align: 'center' });
-    drawClosing(boxY + 34);
+    doc.text('New events added to the calendar will appear in the next digest.', W / 2, boxY + 21.5, { align: 'center' });
   } else {
     pages.forEach((placements, p) => {
       if (p > 0) {
         doc.addPage();
         drawPageHeader();
       }
-      // A page holding only the closing note gets no table header
+      // A page without event rows gets no table header
       if (!isExecutive && placements.some(({ block }) => block.dayKey)) drawTableHead(p === 0 ? listTop(density) : PAGE_TOP);
       placements.forEach(({ block, y }) => block.draw(y));
     });

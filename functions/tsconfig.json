@@ -7,8 +7,13 @@
             "esnext"
         ],
         "types": [
-            "@cloudflare/workers-types"
-        ]
+            "@cloudflare/workers-types/2023-07-01"
+        ],
+        "strict": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "isolatedModules": true
     },
     "include": [
         "**/*.ts"

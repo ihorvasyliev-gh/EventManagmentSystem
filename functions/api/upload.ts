@@ -1,80 +1,41 @@
-interface Env {
-  BUCKET: R2Bucket;
+/**
+ * Cloudflare Pages Function — upload a poster or attachment to R2 (admins only)
+ * URL: PUT /api/upload   multipart: file
+ *
+ * The public /submit form doesn't use this: it sends its flyer with the event to /api/submit.
+ */
+import { json, fail, bearerToken } from '../../server/http.ts';
+import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
+import { type FileBucket, ALLOWED_TYPES, MAX_UPLOAD_BYTES, storeFile } from '../../server/files.ts';
+
+interface Env extends SupabaseEnv {
+  BUCKET?: FileBucket;
 }
 
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
+// Typed by hand (not PagesFunction) so the app's type check and tests can import it
+export const onRequestPut = async ({ request, env }: { request: Request; env: Env }): Promise<Response> => {
+  if (!env.BUCKET) return fail("R2 Bucket binding 'BUCKET' not found.", 500);
+  const cfg = supabaseConfig(env);
+  if (!cfg) return fail('Uploads are not set up on the server (missing Supabase keys).', 500);
 
-// Files are served back from the app's own origin, so only allow types that browsers
-// can't execute as a page (no HTML/SVG/JS) — otherwise an upload becomes stored XSS.
-const ALLOWED_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'text/plain',
-  'text/csv',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-]);
-
-export const onRequestPut: PagesFunction<Env> = async (context) => {
-  const { request, env } = context;
-
-  if (!env.BUCKET) {
-    return new Response("R2 Bucket binding 'BUCKET' not found.", { status: 500 });
-  }
+  const caller = await getCaller(cfg, bearerToken(request));
+  if (!caller) return fail('Please sign in again to upload files.', 401);
+  if (caller.role !== 'admin') return fail('Only admins can upload files here.', 403);
 
   const declaredLength = Number(request.headers.get('content-length') || 0);
-  if (declaredLength > MAX_UPLOAD_BYTES + 64 * 1024) {
-    return new Response('File is too large (max 15 MB).', { status: 413 });
-  }
+  if (declaredLength > MAX_UPLOAD_BYTES + 64 * 1024) return fail('File is too large (max 15 MB).', 413);
 
   try {
     const formData = await request.formData();
     const file = formData.get('file');
-
-    if (!file || typeof file === 'string') {
-      return new Response("No file found in request.", { status: 400 });
-    }
-
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return new Response('File is too large (max 15 MB).', { status: 413 });
-    }
-
+    if (!file || typeof file === 'string') return fail('No file found in request.', 400);
+    if (file.size > MAX_UPLOAD_BYTES) return fail('File is too large (max 15 MB).', 413);
     const contentType = (file.type || '').toLowerCase();
-    if (!ALLOWED_TYPES.has(contentType)) {
-      return new Response('This file type is not allowed.', { status: 415 });
-    }
+    if (!ALLOWED_TYPES.has(contentType)) return fail('This file type is not allowed.', 415);
 
-    // Generate a unique key
-    const uniqueId = crypto.randomUUID();
-    const key = `${uniqueId}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-
-    await env.BUCKET.put(key, file.stream(), {
-      httpMetadata: {
-        contentType,
-      },
-    });
-
-    // Files are served through the proxy at /api/file/[key]
-    const url = `/api/file/${key}`;
-
-    return new Response(JSON.stringify({
-      key: key,
-      url: url,
-      name: file.name,
-      type: contentType,
-      size: file.size
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-  } catch (err: any) {
-    return new Response(`Upload failed: ${err.message}`, { status: 500 });
+    return json(await storeFile(env.BUCKET, file, contentType));
+  } catch (err) {
+    console.error('Upload failed:', err);
+    return fail('Upload failed. Please try again.', 500);
   }
-}
+};

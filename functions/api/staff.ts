@@ -1,64 +1,76 @@
 /**
- * Cloudflare Pages Function — create a staff account (admins only)
- * URL: POST /api/staff   { fullName, email, password }
+ * Cloudflare Pages Function — staff accounts (admins only)
+ *   GET  /api/staff                                    list every account
+ *   POST /api/staff   { fullName, email, password }    create a staff account
  *
  * The caller's Supabase access token (Authorization: Bearer …) must belong to an admin.
- * The account is created confirmed; the handle_new_user trigger (security-hardening-migration.sql)
- * always gives it the role 'staff'. Roles are only changed in Supabase itself.
+ * New accounts are created confirmed; the handle_new_user trigger always gives them the role
+ * 'staff' (roles are only changed in Supabase itself). They must choose their own password
+ * the first time they sign in, so the admin never keeps knowing it.
  *
  * Required Cloudflare Pages environment variables:
  *   SUPABASE_URL              — e.g. https://xxxxx.supabase.co (or VITE_SUPABASE_URL)
  *   SUPABASE_ANON_KEY         — the anon/public key (or VITE_SUPABASE_ANON_KEY)
  *   SUPABASE_SERVICE_ROLE_KEY — the service_role key, stored as an encrypted secret
  */
-
-interface Env {
-  SUPABASE_URL?: string;
-  SUPABASE_ANON_KEY?: string;
-  VITE_SUPABASE_URL?: string;
-  VITE_SUPABASE_ANON_KEY?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
-}
+import { json, fail, bearerToken, readJson } from '../../server/http.ts';
+import { supabaseConfig, getCaller, serviceRest, authAdmin, selectAll, type SupabaseEnv, type SupabaseConfig, type Caller } from '../../server/supabase.ts';
 
 const MIN_PASSWORD_LENGTH = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+type Gate = { cfg: SupabaseConfig; caller: Caller } | { response: Response };
 
-const fail = (error: string, status: number) => json({ error }, status);
+const adminOnly = async (request: Request, env: SupabaseEnv): Promise<Gate> => {
+  const cfg = supabaseConfig(env);
+  if (!cfg?.serviceKey) return { response: fail('Account management is not set up on the server (missing Supabase keys).', 500) };
+  const token = bearerToken(request);
+  if (!token) return { response: fail('Please sign in again.', 401) };
+  const caller = await getCaller(cfg, token);
+  if (!caller) return { response: fail('Your session has expired. Please sign in again.', 401) };
+  if (caller.role !== 'admin') return { response: fail('Only admins can manage accounts.', 403) };
+  return { cfg, caller };
+};
+
+export interface StaffRow {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  must_change_password?: boolean | null;
+  created_at: string;
+}
 
 // Typed by hand (not PagesFunction) so the app's type check and tests can import it
-export const onRequestPost = async ({ request, env }: { request: Request; env: Env }): Promise<Response> => {
-  const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
-  const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
-  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anonKey || !serviceKey) {
-    return fail('Account creation is not set up on the server (missing Supabase keys).', 500);
+export const onRequestGet = async ({ request, env }: { request: Request; env: SupabaseEnv }): Promise<Response> => {
+  const gate = await adminOnly(request, env);
+  if ('response' in gate) return gate.response;
+  try {
+    const rows = await selectAll<StaffRow>(gate.cfg, 'users?select=*&order=full_name.asc');
+    return json({
+      staff: rows.map((u) => ({
+        id: u.id,
+        email: u.email,
+        fullName: u.full_name,
+        role: u.role,
+        mustChangePassword: !!u.must_change_password,
+        createdAt: u.created_at
+      }))
+    });
+  } catch (err) {
+    console.error('Listing staff failed:', err);
+    return fail('Could not load the staff list.', 502);
   }
+};
 
-  // --- Who is asking? --------------------------------------------------------
-  const token = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!token) return fail('Please sign in again.', 401);
-
-  const meRes = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: `Bearer ${token}` } });
-  if (!meRes.ok) return fail('Your session has expired. Please sign in again.', 401);
-  const me = (await meRes.json()) as { id?: string };
-  if (!me.id) return fail('Please sign in again.', 401);
-
-  const profileRes = await fetch(`${url}/rest/v1/users?id=eq.${encodeURIComponent(me.id)}&select=role`, {
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-  });
-  const profile = profileRes.ok ? ((await profileRes.json()) as Array<{ role?: string }>)[0] : undefined;
-  if (profile?.role !== 'admin') return fail('Only admins can create accounts.', 403);
+export const onRequestPost = async ({ request, env }: { request: Request; env: SupabaseEnv }): Promise<Response> => {
+  const gate = await adminOnly(request, env);
+  if ('response' in gate) return gate.response;
+  const { cfg } = gate;
 
   // --- Validate --------------------------------------------------------------
-  let body: { fullName?: unknown; email?: unknown; password?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return fail('Invalid request.', 400);
-  }
+  const body = await readJson<{ fullName?: unknown; email?: unknown; password?: unknown }>(request);
+  if (!body) return fail('Invalid request.', 400);
   const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
@@ -69,9 +81,8 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
 
   // --- Create ----------------------------------------------------------------
   // No role is sent: the database trigger sets 'staff' regardless of what the request says
-  const createRes = await fetch(`${url}/auth/v1/admin/users`, {
+  const createRes = await authAdmin(cfg, 'users', {
     method: 'POST',
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: fullName } })
   });
   if (!createRes.ok) {
@@ -84,5 +95,15 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
     return fail(message ? `Could not create the account: ${message}` : 'Could not create the account.', 502);
   }
   const created = (await createRes.json()) as { id?: string; email?: string };
-  return json({ id: created.id, email: created.email ?? email, fullName, role: 'staff' }, 201);
+
+  // The person picks their own password at their first sign-in
+  let mustChangePassword = false;
+  if (created.id) {
+    const flag = await serviceRest(cfg, `users?id=eq.${encodeURIComponent(created.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ must_change_password: true })
+    });
+    mustChangePassword = flag.ok;
+  }
+  return json({ id: created.id, email: created.email ?? email, fullName, role: 'staff', mustChangePassword }, 201);
 };

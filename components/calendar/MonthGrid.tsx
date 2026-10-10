@@ -63,7 +63,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
     <>
       <div className="grid grid-cols-7 mb-2">
         {WEEKDAYS.map(day => (
-          <div key={day} className="text-center text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-0.5">
+          <div key={day} className="text-center text-[9px] sm:text-[10px] 2xl:text-xs font-semibold text-slate-400 uppercase tracking-widest px-0.5">
             {day}
           </div>
         ))}

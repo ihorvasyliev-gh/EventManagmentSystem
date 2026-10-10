@@ -15,7 +15,7 @@ const UpdateBanner: React.FC = () => {
   if (!visible) return null;
 
   return (
-    <div role="status" className="fixed z-[70] left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 md:left-auto md:right-4 md:max-w-sm animate-slide-up">
+    <div role="status" className="fixed z-[70] left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 [@media(max-height:499px)]:bottom-4 md:left-auto md:right-4 md:max-w-sm animate-slide-up">
       <div className="flex items-center gap-3 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xl px-4 py-3">
         <RefreshCw className="w-5 h-5 shrink-0 opacity-80" aria-hidden="true" />
         <p className="flex-1 text-sm">A new version of the calendar is available.</p>

@@ -106,7 +106,7 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
   return (
     // Above modals (z-[60]) so errors raised while a dialog is open are visible
     <div
-      className="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-full sm:max-w-sm z-[100] space-y-2 pointer-events-none"
+      className="fixed top-[max(1rem,env(safe-area-inset-top))] inset-x-4 sm:inset-x-auto sm:right-4 sm:w-full sm:max-w-sm z-[100] space-y-2 pointer-events-none"
       role="status"
       aria-live="polite"
     >

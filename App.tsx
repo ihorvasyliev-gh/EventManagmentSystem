@@ -53,8 +53,9 @@ const AppContent: React.FC = () => {
 
   // Mobile State
   const isMobile = useMedia('(max-width: 640px)');
-  // Phones and small tablets get the bottom tab bar
-  const hasTabBar = useMedia('(max-width: 767px)');
+  // Phones and small tablets get the bottom tab bar; not a phone held sideways, where it took a
+  // third of the screen (the menu has the same actions)
+  const hasTabBar = useMedia('(max-width: 767px) and (min-height: 500px)');
   usePullToRefresh(!!user && isMobile, () => void refreshEvents(true));
 
   // Search and Filter State
@@ -118,6 +119,13 @@ const AppContent: React.FC = () => {
     });
     return Array.from(emails).sort((a, b) => a.localeCompare(b));
   }, [events]);
+
+  // Signing in on a phone: the login form sits low on the page, and the calendar would open
+  // scrolled down by as much as the page was scrolled to reach the button
+  const userId = user?.id;
+  useEffect(() => {
+    if (userId) window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [userId]);
 
   // Coming back from the submit page: pick up whatever was just submitted
   const wasSubmitPageOpenRef = React.useRef(submitPage.isOpen);
@@ -333,7 +341,7 @@ const AppContent: React.FC = () => {
         </Suspense>
       )}
 
-      <AppFooter isAdmin={isAdmin} />
+      <AppFooter isAdmin={isAdmin} clearTabBar={hasTabBar} />
 
       {hasTabBar && (
         <BottomNavigation

@@ -57,7 +57,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, placeholder = "S
             onChange(localValue);
           }
         }}
-        className="block w-full h-10 pl-10 pr-10 border border-slate-300 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 [&::-webkit-search-cancel-button]:hidden"
+        className={`block w-full h-10 pl-10 ${localValue ? 'pr-10' : 'pr-10 lg:pr-3 xl:pr-10'} border border-slate-300 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 [&::-webkit-search-cancel-button]:hidden`}
         placeholder={placeholder}
         aria-label="Search events"
         aria-keyshortcuts="/"
@@ -73,7 +73,8 @@ const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, placeholder = "S
           <X className="h-5 w-5" />
         </button>
       ) : (
-        <kbd className="hidden sm:flex absolute inset-y-0 right-0 mr-3 my-auto h-5 items-center px-1.5 rounded border border-slate-200 dark:border-slate-600 text-[10px] font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
+        // Not from 1024 to 1279px: the field is at its narrowest there and the hint covered the placeholder
+        <kbd className="hidden sm:flex lg:hidden xl:flex absolute inset-y-0 right-0 mr-3 my-auto h-5 items-center px-1.5 rounded border border-slate-200 dark:border-slate-600 text-[10px] font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
           /
         </kbd>
       )}

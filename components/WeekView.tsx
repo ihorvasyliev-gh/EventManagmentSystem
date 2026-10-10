@@ -3,6 +3,7 @@ import { type Event, UserRole, type EventCategory } from '../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { shortCategoryLabel } from '../constants/categories';
 
 export interface WeekViewProps {
   currentDate: Date;
@@ -251,8 +252,9 @@ const WeekView: React.FC<WeekViewProps> = ({
                 <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
                   {activeMobileGroup.day.toLocaleDateString(APP_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
+                {/* Not on the narrowest phones, where it pushed "Add" out; the day strip above marks today too */}
                 {isSameDay(activeMobileGroup.day, today) && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
+                  <span className="hidden min-[360px]:inline px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
                     Today
                   </span>
                 )}
@@ -273,10 +275,10 @@ const WeekView: React.FC<WeekViewProps> = ({
               <button
                 type="button"
                 onClick={() => onAddEventForDate(activeMobileGroup.day)}
-                className="p-1.5 rounded-lg text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 dark:hover:bg-brand-900/60 transition-colors flex items-center gap-1 text-xs font-semibold"
+                className="shrink-0 p-1.5 rounded-lg text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 dark:hover:bg-brand-900/60 transition-colors flex items-center justify-center gap-1 text-xs font-semibold"
                 aria-label="Add event for this day"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5 shrink-0" />
                 <span>Add</span>
               </button>
             )}
@@ -304,7 +306,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px]"
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass} max-w-[150px] truncate`}>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
                         {event.category || 'Event'}
                       </span>
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
@@ -411,8 +413,9 @@ const WeekView: React.FC<WeekViewProps> = ({
                       >
                         {/* Category & Time */}
                         <div className="flex items-center justify-between gap-1 flex-wrap">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${colorClass} max-w-[90px] truncate`}>
-                            {event.category || 'Event'}
+                          {/* Short names: the full ones were cut to "Enterprise & Em…" in these narrow columns */}
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
+                            {shortCategoryLabel(event.category)}
                           </span>
                           <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
                             <Clock className="w-2.5 h-2.5 text-slate-400" />

@@ -285,9 +285,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return eventsByDayKey.get(toDayKey(popoverDay)) || [];
   }, [popoverDay, eventsByDayKey]);
 
+  // Clipped rather than overflow-hidden where browsers can: hidden makes the card a scroll
+  // container, and the agenda's day headers would no longer stick under the navbar
   return (
     <div
-      className={`rounded-leaf-sm sm:rounded-leaf overflow-hidden animate-fade-in border border-slate-200 dark:border-slate-800 ${theme === 'dark' ? 'panel-dark' : 'bg-white shadow-sm'}`}
+      className={`rounded-leaf-sm sm:rounded-leaf overflow-hidden supports-[overflow:clip]:overflow-clip animate-fade-in border border-slate-200 dark:border-slate-800 ${theme === 'dark' ? 'panel-dark' : 'bg-white shadow-sm'}`}
       {...swipe.handlers}
     >
       <CalendarHeader

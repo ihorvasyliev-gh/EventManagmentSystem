@@ -320,18 +320,17 @@ const EventModal: React.FC<EventModalProps> = ({
       {showPosterPreview && event?.posterUrl && (
         <PosterLightbox src={event.posterUrl} title={event.title} onClose={() => setShowPosterPreview(false)} />
       )}
-      <div className="flex items-end justify-center min-h-[100dvh] pt-0 px-0 pb-0 text-center sm:flex sm:items-center sm:p-0 sm:pt-4 sm:px-4 sm:pb-20">
+      <div className="flex items-end sm:items-center justify-center min-h-[100dvh] sm:p-4">
 
         {/* Transparent Backdrop */}
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity animate-fade-in" aria-hidden="true" onClick={requestClose}></div>
 
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        {/* Modal Panel - Full Screen on Mobile */}
-        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
+        {/* Modal Panel - Full Screen on Mobile. Centred from sm up, never taller than the window
+            (a phone held sideways is sm wide but only ~375px tall) */}
+        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[min(90vh,calc(100dvh-2rem))] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
 
           {/* Header */}
-          <div className="px-4 sm:px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
+          <div className="px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
             <h3 className={`text-lg sm:text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
               {isEditing ? 'Edit Event' : 'Event Details'}
             </h3>

@@ -122,16 +122,18 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 h-10 px-3 sm:px-4 rounded-xl border transition-colors ${
+        className={`flex items-center gap-2 h-10 px-3 sm:px-4 lg:px-3 xl:px-4 rounded-xl border transition-colors ${
           hasActiveFilters
             ? 'bg-brand-50 dark:bg-brand-950/40 border-brand-300 dark:border-brand-800 text-brand-700 dark:text-brand-300'
             : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
         }`}
         aria-label="Filter events"
         aria-expanded={isOpen}
+        title="Filters"
       >
         <SlidersHorizontal className="h-4 w-4" />
-        <span className="hidden min-[400px]:inline text-sm font-medium">Filters</span>
+        {/* Icon only from 1024 to 1279px, where it shares the row with the search and every category */}
+        <span className="hidden min-[400px]:inline lg:hidden xl:inline text-sm font-medium">Filters</span>
         {activeCount > 0 && (
           <span className="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center bg-brand-600 text-white text-[11px] font-bold rounded-full">
             {activeCount}
@@ -146,7 +148,7 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
             onClick={() => setIsOpen(false)}
             aria-hidden="true"
           />
-          <div className="fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-auto sm:right-0 sm:left-auto sm:mt-2 sm:w-80 w-full bg-white dark:bg-slate-800 rounded-t-2xl sm:rounded-lg shadow-xl border-t sm:border border-slate-200 dark:border-slate-700 z-50 p-4 sm:p-4 space-y-4 max-h-[85vh] sm:max-h-[80vh] overflow-y-auto animate-slide-up sm:animate-scale-in">
+          <div className="fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-auto sm:right-0 sm:left-auto sm:mt-2 sm:w-80 w-full bg-white dark:bg-slate-800 rounded-t-2xl sm:rounded-lg shadow-xl border-t sm:border border-slate-200 dark:border-slate-700 z-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 space-y-4 max-h-[85vh] sm:max-h-[80vh] overflow-y-auto animate-slide-up sm:animate-scale-in">
             <div className="flex justify-between items-center mb-2 sm:mb-0">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Filters</h3>
               <button

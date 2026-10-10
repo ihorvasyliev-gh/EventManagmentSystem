@@ -1,4 +1,7 @@
-Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+Copyright (c) 2010-2015 by tyPoland Lukasz Dziedzic (http://www.typoland.com/) with Reserved Font Name "Lato".
+
+Lato 2.015 (https://www.latofonts.com/), cut down to Latin, Latin Extended-A, Cyrillic and
+common punctuation for this app.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

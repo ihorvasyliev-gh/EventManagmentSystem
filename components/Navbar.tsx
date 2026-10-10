@@ -27,7 +27,7 @@ const initialsOf = (name: string): string =>
     .join('') || '?';
 
 const iconButton =
-  'relative inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors';
+  'relative inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-400 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors';
 
 const Navbar: React.FC<NavbarProps> = ({
   user,
@@ -82,9 +82,9 @@ const Navbar: React.FC<NavbarProps> = ({
               aria-label="CCP Calendar — refresh events"
             >
               <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs flex items-center justify-center shrink-0">
-                <img src="/assets/ccp-logo.png" alt="" className="h-6 sm:h-7 w-auto object-contain" />
+                <img src="/assets/ccp-logo-v2.png" alt="" className="h-6 sm:h-7 w-auto object-contain" />
               </span>
-              <span className="hidden min-[400px]:inline font-semibold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white select-none truncate">
+              <span className="hidden min-[400px]:inline font-medium text-base sm:text-lg text-slate-900 dark:text-white select-none truncate">
                 Calendar
               </span>
               {isBusy && <RefreshCw className="w-3.5 h-3.5 text-brand-600 animate-spin shrink-0" aria-label="Syncing" />}
@@ -97,7 +97,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenFortnightlyBulletin}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
                   title="Generate the Upcoming Events Digest (PDF & WhatsApp)"
                 >
                   <FileText className="h-4 w-4" />
@@ -108,7 +108,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onExportClick}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
                   title="Export or subscribe to the calendar"
                 >
                   <Download className="h-4 w-4" />
@@ -119,7 +119,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenAddStaff}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
                   title="Create a staff account"
                 >
                   <UserPlus className="h-4 w-4" />
@@ -130,7 +130,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenSubmissions}
-                  className="hidden md:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
                   title="Review staff submissions"
                 >
                   <Inbox className="h-4 w-4" />
@@ -157,7 +157,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={primaryAction}
-                  className="hidden md:inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 h-10 rounded-xl text-sm font-semibold shadow-sm transition-colors ml-1"
+                  className="cta hidden md:inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-5 h-10 rounded shadow-sm transition-colors ml-1"
                   title={isAdmin ? 'Create a new event (shortcut: C)' : 'Submit an event for review'}
                   aria-keyshortcuts={isAdmin ? 'c' : undefined}
                 >
@@ -169,7 +169,7 @@ const Navbar: React.FC<NavbarProps> = ({
               {/* Account (desktop) */}
               <div className="hidden lg:flex items-center gap-2 pl-3 ml-1.5 border-l border-slate-200 dark:border-slate-800">
                 <span
-                  className="w-9 h-9 rounded-full bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold inline-flex items-center justify-center"
+                  className="w-9 h-9 rounded-full bg-ccp-green-600 text-white text-xs font-bold inline-flex items-center justify-center"
                   title={`${user.fullName} (${user.role})`}
                   aria-hidden="true"
                 >
@@ -177,7 +177,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 </span>
                 <span className="hidden xl:flex flex-col leading-tight max-w-[10rem]">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{user.fullName}</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">{user.role}</span>
+                  <span className="text-[10px] text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] font-bold">{user.role}</span>
                 </span>
                 <button
                   type="button"
@@ -220,21 +220,21 @@ const Navbar: React.FC<NavbarProps> = ({
           >
             <div className="p-3">
               <div className="flex items-center gap-3 px-3 py-3 mb-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="w-10 h-10 rounded-full bg-slate-900 dark:bg-slate-700 text-white text-sm font-bold inline-flex items-center justify-center shrink-0" aria-hidden="true">
+                <span className="w-10 h-10 rounded-full bg-ccp-green-600 text-white text-sm font-bold inline-flex items-center justify-center shrink-0" aria-hidden="true">
                   {initialsOf(user.fullName)}
                 </span>
                 <span className="flex flex-col min-w-0">
                   <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</span>
                 </span>
-                <span className="ml-auto shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                <span className="ml-auto shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.14em] bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300">
                   {user.role}
                 </span>
               </div>
 
               <div className="space-y-0.5">
                 {primaryAction && (
-                  <button type="button" onClick={closeMenuAnd(primaryAction)} className={`${menuItem} md:hidden !text-white bg-brand-600 hover:!bg-brand-700 mb-1`}>
+                  <button type="button" onClick={closeMenuAnd(primaryAction)} className={`${menuItem} cta md:hidden !text-white bg-brand-600 hover:!bg-brand-700 mb-1`}>
                     <PlusCircle className="h-5 w-5" />
                     <span>{isAdmin ? 'New event' : 'Submit an event'}</span>
                   </button>

@@ -1076,10 +1076,10 @@ const areExceptionsEqual = (a: Map<string, Date[]>, b: Map<string, Date[]>): boo
             type="button"
             onClick={() => setFilters(prev => ({ ...prev, category: undefined }))}
             aria-pressed={!filters.category}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+            className={`flex-shrink-0 px-3 py-1.5 rounded border font-medium whitespace-nowrap transition-all ${
               !filters.category
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                ? 'bg-brand-600 border-brand-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-300 hover:border-brand-300 dark:hover:border-brand-700 border-slate-200 dark:border-slate-700'
             }`}
           >
             All
@@ -1092,13 +1092,13 @@ const areExceptionsEqual = (a: Map<string, Date[]>, b: Map<string, Date[]>): boo
                 type="button"
                 onClick={() => setFilters(prev => ({ ...prev, category: isSelected ? undefined : cat }))}
                 aria-pressed={isSelected}
-                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all ${
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded border font-medium whitespace-nowrap transition-all ${
                   isSelected
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-brand-600 border-brand-600 text-white shadow-sm'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-300 hover:border-brand-300 dark:hover:border-brand-700 border-slate-200 dark:border-slate-700'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)}`} aria-hidden="true" />
+                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)} ${isSelected ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
                 {cat}
               </button>
             );
@@ -1224,7 +1224,7 @@ const areExceptionsEqual = (a: Map<string, Date[]>, b: Map<string, Date[]>): boo
 
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-6 pb-28 md:pb-6">
         <div className="max-w-7xl 2xl:max-w-[96rem] mx-auto px-4 text-center text-slate-500 dark:text-slate-400 text-sm">
-          &copy; {new Date().getFullYear()} Cork City Partnership. Internal Use Only.
+          <span className="text-xs font-bold uppercase tracking-[0.14em]">&copy; {new Date().getFullYear()} Cork City Partnership · Internal use only</span>
           <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
             Keyboard: <kbd className="font-sans font-semibold">/</kbd> search · <kbd className="font-sans font-semibold">←</kbd> <kbd className="font-sans font-semibold">→</kbd> previous / next · <kbd className="font-sans font-semibold">T</kbd> today
             {user.role === UserRole.ADMIN && <> · <kbd className="font-sans font-semibold">C</kbd> new event · <kbd className="font-sans font-semibold">E</kbd> edit open event</>}

@@ -180,11 +180,12 @@ const loadImageCached = (url: string, maxSide: number, jpeg = false): Promise<Lo
 
 type Weight = 'regular' | 'medium' | 'semibold' | 'bold';
 
+// Lato, the typeface of corkcitypartnership.ie
 const FONT_FILES: Record<Weight, string> = {
-  regular: 'Inter-Regular.ttf',
-  medium: 'Inter-Medium.ttf',
-  semibold: 'Inter-SemiBold.ttf',
-  bold: 'Inter-Bold.ttf'
+  regular: 'Lato-Regular.ttf',
+  medium: 'Lato-Medium.ttf',
+  semibold: 'Lato-SemiBold.ttf',
+  bold: 'Lato-Bold.ttf'
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -198,7 +199,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
 
 let fontDataPromise: Promise<Record<Weight, string> | null> | null = null;
 
-/** Fetches the Inter TTFs once per session (null when unavailable, e.g. offline) */
+/** Fetches the Lato TTFs once per session (null when unavailable, e.g. offline) */
 const loadFontData = (): Promise<Record<Weight, string> | null> => {
   if (!fontDataPromise) {
     fontDataPromise = Promise.all(
@@ -275,9 +276,12 @@ const cleanPdfText = (text: string | null | undefined, preserveNewlines = false)
   return normaliseWhitespace(result, preserveNewlines);
 };
 
-/** Characters covered by the bundled Inter subset (Latin, Latin Extended-A, Cyrillic, punctuation) */
-const isInInterSubset = (code: number): boolean =>
-  code === 10 ||
+// Characters in the ranges below that Lato has no glyph for
+const MISSING_FROM_FONT = new Set([0xad, 0x149, 0x2011, 0x2023, 0x2024, 0x2025, 0x2027, 0x2031, 0x2035, 0x2036, 0x2037, 0x2038]);
+
+/** Characters covered by the bundled Lato subset (Latin, Latin Extended-A, Cyrillic, punctuation) */
+const isInFontSubset = (code: number): boolean =>
+  !MISSING_FROM_FONT.has(code) && (code === 10 ||
   (code >= 0x20 && code <= 0x7e) ||
   (code >= 0xa0 && code <= 0x17f) ||
   (code >= 0x218 && code <= 0x21b) ||
@@ -286,14 +290,15 @@ const isInInterSubset = (code: number): boolean =>
   (code >= 0x2010 && code <= 0x2027) ||
   (code >= 0x2030 && code <= 0x203a) ||
   code === 0x20ac || code === 0x2122 || code === 0x2212 ||
-  (code >= 0x2190 && code <= 0x2193);
+  (code >= 0x2190 && code <= 0x2193));
 
 const cleanUnicodeText = (text: string | null | undefined, preserveNewlines = false): string => {
   if (!text) return '';
   let result = '';
-  const stripped = stripEmoji(text);
+  // Non-breaking hyphens become plain ones, soft hyphens are dropped (Lato has neither)
+  const stripped = stripEmoji(text).replace(/\u2011/g, '-').replace(/\u00ad/g, '');
   for (let i = 0; i < stripped.length; i++) {
-    result += isInInterSubset(stripped.charCodeAt(i)) || stripped[i] === '\t' ? stripped[i] : ' ';
+    result += isInFontSubset(stripped.charCodeAt(i)) || stripped[i] === '\t' ? stripped[i] : ' ';
   }
   return normaliseWhitespace(result, preserveNewlines);
 };
@@ -336,23 +341,23 @@ const dayCountInclusive = (start: Date, end: Date): number =>
 // Palette
 // ---------------------------------------------------------------------------
 
-const RED: Rgb = [225, 0, 0];            // #E10000 official CCP red
-const GREEN: Rgb = [62, 168, 11];        // #3EA80B official CCP green
-const INK: Rgb = [15, 23, 42];           // slate-900
-const BODY: Rgb = [71, 85, 105];         // slate-600
-const MUTED: Rgb = [100, 116, 139];      // slate-500
-const FAINT: Rgb = [148, 163, 184];      // slate-400
-const BORDER: Rgb = [226, 232, 240];     // slate-200
-const BG: Rgb = [248, 250, 252];         // slate-50
+// corkcitypartnership.ie: raspberry and green on white, neutral greys, #222 text
+const BRAND: Rgb = [185, 11, 79];        // #B90B4F raspberry
+const GREEN: Rgb = [96, 156, 92];        // #609C5C green
+const GREEN_DARK: Rgb = [67, 111, 64];   // #436F40 the green for small type
+const INK: Rgb = [34, 34, 34];           // #222222
+const BODY: Rgb = [66, 66, 66];          // #424242
+const MUTED: Rgb = [115, 115, 115];      // #737373
+const FAINT: Rgb = [163, 163, 163];      // #A3A3A3
+const BORDER: Rgb = [230, 230, 230];     // #E6E6E6
+const BG: Rgb = [250, 250, 250];         // #FAFAFA
 const WHITE: Rgb = [255, 255, 255];
-const LINK: Rgb = [3, 105, 161];         // sky-700
-const RED_TINT: Rgb = [254, 242, 242];
-const DAY_WITH_EVENTS: Rgb = [241, 245, 249]; // slate-100: neutral, so it doesn't read as a holiday
-const RED_TINT_BORDER: Rgb = [254, 202, 202];
-const OUTLOOK_BLUE: Rgb = [0, 99, 177];
-const OUTLOOK_BG: Rgb = [235, 244, 255];
-const GOOGLE_BLUE: Rgb = [26, 115, 232];
-const GOOGLE_BG: Rgb = [241, 245, 249];
+const LINK: Rgb = BRAND;
+const PLACE: Rgb = GREEN_DARK;           // venues (they link to Google Maps)
+const BRAND_TINT: Rgb = [251, 240, 244]; // #FBF0F4
+const BRAND_TINT_BORDER: Rgb = [234, 182, 202]; // #EAB6CA
+const BRAND_LIGHT: Rgb = [232, 169, 194];       // #E8A9C2, the hairline after a label
+const DAY_WITH_EVENTS: Rgb = [243, 243, 243];   // #F3F3F3, the site's grey sections
 
 // ---------------------------------------------------------------------------
 // Digest generator
@@ -418,25 +423,25 @@ export const generateEventsDigestPDF = async (
 
   // --- Fonts ---------------------------------------------------------------
   const fontData = await loadFontData();
-  let hasInter = false;
+  let hasLato = false;
   if (fontData) {
     try {
       (Object.keys(FONT_FILES) as Weight[]).forEach((weight) => {
         doc.addFileToVFS(FONT_FILES[weight], fontData[weight]);
-        doc.addFont(FONT_FILES[weight], `Inter-${weight}`, 'normal');
+        doc.addFont(FONT_FILES[weight], `Lato-${weight}`, 'normal');
       });
-      hasInter = true;
+      hasLato = true;
     } catch (err) {
       console.warn('Could not register PDF fonts:', err);
     }
   }
   const font = (weight: Weight, size: number) => {
-    if (hasInter) doc.setFont(`Inter-${weight}`, 'normal');
+    if (hasLato) doc.setFont(`Lato-${weight}`, 'normal');
     else doc.setFont('helvetica', weight === 'regular' ? 'normal' : 'bold');
     doc.setFontSize(size);
   };
   const txt = (s: string | null | undefined, keepNewlines = false) =>
-    hasInter ? cleanUnicodeText(s, keepNewlines) : cleanPdfText(s, keepNewlines);
+    hasLato ? cleanUnicodeText(s, keepNewlines) : cleanPdfText(s, keepNewlines);
 
   const color = (rgb: Rgb) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
   const fill = (rgb: Rgb) => doc.setFillColor(rgb[0], rgb[1], rgb[2]);
@@ -514,13 +519,41 @@ export const generateEventsDigestPDF = async (
     });
   };
 
+  /** Label or button with the site's nearly square (3px) corners */
   const pill = (x: number, y: number, w: number, h: number, bg: Rgb, border?: Rgb) => {
     fill(bg);
     if (border) {
       stroke(border, 0.2);
-      doc.roundedRect(x, y, w, h, h / 2, h / 2, 'FD');
+      doc.roundedRect(x, y, w, h, 0.8, 0.8, 'FD');
     } else {
-      doc.roundedRect(x, y, w, h, h / 2, h / 2, 'F');
+      doc.roundedRect(x, y, w, h, 0.8, 0.8, 'F');
+    }
+  };
+
+  /**
+   * The site's "leaf" box: top-left and bottom-right corners rounded, the other two square.
+   * `style` null only builds the path (for clipping).
+   */
+  const leaf = (x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' | null) => {
+    const k = 0.5523 * r; // quarter circle as a Bézier curve
+    doc.lines([
+      [w - r, 0],
+      [0, h - r],
+      [0, k, -(r - k), r, -r, r],
+      [-(w - r), 0],
+      [0, -(h - r)],
+      [0, -k, r - k, -r, r, -r]
+    ], x + r, y, [1, 1], style, true);
+  };
+
+  /** The site's section label: raspberry capitals with a hairline running on to `right` */
+  const eyebrow = (text: string, x: number, y: number, right: number) => {
+    font('bold', 7);
+    color(BRAND);
+    const w = spaced(text, x, y, 0.55);
+    if (right - (x + w + 3) > 4) {
+      stroke(BRAND_LIGHT, 0.3);
+      doc.line(x + w + 3, y - 1.15, right, y - 1.15);
     }
   };
 
@@ -593,7 +626,7 @@ export const generateEventsDigestPDF = async (
 
   const [logo, flyers] = await Promise.all([
     // Printed about 55 mm wide: 600 px is still well over 250 dpi
-    loadImageCached('/assets/ccp-logo.png', 600),
+    loadImageCached('/assets/ccp-logo-v2.png', 600),
     (async () => {
       // Keyed by event; the alias is per image, so a flyer shared by several events is embedded once
       const map = new Map<string, LoadedPdfFlyer & { alias: string }>();
@@ -639,16 +672,16 @@ export const generateEventsDigestPDF = async (
       }
     }
     font('bold', h * 0.9);
-    color(RED);
+    color(BRAND);
     doc.text('CORK CITY PARTNERSHIP', x, y + h * 0.7);
     return doc.getTextWidth('CORK CITY PARTNERSHIP');
   };
 
   // --- Page 1: header -------------------------------------------------------
-  // Deliberately light: white paper, a thin brand stripe and dark text, so the
-  // digest prints cheaply and doesn't shout on screen.
+  // Deliberately light: white paper, a thin raspberry and green stripe (the site's colours)
+  // and dark text, so the digest prints cheaply and doesn't shout on screen.
   const drawBrandStripe = () => {
-    fill(RED);
+    fill(BRAND);
     doc.rect(0, 0, W, 1.8, 'F');
     fill(GREEN);
     doc.rect(W * 0.72, 0, W * 0.28, 1.8, 'F');
@@ -658,16 +691,17 @@ export const generateEventsDigestPDF = async (
     drawBrandStripe();
     logoDraw(M, 10, 13);
 
-    font('semibold', 7);
-    color(MUTED);
+    font('bold', 7);
+    color(BRAND);
     spaced('EVENTS DIGEST', W - M, 14.5, 0.6, 'right');
     font('regular', 8);
+    color(MUTED);
     const issued = new Date();
     doc.text(`Issued ${WEEKDAYS_LONG[issued.getDay()].slice(0, 3)} ${issued.getDate()} ${monthShort(issued)} ${issued.getFullYear()}`, W - M, 19.5, { align: 'right' });
 
-    font('bold', 24);
+    font('semibold', 25);
     color(INK);
-    doc.text('Upcoming Events', M, 37);
+    doc.text('Upcoming Events', M, 37, { charSpace: 0.15 });
     font('medium', 10.5);
     color(BODY);
     doc.text(txt(formatLongRange(periodStart, periodEnd)), M, 44);
@@ -682,7 +716,7 @@ export const generateEventsDigestPDF = async (
   const STAT_GAP = 5; // either side of the separators
   const drawStats = () => {
     const stats: Array<{ value: string; label: string; accent: Rgb }> = [
-      { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: RED },
+      { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: BRAND },
       { value: String(eventDays.size), label: eventDays.size === 1 ? 'Day with events' : 'Days with events', accent: GREEN },
       { value: String(venues.size), label: venues.size === 1 ? 'Venue' : 'Venues', accent: MUTED }
     ];
@@ -729,9 +763,7 @@ export const generateEventsDigestPDF = async (
   const glanceHeight = (d: Density) => showGlance ? 7 + 5 + gridRows * glanceCellH(d) : 0;
 
   const drawGlance = (top: number, cellH: number) => {
-    font('semibold', 7);
-    color(MUTED);
-    spaced('AT A GLANCE', M, top + 3, 0.5);
+    eyebrow('AT A GLANCE', M, top + 3, W - M);
 
     const gy = top + 7;
     const cellW = CW / 7;
@@ -741,8 +773,14 @@ export const generateEventsDigestPDF = async (
 
     const rowsTop = gy + 5;
     const gridH = gridRows * cellH;
+    const GRID_R = 4;
+    // A leaf-shaped grid: the cell shading is clipped to its outline
+    doc.saveGraphicsState();
+    leaf(M, rowsTop, CW, gridH, GRID_R, null);
+    doc.clip();
+    doc.discardPath();
     fill(WHITE);
-    doc.roundedRect(M, rowsTop, CW, gridH, 2, 2, 'F');
+    doc.rect(M, rowsTop, CW, gridH, 'F');
 
     for (let i = 0; i < gridRows * 7; i++) {
       const d = addDays(gridStart, i);
@@ -768,7 +806,7 @@ export const generateEventsDigestPDF = async (
       if (isToday) {
         // A smaller, higher circle in short rows keeps clear of the event dots
         const short = cellH < 11;
-        fill(INK);
+        fill(BRAND);
         doc.circle(x + 4.3, y + (short ? 3.5 : 3.9), short ? 2.3 : 2.55, 'F');
         font('bold', 7.5);
         color(WHITE);
@@ -802,8 +840,9 @@ export const generateEventsDigestPDF = async (
     stroke(BORDER, 0.2);
     for (let c = 1; c < 7; c++) doc.line(M + c * cellW, rowsTop, M + c * cellW, rowsTop + gridH);
     for (let r = 1; r < gridRows; r++) doc.line(M, rowsTop + r * cellH, M + CW, rowsTop + r * cellH);
+    doc.restoreGraphicsState();
     stroke(BORDER, 0.3);
-    doc.roundedRect(M, rowsTop, CW, gridH, 2, 2, 'S');
+    leaf(M, rowsTop, CW, gridH, GRID_R, 'S');
   };
 
   const LEGEND_H = categories.length > 0 ? 8 : 0;
@@ -829,7 +868,7 @@ export const generateEventsDigestPDF = async (
   const drawPageHeader = () => {
     drawBrandStripe();
     logoDraw(M, 8, 7.5);
-    font('bold', 9.5);
+    font('semibold', 10);
     color(INK);
     doc.text('Upcoming Events', W - M, 11.2, { align: 'right' });
     font('regular', 7.5);
@@ -849,10 +888,22 @@ export const generateEventsDigestPDF = async (
       font('semibold', 7);
       color(INK);
       doc.text('Cork City Partnership CLG', M, y);
-      const orgW = doc.getTextWidth('Cork City Partnership CLG');
+      let fx = M + doc.getTextWidth('Cork City Partnership CLG');
+      // The logo's strapline: green words, raspberry bars
       font('regular', 7);
       color(MUTED);
-      doc.text('  ·  Education | Employment | Empowerment', M + orgW, y);
+      doc.text('  ·  ', fx, y);
+      fx += doc.getTextWidth('  ·  ');
+      ['Education', 'Employment', 'Empowerment'].forEach((word, i) => {
+        if (i > 0) {
+          color(BRAND);
+          doc.text(' | ', fx, y);
+          fx += doc.getTextWidth(' | ');
+        }
+        color(GREEN_DARK);
+        doc.text(word, fx, y);
+        fx += doc.getTextWidth(word);
+      });
       font('medium', 7);
       color(MUTED);
       doc.text(`Page ${p} of ${total}`, W - M, y, { align: 'right' });
@@ -896,7 +947,7 @@ export const generateEventsDigestPDF = async (
         if (label) {
           font('bold', 6.6);
           const lw = doc.getTextWidth(label) + 0.5 * (label.length - 1) + 6;
-          pill(M, y + 2.6, lw, 5.4, INK);
+          pill(M, y + 2.6, lw, 5.4, BRAND);
           color(WHITE);
           spaced(label, M + 3, y + 6.25, 0.5);
           x += lw + 3;
@@ -905,7 +956,7 @@ export const generateEventsDigestPDF = async (
         color(INK);
         doc.text(range, x, y + 6.6);
         const rw = doc.getTextWidth(range);
-        stroke(BORDER, 0.3);
+        stroke(BRAND_LIGHT, 0.3);
         doc.line(x + rw + 3, y + 5.3, W - M, y + 5.3);
       }
     };
@@ -918,14 +969,14 @@ export const generateEventsDigestPDF = async (
     return null;
   };
 
-  /** Executive layout: the day's date in the column left of its cards (today in ink) */
+  /** Executive layout: the day's date in the column left of its cards (today in raspberry) */
   const TILE_H = 15;
   const dateTile = (day: Date, y: number, mode: 'first' | 'continued') => {
     const isToday = day.getTime() === today.getTime();
     const cx = M + TILE_W / 2;
-    fill(isToday ? INK : WHITE);
-    stroke(isToday ? INK : BORDER, 0.35);
-    doc.roundedRect(M, y, TILE_W, TILE_H, 2.2, 2.2, 'FD');
+    fill(isToday ? BRAND : WHITE);
+    stroke(isToday ? BRAND : BORDER, 0.35);
+    leaf(M, y, TILE_W, TILE_H, 3, 'FD');
     font('semibold', 5.2);
     color(isToday ? WHITE : MUTED);
     spaced(WEEKDAYS_LONG[day.getDay()].slice(0, 3).toUpperCase(), cx, y + 3.9, 0.3, 'center');
@@ -938,7 +989,7 @@ export const generateEventsDigestPDF = async (
     const note = mode === 'continued' ? 'CONT.' : relativeDayLabel(day);
     if (note) {
       font('bold', 4.8);
-      color(mode === 'continued' ? MUTED : INK);
+      color(mode === 'continued' ? MUTED : BRAND);
       spaced(note, cx, y + TILE_H + 3.3, 0.2, 'center');
     }
   };
@@ -957,7 +1008,7 @@ export const generateEventsDigestPDF = async (
         const rel = relativeDayLabel(day);
         fill(BG);
         doc.rect(M, y, CW, 7, 'F');
-        fill(INK);
+        fill(BRAND);
         doc.rect(M, y, isToday ? 1.6 : 0.9, 7, 'F');
         font('bold', 8);
         color(INK);
@@ -966,7 +1017,7 @@ export const generateEventsDigestPDF = async (
         if (rel) {
           const lx = M + 3 + doc.getTextWidth(label) + 2.5;
           font('bold', 5.8);
-          color(INK);
+          color(BRAND);
           spaced(rel, lx, y + 4.6, 0.3);
         }
         font('medium', 7);
@@ -1016,9 +1067,10 @@ export const generateEventsDigestPDF = async (
   };
 
   type CalendarLinkEvent = Parameters<typeof createGoogleCalendarUrl>[0];
+  // Outlined in raspberry, like the site's buttons
   const calendarLinks = (calendarEvent: CalendarLinkEvent): Array<{ label: string; url: string; fg: Rgb; bg: Rgb }> => [
-    { label: '+ Outlook', url: createOutlookWebUrl(calendarEvent), fg: OUTLOOK_BLUE, bg: OUTLOOK_BG },
-    { label: '+ Google', url: createGoogleCalendarUrl(calendarEvent), fg: GOOGLE_BLUE, bg: GOOGLE_BG }
+    { label: '+ Outlook', url: createOutlookWebUrl(calendarEvent), fg: BRAND, bg: WHITE },
+    { label: '+ Google', url: createGoogleCalendarUrl(calendarEvent), fg: BRAND, bg: WHITE }
   ];
 
   /** Small "+ Outlook" / "+ Google" buttons in a row of "Also on" dates */
@@ -1036,7 +1088,7 @@ export const generateEventsDigestPDF = async (
       calendarLinks(calendarEvent).forEach((b) => {
         const bw = doc.getTextWidth(b.label) + ROW_BTN_PAD * 2;
         const by = rowY - 0.9 - bh / 2;
-        pill(x, by, bw, bh, b.bg, BORDER);
+        pill(x, by, bw, bh, b.bg, BRAND_TINT_BORDER);
         color(b.fg);
         doc.text(b.label, x + ROW_BTN_PAD, rowY - 0.35);
         doc.link(x, by, bw, bh, { url: b.url });
@@ -1136,15 +1188,14 @@ export const generateEventsDigestPDF = async (
       draw: (y) => {
         if (block.tile) dateTile(day, y, block.tile);
 
-        const r = 2.4;
-        // Card with a category-coloured left edge
+        // Leaf-shaped card (the site's boxes) with a category-coloured left edge
+        const r = 5;
         fill(cat.accent);
-        doc.roundedRect(CARD_X, y, CARD_W, h, r, r, 'F');
+        leaf(CARD_X, y, CARD_W, h, r, 'F');
         fill(WHITE);
-        doc.roundedRect(CARD_X + ACCENT, y, CARD_W - ACCENT, h, r, r, 'F');
-        doc.rect(CARD_X + ACCENT, y, r, h, 'F');
+        leaf(CARD_X + ACCENT, y, CARD_W - ACCENT, h, r, 'F');
         stroke(BORDER, 0.25);
-        doc.roundedRect(CARD_X, y, CARD_W, h, r, r, 'S');
+        leaf(CARD_X, y, CARD_W, h, r, 'S');
 
         // Time, then category and chips; "+ Outlook" / "+ Google" on the right (screen only)
         let cy = y + PAD_Y + 2.8;
@@ -1153,7 +1204,7 @@ export const generateEventsDigestPDF = async (
         screenOnly(() => calendarLinks(ev).reverse().forEach((b) => {
           const bw = doc.getTextWidth(b.label) + 5.4;
           const bx = buttonsLeft - bw;
-          pill(bx, cy - 3.45, bw, BTN_H, b.bg, BORDER);
+          pill(bx, cy - 3.45, bw, BTN_H, b.bg, BRAND_TINT_BORDER);
           color(b.fg);
           doc.text(b.label, bx + 2.7, cy - 0.15);
           doc.link(bx, cy - 3.45, bw, BTN_H, { url: b.url });
@@ -1176,15 +1227,15 @@ export const generateEventsDigestPDF = async (
         chips.forEach((c) => {
           font('bold', 5.8);
           const cw = doc.getTextWidth(c) + 0.3 * (c.length - 1) + 4.2;
-          pill(mx, cy - 3.05, cw, 4.2, RED_TINT, RED_TINT_BORDER);
-          color(RED);
+          pill(mx, cy - 3.05, cw, 4.2, BRAND_TINT, BRAND_TINT_BORDER);
+          color(BRAND);
           spaced(c, mx + 2.1, cy - 0.1, 0.3);
           mx += cw + 1.5;
         });
 
         // Title
         cy += 1.6 + TITLE_LH - 0.6;
-        font('bold', 12);
+        font('semibold', 12.5);
         color(INK);
         doc.text(titleLines, mainX, cy, { lineHeightFactor: 1.2 });
         cy += (titleLines.length - 1) * TITLE_LH;
@@ -1192,9 +1243,9 @@ export const generateEventsDigestPDF = async (
         // Venue (links to Google Maps)
         if (venueLines.length) {
           cy += 2.2 + VENUE_LH;
-          drawPin(mainX, cy, LINK);
+          drawPin(mainX, cy, PLACE);
           font('medium', 8);
-          color(LINK);
+          color(PLACE);
           doc.text(venueLines, mainX + 3.6, cy, { lineHeightFactor: 1.3 });
           const linkW = Math.min(mainW, Math.max(...venueLines.map((l) => doc.getTextWidth(l))) + 4);
           doc.link(mainX, cy - 3, linkW, venueLines.length * VENUE_LH + 0.6, { url: createGoogleMapsUrl(ev.location) });
@@ -1228,9 +1279,9 @@ export const generateEventsDigestPDF = async (
           const right = mainX + boxW - 2.5;
           fill(BG);
           stroke(BORDER, 0.2);
-          doc.roundedRect(mainX, top, boxW, alsoH, 1.6, 1.6, 'FD');
+          leaf(mainX, top, boxW, alsoH, 2.5, 'FD');
           font('bold', 6.3);
-          color(RED);
+          color(BRAND);
           spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
           const timeX = left + alsoDateW;
           const placeX = timeX + alsoTimeW;
@@ -1249,8 +1300,8 @@ export const generateEventsDigestPDF = async (
             doc.text(o.time, timeX, rowY);
             const place = txt(o.place);
             if (place && placeW > 8) {
-              drawPin(placeX, rowY, LINK);
-              color(LINK);
+              drawPin(placeX, rowY, PLACE);
+              color(PLACE);
               const shown = truncate(place, placeW);
               doc.text(shown, placeX + 3.6, rowY);
               doc.link(placeX, rowY - 2.9, doc.getTextWidth(shown) + 3.6, 3.8, { url: createGoogleMapsUrl(o.place) });
@@ -1265,13 +1316,13 @@ export const generateEventsDigestPDF = async (
             const fx = CARD_X + CARD_W - 5 - FLYER_W + (FLYER_W - flyerW) / 2;
             const fy = y + PAD_Y;
             doc.saveGraphicsState();
-            doc.roundedRect(fx, fy, flyerW, flyerH, 1.6, 1.6, null);
+            leaf(fx, fy, flyerW, flyerH, 3, null);
             doc.clip();
             doc.discardPath();
             doc.addImage(flyer.dataUrl, flyer.format, fx, fy, flyerW, flyerH, flyer.alias, 'FAST');
             doc.restoreGraphicsState();
             stroke(BORDER, 0.3);
-            doc.roundedRect(fx, fy, flyerW, flyerH, 1.6, 1.6, 'S');
+            leaf(fx, fy, flyerW, flyerH, 3, 'S');
             const posterLink = toAbsoluteHttpUrl(ev.posterUrl);
             if (posterLink) doc.link(fx, fy, flyerW, flyerH, { url: posterLink });
           } catch (err) {
@@ -1294,10 +1345,10 @@ export const generateEventsDigestPDF = async (
   const drawTableHead = (y: number) => {
     fill(BG);
     doc.rect(M, y, CW, TABLE_HEAD_H, 'F');
-    stroke(BORDER, 0.3);
+    stroke(BRAND, 0.4);
     doc.line(M, y + TABLE_HEAD_H, M + CW, y + TABLE_HEAD_H);
     font('bold', 6.5);
-    color(MUTED);
+    color(BRAND);
     spaced('TIME', COL.time, y + 4.6, 0.4);
     spaced('EVENT', COL.event, y + 4.6, 0.4);
     spaced('VENUE', COL.venue, y + 4.6, 0.4);
@@ -1368,13 +1419,13 @@ export const generateEventsDigestPDF = async (
         ly += 3.5;
         screenOnly(() => {
           font('semibold', 6.4);
-          color(OUTLOOK_BLUE);
+          color(BRAND);
           doc.text('+ Outlook', COL.event, ly);
           const ow = doc.getTextWidth('+ Outlook');
           doc.link(COL.event, ly - 2.6, ow, 3.4, { url: createOutlookWebUrl(ev) });
           color(FAINT);
           doc.text('·', COL.event + ow + 1.6, ly);
-          color(GOOGLE_BLUE);
+          color(BRAND);
           doc.text('+ Google', COL.event + ow + 3.6, ly);
           doc.link(COL.event + ow + 3.6, ly - 2.6, doc.getTextWidth('+ Google'), 3.4, { url: createGoogleCalendarUrl(ev) });
         });
@@ -1382,7 +1433,7 @@ export const generateEventsDigestPDF = async (
         // Venue
         if (venueLines.length) {
           font('regular', 7.3);
-          color(LINK);
+          color(PLACE);
           doc.text(venueLines, COL.venue, y + 5.6, { lineHeightFactor: 1.3 });
           doc.link(COL.venue, y + 2.6, venueW, venueLines.length * 3.3 + 1, { url: createGoogleMapsUrl(ev.location) });
         }
@@ -1393,7 +1444,7 @@ export const generateEventsDigestPDF = async (
           const right = COL.category - 3;
           let ay = y + mainH + 1.5 + 2.4;
           font('bold', 5.8);
-          color(RED);
+          color(BRAND);
           spaced('ALSO ON', left, ay, 0.3);
           const timeX = left + aDateW;
           const placeX = timeX + aTimeW;
@@ -1408,8 +1459,8 @@ export const generateEventsDigestPDF = async (
             doc.text(o.time, timeX, ay);
             const place = txt(o.place);
             if (place && placeW > 8) {
-              drawPin(placeX, ay, LINK);
-              color(LINK);
+              drawPin(placeX, ay, PLACE);
+              color(PLACE);
               const shown = truncate(place, placeW);
               doc.text(shown, placeX + 3.4, ay);
               doc.link(placeX, ay - 2.7, doc.getTextWidth(shown) + 3.4, 3.5, { url: createGoogleMapsUrl(o.place) });
@@ -1436,25 +1487,24 @@ export const generateEventsDigestPDF = async (
   const drawClosing = (y: number) => {
     if (!submitUrl) return;
     const top = y + 5;
-    fill(BG);
-    stroke(BORDER, 0.25);
-    doc.roundedRect(M, top, CW, 12, 2, 2, 'FD');
-    font('semibold', 8.2);
-    color(INK);
-    doc.text('Running an event? Get it into the next digest.', M + 4, top + 5);
+    // Raspberry box with white text, like the site's "Our Mission"
+    fill(BRAND);
+    leaf(M, top, CW, 12, 4, 'F');
+    font('bold', 8.4);
+    color(WHITE);
+    doc.text('Running an event? Get it into the next digest.', M + 5, top + 5);
     font('regular', 7.6);
-    color(BODY);
     const lead = 'Send it in at ';
-    doc.text(lead, M + 4, top + 9.1);
-    const lx = M + 4 + doc.getTextWidth(lead);
+    doc.text(lead, M + 5, top + 9.1);
+    const lx = M + 5 + doc.getTextWidth(lead);
     const shown = submitUrl.replace(/^https?:\/\//, '');
-    color(LINK);
+    font('bold', 7.6);
     doc.text(shown, lx, top + 9.1);
     const sw = doc.getTextWidth(shown);
-    stroke(LINK, 0.15);
+    stroke(WHITE, 0.2);
     doc.line(lx, top + 9.7, lx + sw, top + 9.7);
     doc.link(lx, top + 6.5, sw, 3.4, { url: submitUrl });
-    color(BODY);
+    font('regular', 7.6);
     doc.text(' (no login needed).', lx + sw, top + 9.1);
   };
 
@@ -1512,9 +1562,7 @@ export const generateEventsDigestPDF = async (
   const drawIndex = (top: number, cardAt: Map<number, { page: number; y: number }>) => {
     const gutter = 6;
     const colW = indexCols === 2 ? (CW - gutter) / 2 : CW;
-    font('semibold', 7);
-    color(MUTED);
-    spaced('IN THIS DIGEST', M, top + 3, 0.5);
+    eyebrow('IN THIS DIGEST', M, top + 3, indexCols === 2 ? M + colW - 12 : W - M - 12);
     for (let c = 0; c < indexCols; c++) {
       font('semibold', 6.3);
       color(FAINT);
@@ -1636,7 +1684,7 @@ export const generateEventsDigestPDF = async (
     fill(BG);
     stroke(BORDER, 0.3);
     doc.setLineDashPattern([1.2, 1.2], 0);
-    doc.roundedRect(M, boxY, CW, 34, 3, 3, 'FD');
+    leaf(M, boxY, CW, 34, 6, 'FD');
     doc.setLineDashPattern([], 0);
     font('bold', 12);
     color(INK);

@@ -25,6 +25,7 @@ import { exportToICal, downloadFile } from '../utils/export';
 import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
 import { usePosterFile } from '../hooks/usePosterFile';
 import PdfPagePicker from './PdfPagePicker';
+import { getCategoryColor } from './WeekView';
 
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
@@ -780,11 +781,11 @@ const EventModal: React.FC<EventModalProps> = ({
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
         {/* Modal Panel - Full Screen on Mobile */}
-        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
+        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
 
           {/* Header */}
           <div className="px-4 sm:px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
-            <h3 className={`text-base sm:text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
+            <h3 className={`text-lg sm:text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
               {isEditing ? 'Edit Event' : 'Event Details'}
             </h3>
             <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
@@ -803,15 +804,7 @@ const EventModal: React.FC<EventModalProps> = ({
                   <div className="flex items-center gap-2 flex-wrap">
                     {event.status === 'draft' && <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full">Draft</span>}
                     {event.category && (
-                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
-                        event.category === 'Enterprise & Employment' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' :
-                        event.category === 'Community & Family' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100' :
-                        event.category === 'Education & Training' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100' :
-                        event.category === 'Special Visits & Celebrations' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100' :
-                        event.category === 'Public Information Session' ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-100' :
-                        event.category === 'Health & Wellbeing' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-100' :
-                        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                      }`}>
+                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-[0.12em] ${getCategoryColor(event.category)}`}>
                         {event.category}
                       </span>
                     )}
@@ -825,7 +818,7 @@ const EventModal: React.FC<EventModalProps> = ({
                   </div>
 
                   <div className="flex justify-between items-start gap-3">
-                    <h2 className={`text-xl sm:text-2xl font-bold leading-tight break-words ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                    <h2 className={`text-2xl sm:text-[1.75rem] font-semibold leading-tight break-words ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                       {event.title}
                     </h2>
                     {getShareLink && (
@@ -873,7 +866,7 @@ const EventModal: React.FC<EventModalProps> = ({
                     )}
                     {attachments.length > 0 && (
                       <div className={`p-4 ${event.posterUrl ? 'border-t border-slate-100 dark:border-slate-800' : ''} bg-slate-50/50 dark:bg-slate-800/30`}>
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</h4>
+                        <h4 className="text-[10px] font-bold text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] mb-2">Attachments</h4>
                         <div className="grid gap-2">
                           {attachments.map((att, idx) => (
                             <a key={idx} href={att.url} download={att.name} className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-700 rounded-lg border border-slate-100 dark:border-slate-600 hover:border-brand-200 transition-colors group">
@@ -889,10 +882,10 @@ const EventModal: React.FC<EventModalProps> = ({
 
                 {/* Details Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="flex items-center p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <CalendarIcon className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
+                  <div className="flex items-center p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
+                    <CalendarIcon className="h-5 w-5 mr-3 text-brand-600 dark:text-brand-300 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Date & Time</p>
+                      <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em]">Date & Time</p>
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">
                         {event.endDate && !isSameDay(event.date, event.endDate) ? (
                           <>
@@ -912,10 +905,10 @@ const EventModal: React.FC<EventModalProps> = ({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <MapPin className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
+                  <div className="flex items-center p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
+                    <MapPin className="h-5 w-5 mr-3 text-brand-600 dark:text-brand-300 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Location</p>
+                      <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em]">Location</p>
                       <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-brand-600 break-words block">
                         {event.location}
                       </a>
@@ -924,8 +917,8 @@ const EventModal: React.FC<EventModalProps> = ({
                 </div>
 
                 {seriesDates.upcoming.length > 0 && (
-                  <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1.5">
+                  <div className="p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
+                    <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em] flex items-center gap-1.5">
                       <Repeat className="h-3 w-3" /> Other upcoming dates
                     </p>
                     <ul className="mt-2 flex flex-wrap gap-1.5">
@@ -976,9 +969,9 @@ const EventModal: React.FC<EventModalProps> = ({
                       <button
                         onClick={handleRsvp}
                         disabled={!!(event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
-                        className={`px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm font-bold rounded-lg transition-all active:scale-95 ${userHasRsvped
+                        className={`cta px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded transition-all active:scale-95 ${userHasRsvped
                           ? 'bg-white text-red-600 border border-red-100 hover:bg-red-50'
-                          : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
+                          : 'bg-ccp-green-600 text-white hover:bg-ccp-green-700'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
@@ -1004,7 +997,7 @@ const EventModal: React.FC<EventModalProps> = ({
                 <div className="relative">
                   <button
                     onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
-                    className="w-full py-3 sm:py-2.5 min-h-[44px] sm:min-h-0 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                    className="cta w-full py-3 sm:py-2.5 min-h-[44px] sm:min-h-0 border border-brand-600 dark:border-brand-400 rounded text-brand-600 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors flex items-center justify-center gap-2"
                   >
                     <CalendarIcon className="h-4 w-4" />
                     Add to Calendar
@@ -1068,8 +1061,8 @@ const EventModal: React.FC<EventModalProps> = ({
               // FORM MODE
               <form id="event-form" onSubmit={handleSubmit} className="space-y-5">
                 {autoApproveOnSave && (
-                  <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="rounded-xl bg-ccp-green-50 dark:bg-ccp-green-950/30 border border-ccp-green-200 dark:border-ccp-green-800/60 p-3.5 flex items-center gap-3 text-xs text-ccp-green-800 dark:text-ccp-green-300">
+                    <CheckCircle className="w-4 h-4 text-ccp-green-600 dark:text-ccp-green-400 shrink-0" />
                     <span>Saving your edits will automatically approve and publish this submission to the calendar.</span>
                   </div>
                 )}
@@ -1535,10 +1528,10 @@ const EventModal: React.FC<EventModalProps> = ({
           <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
             {showForm ? (
               <>
-                <button type="submit" form="event-form" disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50 text-sm w-full sm:w-auto">
+                <button type="submit" form="event-form" disabled={isSubmitting} className="cta inline-flex justify-center items-center rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-brand-600 text-white hover:bg-brand-700 shadow-sm transition-all disabled:opacity-50 w-full sm:w-auto">
                   {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : (isEditing ? (autoApproveOnSave ? 'Save & Approve' : 'Save Changes') : 'Create Event')}
                 </button>
-                <button type="button" onClick={handleCancelForm} disabled={isSubmitting} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
+                <button type="button" onClick={handleCancelForm} disabled={isSubmitting} className="cta inline-flex justify-center items-center rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all w-full sm:w-auto">
                   Cancel
                 </button>
               </>
@@ -1547,20 +1540,20 @@ const EventModal: React.FC<EventModalProps> = ({
                 <button
                   type="button"
                   onClick={handleDeleteClick}
-                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-3 sm:px-4 py-3 sm:py-2 min-h-[48px] sm:min-h-0 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-all text-sm"
+                  className="cta inline-flex justify-center items-center gap-1.5 rounded px-3 sm:px-4 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
                   title="Delete event"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
                 </button>
                 <span className="flex-1" />
-                <button type="button" onClick={onClose} className="hidden sm:inline-flex justify-center items-center rounded-lg px-5 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm">
+                <button type="button" onClick={onClose} className="cta hidden sm:inline-flex justify-center items-center rounded px-5 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all">
                   Close
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="inline-flex justify-center items-center gap-1.5 rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-brand-600 text-white font-semibold hover:bg-brand-700 shadow-sm transition-all text-sm flex-1 sm:flex-none"
+                  className="cta inline-flex justify-center items-center gap-1.5 rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-brand-600 text-white hover:bg-brand-700 shadow-sm transition-all flex-1 sm:flex-none"
                   title="Edit event (E)"
                   aria-keyshortcuts="e"
                 >
@@ -1569,7 +1562,7 @@ const EventModal: React.FC<EventModalProps> = ({
                 </button>
               </div>
             ) : (
-              <button type="button" onClick={onClose} className="inline-flex justify-center items-center rounded-lg px-5 py-3 sm:py-2 min-h-[48px] sm:min-h-0 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm w-full sm:w-auto">
+              <button type="button" onClick={onClose} className="cta inline-flex justify-center items-center rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all w-full sm:w-auto">
                 Close
               </button>
             )}

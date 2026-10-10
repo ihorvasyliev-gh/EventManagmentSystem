@@ -41,12 +41,12 @@ const Block: React.FC<{ icon: React.ReactNode; label: string; onEdit: () => void
   icon, label, onEdit, editLabel, children
 }) => (
   <div className="flex items-start gap-3 py-4 border-t border-slate-100 dark:border-slate-700/70 first:border-t-0">
-    <span className="mt-0.5 w-8 h-8 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 flex items-center justify-center">
+    <span className="mt-0.5 w-8 h-8 shrink-0 rounded-leaf-xs bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300 flex items-center justify-center">
       {icon}
     </span>
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between gap-2 min-h-8">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-300">{label}</p>
         <EditButton onClick={onEdit} label={editLabel} />
       </div>
       <div className="text-sm text-slate-700 dark:text-slate-200">{children}</div>
@@ -71,7 +71,7 @@ export const ScheduleList: React.FC<{ days: SubmissionSummary['days']; compact?:
                   href={mapsUrl(s.place)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400 hover:underline break-words min-w-0"
+                  className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-300 hover:underline break-words min-w-0"
                 >
                   <MapPin className="w-3.5 h-3.5 shrink-0 self-center" /> {s.place}
                 </a>
@@ -105,13 +105,13 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           <button
             type="button"
             onClick={() => onEdit()}
-            className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+            className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" /> Back to form
           </button>
           <ThemeToggle className="ml-auto" />
           <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
-            <img src="/assets/ccp-logo.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
+            <img src="/assets/ccp-logo-v2.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
           </span>
         </div>
       </header>
@@ -119,7 +119,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
       <main className="max-w-2xl mx-auto px-3 sm:px-6 py-5 sm:py-8 pb-36 sm:pb-12 animate-fade-in">
         {/* Progress */}
         <ol className="flex items-center gap-2 text-xs font-semibold mb-5" aria-label="Progress">
-          <li className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+          <li className="inline-flex items-center gap-1.5 text-ccp-green-600 dark:text-ccp-green-400">
             <CheckCircle2 className="w-4 h-4" /> Details
           </li>
           <li className="h-px w-6 bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
@@ -132,7 +132,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           </li>
         </ol>
 
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Check your event</h1>
+        <h1 className="text-2xl sm:text-[2.375rem] sm:leading-tight font-medium text-slate-900 dark:text-white">Check your event</h1>
         <p className="mt-1.5 text-sm sm:text-base text-slate-600 dark:text-slate-300">
           This is how it will appear on the calendar. Tap <span className="font-semibold">Edit</span> next to anything that needs changing.
         </p>
@@ -156,7 +156,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
         )}
 
         {/* The event card */}
-        <article className="mt-5 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <article className="mt-5 bg-white dark:bg-slate-800 rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
           {summary.posterUrl ? (
             <div className="relative bg-slate-100 dark:bg-slate-900">
               <img src={summary.posterUrl} alt="Poster" className="w-full max-h-80 object-contain" />
@@ -181,10 +181,10 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           <div className="px-4 sm:px-6 pt-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-[0.12em] bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200">
                   <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(summary.category)}`} /> {summary.category}
                 </span>
-                <h2 className="mt-2 text-xl sm:text-2xl font-bold leading-tight text-slate-900 dark:text-white break-words">{summary.title}</h2>
+                <h2 className="mt-2 text-xl sm:text-2xl font-semibold leading-tight text-slate-900 dark:text-white break-words">{summary.title}</h2>
               </div>
               <EditButton onClick={() => onEdit('title')} label="Edit name and category" />
             </div>
@@ -202,7 +202,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
 
             {summary.location && (
               <Block icon={<MapPin className="w-4 h-4" />} label="Venue" onEdit={() => onEdit('location')} editLabel="Edit venue">
-                <a href={mapsUrl(summary.location)} target="_blank" rel="noopener noreferrer" className="font-medium text-sky-700 dark:text-sky-400 hover:underline break-words">
+                <a href={mapsUrl(summary.location)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-300 hover:underline break-words">
                   {summary.location}
                 </a>
               </Block>
@@ -232,7 +232,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           <button
             type="button"
             onClick={() => onEdit()}
-            className="inline-flex items-center gap-2 h-12 px-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-[15px] hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="cta inline-flex items-center gap-2 h-12 px-5 rounded border border-brand-600 dark:border-brand-400 bg-white dark:bg-transparent text-brand-600 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
           >
             <Pencil className="w-4 h-4" /> Edit
           </button>
@@ -245,7 +245,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
         <button
           type="button"
           onClick={() => onEdit()}
-          className="inline-flex items-center justify-center gap-1.5 h-12 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-[15px]"
+          className="cta inline-flex items-center justify-center gap-1.5 h-12 px-4 rounded border border-brand-600 dark:border-brand-400 bg-white dark:bg-transparent text-brand-600 dark:text-brand-300"
         >
           <Pencil className="w-4 h-4" /> Edit
         </button>
@@ -260,7 +260,7 @@ const SendButton: React.FC<{ isSubmitting: boolean; onSend: () => void; full?: b
     type="button"
     onClick={onSend}
     disabled={isSubmitting}
-    className={`${full ? 'flex-1' : ''} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-600/20 transition-colors text-[15px] disabled:opacity-60`}
+    className={`cta ${full ? 'flex-1' : ''} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
   >
     {isSubmitting ? (
       <>

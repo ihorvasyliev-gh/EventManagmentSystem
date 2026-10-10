@@ -60,7 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="w-full px-4 py-2.5 bg-brand-600 text-white font-semibold rounded-md hover:bg-brand-700 transition-colors"
+              className="cta w-full px-4 py-2.5 bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors"
             >
               Reload page
             </button>

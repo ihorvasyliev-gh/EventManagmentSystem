@@ -38,7 +38,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
             className="relative flex flex-1 flex-col items-center justify-end h-full min-w-0 pb-1.5"
             aria-label={createLabel}
         >
-            <span className="absolute -top-5 flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30 ring-4 ring-slate-50 dark:ring-slate-900 active:scale-95 transition-transform">
+            <span className="absolute -top-5 flex items-center justify-center w-14 h-14 rounded-leaf-sm bg-brand-600 text-white shadow-lg shadow-brand-600/30 ring-4 ring-slate-50 dark:ring-slate-900 active:scale-95 transition-transform">
                 <Plus className="h-7 w-7" strokeWidth={2.5} />
             </span>
             <span className="text-[10px] font-semibold text-brand-700 dark:text-brand-400 truncate max-w-full">{createLabel}</span>

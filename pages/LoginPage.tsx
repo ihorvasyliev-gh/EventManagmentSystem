@@ -77,14 +77,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   return (
     <div className="relative min-h-[100dvh] bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4 pt-16 sm:p-6">
       <ThemeToggle className="absolute top-3 right-3 z-10 bg-white/80 dark:bg-slate-800/80 shadow-sm" />
-      <div className="w-full max-w-md lg:max-w-4xl grid lg:grid-cols-2 bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden border border-slate-200/70 dark:border-slate-700">
-        {/* Brand panel */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-brand-600 to-brand-800 px-6 py-7 sm:px-8 lg:p-10 text-white flex flex-col">
-          <div className="pointer-events-none absolute -right-16 -top-16 w-64 h-64 rounded-full bg-white/10" aria-hidden="true" />
-          <div className="pointer-events-none absolute right-24 -bottom-20 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
-          <div className="relative bg-white p-2.5 rounded-2xl shadow-md self-center lg:self-start max-w-[260px]">
+      <div className="w-full max-w-md lg:max-w-4xl grid lg:grid-cols-2 bg-white dark:bg-slate-800 rounded-leaf shadow-xl overflow-hidden border border-slate-200/70 dark:border-slate-700">
+        {/* Brand panel: flat raspberry like the site's "Our Mission" box, with its green top bar */}
+        <div className="relative overflow-hidden bg-brand-600 px-6 py-7 sm:px-8 lg:p-10 text-white flex flex-col border-t-[6px] border-ccp-green-500">
+          <div className="relative bg-white p-2.5 rounded-leaf-sm shadow-md self-center lg:self-start max-w-[260px]">
             <img
-              src="/assets/ccp-logo.png"
+              src="/assets/ccp-logo-v2.png"
               alt="Cork City Partnership"
               className="h-11 w-auto object-contain"
               onError={(e) => {
@@ -93,8 +91,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             />
           </div>
           <div className="relative mt-5 lg:mt-auto text-center lg:text-left">
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Event Calendar</h1>
-            <p className="text-brand-100 text-sm mt-1">Staff portal for Cork City Partnership events</p>
+            <p className="hidden lg:flex eyebrow !text-white mb-3">Cork City Partnership</p>
+            <h1 className="text-3xl lg:text-[2.75rem] lg:leading-none font-semibold tracking-[0.02em]">Event Calendar</h1>
+            <p className="text-brand-100 text-sm mt-2">Staff portal for Cork City Partnership events</p>
             <ul className="hidden lg:block mt-6 space-y-2.5 text-sm text-white/90">
               {['See every upcoming event in one calendar', 'Get the events digest as a branded PDF', 'Subscribe from Outlook, Google or Apple Calendar'].map((line) => (
                 <li key={line} className="flex items-start gap-2.5">
@@ -110,7 +109,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
         <div className="px-6 py-7 sm:px-8 lg:p-10">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Sign in</h2>
+              <h2 className="text-2xl font-medium text-slate-900 dark:text-white">Sign in</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Use your staff account to view and manage events.</p>
             </div>
 
@@ -184,14 +183,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center items-center gap-2 bg-brand-600 text-white h-12 rounded-xl font-semibold hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 dark:focus:ring-offset-slate-800 transition-all disabled:opacity-70 shadow-sm"
+              className="cta w-full flex justify-center items-center gap-2 bg-brand-600 text-white h-12 rounded hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 dark:focus:ring-offset-slate-800 transition-all disabled:opacity-70 shadow-sm"
             >
               {isLoading ? <><Loader2 className="animate-spin h-5 w-5" /> Signing in…</> : 'Sign in'}
             </button>
 
             <p className="text-center text-xs text-slate-500 dark:text-slate-400">
               Need an account? Contact{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand-600 dark:text-brand-400 hover:underline font-medium">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand-600 dark:text-brand-300 hover:underline font-medium">
                 {CONTACT_EMAIL}
               </a>
             </p>
@@ -202,9 +201,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
               <button
                 type="button"
                 onClick={onOpenSubmitEvent}
-                className="group w-full flex items-center gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 hover:border-brand-300 hover:bg-brand-50/60 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 text-left transition-colors"
+                className="group w-full flex items-center gap-3 p-4 rounded-leaf-sm border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 hover:border-brand-300 hover:bg-brand-50/60 dark:hover:border-brand-700 dark:hover:bg-brand-950/30 text-left transition-colors"
               >
-                <span className="shrink-0 w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center">
+                <span className="shrink-0 w-10 h-10 rounded-leaf-xs bg-ccp-green-600 text-white flex items-center justify-center">
                   <CalendarPlus className="w-5 h-5" />
                 </span>
                 <span className="flex-1 min-w-0">

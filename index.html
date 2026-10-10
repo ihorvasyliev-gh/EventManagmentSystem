@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#d91b1b" />
+    <meta name="theme-color" content="#B90B4F" />
     <meta name="description" content="CCP Event Calendar - Manage and view community events" />
     
     <!-- Open the connection to this project's Supabase while the app loads (the bare supabase.co host saved nothing) -->
     <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
     <link rel="dns-prefetch" href="%VITE_SUPABASE_URL%" />
-    <link rel="preload" href="/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Lato-Regular.woff2" as="font" type="font/woff2" crossorigin />
     
     <title>CCP Event Calendar</title>
 
@@ -28,15 +28,15 @@
     <style>
       /* Critical CSS - prevents FOUC (Flash of Unstyled Content) */
       .dark body {
-        background-color: #0F172A;
-        color: #F1F5F9;
+        background-color: #222222;
+        color: #F3F3F3;
       }
 
       body {
         margin: 0;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background-color: #F1F5F9;
-        color: #0F172A;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #F3F3F3;
+        color: #222222;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
@@ -51,7 +51,7 @@
         align-items: center;
         justify-content: center;
         min-height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #B90B4F;
       }
       
       .app-loading::after {

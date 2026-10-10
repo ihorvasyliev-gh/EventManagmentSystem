@@ -53,7 +53,7 @@ const fmtTime = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(
 
 /** Tiny schematic of each PDF layout so the choice is visual, not just a label */
 const LayoutThumb: React.FC<{ kind: 'executive' | 'compact'; active: boolean }> = ({ kind, active }) => {
-  const bar = active ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600';
+  const bar = active ? 'bg-[linear-gradient(to_right,#B90B4F_72%,#609C5C_72%)]' : 'bg-slate-300 dark:bg-slate-600';
   const heading = 'bg-slate-300 dark:bg-slate-600';
   const line = 'bg-slate-200 dark:bg-slate-600';
   return (
@@ -62,8 +62,8 @@ const LayoutThumb: React.FC<{ kind: 'executive' | 'compact'; active: boolean }> 
       <div className={`h-1.5 w-1/2 rounded-sm ${heading}`} />
       {kind === 'executive' ? (
         [0, 1].map((i) => (
-          <div key={i} className="flex-1 flex gap-1 rounded-sm border border-slate-200 dark:border-slate-700 p-1">
-            <div className={`w-0.5 rounded-full ${i ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+          <div key={i} className="flex-1 flex gap-1 rounded-tl-[6px] rounded-br-[6px] border border-slate-200 dark:border-slate-700 p-1">
+            <div className={`w-0.5 rounded-full ${i ? 'bg-cat-community-500' : 'bg-cat-enterprise-500'}`} />
             <div className="flex-1 space-y-0.5">
               <div className={`h-1 w-3/4 rounded ${line}`} />
               <div className={`h-1 w-1/2 rounded ${line}`} />
@@ -215,7 +215,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         type="button"
         onClick={handleDownloadPDF}
         disabled={disabled}
-        className="col-span-full sm:order-5 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50"
+        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap col-span-full sm:order-5 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50"
       >
         {busy === 'download' ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
         {busy === 'download' ? 'Generating…' : 'Download PDF'}
@@ -224,7 +224,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         type="button"
         onClick={handlePreviewPDF}
         disabled={disabled}
-        className="sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-brand-600 dark:text-brand-300 bg-white dark:bg-transparent border border-brand-600 dark:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors disabled:opacity-50"
       >
         {busy === 'preview' ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="w-4 h-4" />}
         Preview
@@ -235,7 +235,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           onClick={handleEmail}
           disabled={!rangeValid}
           title="Opens a new email for the Board and staff with the subject and text filled in. Add the recipients and attach the PDF."
-          className="sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-medium text-sky-800 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/30 dark:hover:bg-sky-900/40 border border-sky-200 dark:border-sky-800/60 transition-colors disabled:opacity-50"
+          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
         >
           <Mail className="w-4 h-4 shrink-0" />
           Email
@@ -246,7 +246,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         onClick={handleCopyWhatsApp}
         disabled={!rangeValid}
         title="Copies a plain-text summary for WhatsApp groups"
-        className="sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 rounded-xl text-sm font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/60 transition-colors disabled:opacity-50"
+        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 border border-ccp-green-600 hover:border-ccp-green-700 transition-colors disabled:opacity-50"
       >
         {copied ? <Check className="w-4 h-4 shrink-0" /> : <MessageSquare className="w-4 h-4 shrink-0" />}
         <span className="sm:hidden">{copied ? 'Copied!' : 'WhatsApp'}</span>
@@ -269,20 +269,20 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       <div className="space-y-6">
         {/* 1. Period */}
         <section aria-labelledby="digest-period">
-          <h3 id="digest-period" className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+          <h3 id="digest-period" className="eyebrow mb-3">
             1 · Period
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-100 dark:bg-slate-900/60 rounded-xl">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {PRESETS.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => handleSelectPreset(p.id)}
                 aria-pressed={activePreset === p.id}
-                className={`py-2 px-2 text-sm font-medium rounded-lg transition-all ${
+                className={`py-2 px-2 text-sm font-medium rounded border transition-all ${
                   activePreset === p.id
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-brand-600 border-brand-600 text-white shadow-sm'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-300 hover:border-brand-300 dark:hover:border-brand-700'
                 }`}
               >
                 {p.label}
@@ -319,7 +319,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
 
         {/* 2. Layout */}
         <section aria-labelledby="digest-layout">
-          <h3 id="digest-layout" className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+          <h3 id="digest-layout" className="eyebrow mb-3">
             2 · Layout
           </h3>
           <div className="grid grid-cols-2 gap-3">
@@ -334,15 +334,15 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                   type="button"
                   onClick={() => { setFormat(opt.id); writePref(FORMAT_KEY, opt.id); }}
                   aria-pressed={active}
-                  className={`p-3 rounded-xl border-2 text-left transition-all ${
+                  className={`p-3 rounded-leaf-sm border-2 text-left transition-all ${
                     active
-                      ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-950/30'
+                      ? 'border-brand-600 dark:border-brand-400 bg-brand-50/60 dark:bg-brand-950/30'
                       : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
                 >
                   <LayoutThumb kind={opt.id} active={active} />
                   <span className="mt-2.5 flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-white">
-                    <opt.icon className={`w-4 h-4 ${active ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`} />
+                    <opt.icon className={`w-4 h-4 ${active ? 'text-brand-600 dark:text-brand-300' : 'text-slate-400'}`} />
                     {opt.name}
                   </span>
                   <span className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{opt.hint}</span>
@@ -363,11 +363,13 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
             type="button"
             onClick={() => setShowList((v) => !v)}
             aria-expanded={showList}
-            className="w-full flex items-center justify-between gap-2 mb-2.5"
+            className="w-full flex items-center justify-between gap-3 mb-3"
           >
-            <h3 id="digest-included" className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              3 · Included — {groups.length} {groups.length === 1 ? 'event' : 'events'}
-              {rangeValid && <span className="normal-case tracking-normal font-normal"> over {dayCount} {dayCount === 1 ? 'day' : 'days'}</span>}
+            <h3 id="digest-included" className="eyebrow flex-1">
+              <span>
+                3 · Included — {groups.length} {groups.length === 1 ? 'event' : 'events'}
+                {rangeValid && <span className="normal-case tracking-normal font-normal"> over {dayCount} {dayCount === 1 ? 'day' : 'days'}</span>}
+              </span>
             </h3>
             <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showList ? 'rotate-180' : ''}`} />
           </button>

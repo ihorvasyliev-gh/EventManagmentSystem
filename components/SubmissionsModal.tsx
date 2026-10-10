@@ -108,13 +108,13 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
           <span className="text-sm text-red-700 dark:text-red-300 font-medium">
             {duplicateCount === 1 ? '1 submission looks' : `${duplicateCount} submissions look`} like a duplicate. Approve all anyway?
           </span>
-          <button type="button" onClick={() => setConfirmApproveAll(false)} className="px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+          <button type="button" onClick={() => setConfirmApproveAll(false)} className="cta px-3 py-2 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => { setConfirmApproveAll(false); void handleBatchApprove(); }}
-            className="px-3 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700"
+            className="cta px-3 py-2 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700"
           >
             Approve all
           </button>
@@ -125,7 +125,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
           type="button"
           onClick={() => (duplicateCount > 0 ? setConfirmApproveAll(true) : handleBatchApprove())}
           disabled={isApprovingAll || processingId !== null}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
+          className="cta inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-ccp-green-600 hover:bg-ccp-green-700 text-white rounded shadow-sm transition-colors disabled:opacity-50"
         >
           <CheckCheck className="w-4 h-4" />
           {isApprovingAll ? 'Approving…' : `Approve all ${submissions.length}`}
@@ -149,7 +149,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
       >
         {submissions.length === 0 ? (
           <div className="py-10 text-center">
-            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-ccp-green-50 dark:bg-ccp-green-950/30 text-ccp-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-8 h-8" />
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">All caught up</h3>
@@ -175,14 +175,14 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const listEach = !!perDate || schedule.shared.length > 1 || !!places;
 
               return (
-                <li key={event.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden">
+                <li key={event.id} className="rounded-leaf-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 overflow-hidden">
                   <div className="p-4 sm:p-5 flex gap-4">
                     <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                         <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(event.category)}`} aria-hidden="true" />
                         <span className="truncate">{event.category || 'Event'}</span>
                       </div>
-                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug break-words">{event.title}</h3>
+                      <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white leading-snug break-words">{event.title}</h3>
 
                       <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
                         {listEach ? (
@@ -268,7 +268,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setApproveConfirmId(null)}
-                          className="px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                          className="cta px-3 py-2 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
                         >
                           Cancel
                         </button>
@@ -276,7 +276,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           type="button"
                           onClick={() => { setApproveConfirmId(null); void handleSingleApprove(event); }}
                           disabled={isProcessing}
-                          className="px-3 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                          className="cta px-3 py-2 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 disabled:opacity-50"
                         >
                           Approve anyway
                         </button>
@@ -287,7 +287,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setRejectConfirmId(null)}
-                          className="px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+                          className="cta px-3 py-2 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
                         >
                           Keep
                         </button>
@@ -295,7 +295,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           type="button"
                           onClick={() => handleSingleReject(event.id)}
                           disabled={isProcessing}
-                          className="px-3 py-2 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                          className="cta px-3 py-2 rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
                         >
                           {isProcessing ? 'Deleting…' : 'Yes, decline'}
                         </button>
@@ -306,7 +306,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           type="button"
                           onClick={() => setRejectConfirmId(event.id)}
                           disabled={isProcessing}
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors sm:mr-auto"
+                          className="cta inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors sm:mr-auto"
                           title="Decline / delete submission"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -319,7 +319,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                             onClose();
                           }}
                           disabled={isProcessing}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                          className="cta inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
                         >
                           <Pencil className="w-4 h-4" />
                           Edit
@@ -328,7 +328,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           type="button"
                           onClick={() => (duplicate ? setApproveConfirmId(event.id) : handleSingleApprove(event))}
                           disabled={isProcessing || isApprovingAll}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-50"
+                          className="cta inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 shadow-sm transition-colors disabled:opacity-50"
                         >
                           <Check className="w-4 h-4" />
                           {isProcessing ? 'Publishing…' : 'Approve'}

@@ -27,7 +27,7 @@ const SIZE_CLASS: Record<NonNullable<ModalShellProps['size']>, string> = {
 let scrollLocks = 0;
 
 /**
- * Shared dialog frame: a bottom sheet on phones and a centred card from `sm` up.
+ * Shared dialog frame: a bottom sheet on phones and a centred "leaf" card (the site's shape) from `sm` up.
  * Header and footer stay visible while the body scrolls.
  */
 const ModalShell: React.FC<ModalShellProps> = ({
@@ -73,7 +73,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative outline-none w-full ${SIZE_CLASS[size]} max-h-[92dvh] sm:max-h-[88vh] flex flex-col bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up overflow-hidden`}
+        className={`relative outline-none w-full ${SIZE_CLASS[size]} max-h-[92dvh] sm:max-h-[88vh] flex flex-col bg-white dark:bg-slate-800 rounded-tl-[24px] rounded-tr-md sm:rounded-leaf shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up overflow-hidden`}
       >
         {/* Grab handle hints that the sheet is a layer above the page on phones */}
         <div className="sm:hidden flex justify-center pt-2.5" aria-hidden="true">
@@ -82,12 +82,12 @@ const ModalShell: React.FC<ModalShellProps> = ({
 
         <div className="flex items-start gap-3 px-5 sm:px-6 pt-3 sm:pt-5 pb-4 border-b border-slate-100 dark:border-slate-700/80">
           {icon && (
-            <div className="shrink-0 p-2 rounded-xl bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400">
+            <div className="shrink-0 p-2 rounded-leaf-xs bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300">
               {icon}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h2 id={titleId} className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+            <h2 id={titleId} className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-white leading-tight">
               {title}
             </h2>
             {subtitle && <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}

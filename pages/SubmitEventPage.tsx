@@ -108,11 +108,11 @@ const FieldError: React.FC<{ id: string; message?: string }> = ({ id, message })
   ) : null;
 
 const Section: React.FC<{ step: number; title: string; hint?: string; children: React.ReactNode }> = ({ step, title, hint, children }) => (
-  <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
+  <section className="bg-white dark:bg-slate-800 rounded-leaf-sm sm:rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
     <div className="flex items-start gap-3 mb-4 sm:mb-5">
-      <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600 text-white text-sm font-bold flex items-center justify-center">{step}</span>
+      <span className="shrink-0 w-7 h-7 rounded-leaf-xs bg-brand-600 text-white text-sm font-bold flex items-center justify-center">{step}</span>
       <div>
-        <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white leading-7">{title}</h2>
+        <h2 className="text-lg sm:text-xl font-medium text-slate-900 dark:text-white leading-7">{title}</h2>
         {hint && <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{hint}</p>}
       </div>
     </div>
@@ -454,12 +454,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         <div className="max-w-lg w-full animate-scale-in">
           <div className="text-center mb-6">
             <div className="relative w-16 h-16 mx-auto mb-4">
-              <span className="absolute inset-0 rounded-full bg-emerald-400/30 animate-ping [animation-iteration-count:2]" aria-hidden="true" />
-              <span className="relative w-16 h-16 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <span className="absolute inset-0 rounded-full bg-ccp-green-400/30 animate-ping [animation-iteration-count:2]" aria-hidden="true" />
+              <span className="relative w-16 h-16 bg-ccp-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-ccp-green-500/30">
                 <CheckCircle2 className="w-9 h-9" />
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white">
               {isAdmin ? 'Event published' : 'Thank you — event sent!'}
             </h1>
             <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300">
@@ -469,7 +469,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </p>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-leaf shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="flex gap-4 p-4 sm:p-5">
               {submitted.posterUrl && (
                 <img src={submitted.posterUrl} alt="" className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 object-cover rounded-xl border border-slate-200 dark:border-slate-700" />
@@ -498,7 +498,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {steps.map(([label, hint, state], i) => (
                 <li key={label} className="flex items-start gap-3">
                   <span className={`mt-0.5 w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold ${
-                    state === 'done' ? 'bg-emerald-500 text-white'
+                    state === 'done' ? 'bg-ccp-green-500 text-white'
                       : state === 'current' ? 'bg-amber-400 text-amber-950'
                       : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
                   }`}>
@@ -517,7 +517,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             <button
               type="button"
               onClick={handleSubmitAnother}
-              className="flex-1 h-12 px-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-sm transition-colors text-sm"
+              className="cta flex-1 h-12 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-sm transition-colors"
             >
               {isAdmin ? 'Create another event' : 'Submit another event'}
             </button>
@@ -525,7 +525,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               <button
                 type="button"
                 onClick={onBackToLogin}
-                className="flex-1 h-12 px-4 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors text-sm"
+                className="cta flex-1 h-12 px-4 bg-white hover:bg-brand-50 dark:bg-transparent dark:hover:bg-brand-950/40 border border-brand-600 dark:border-brand-400 text-brand-600 dark:text-brand-300 rounded transition-colors"
               >
                 {currentUser ? 'Back to calendar' : 'Go to staff login'}
               </button>
@@ -574,7 +574,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             <button
               type="button"
               onClick={onBackToLogin}
-              className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+              className="inline-flex items-center gap-1.5 h-10 px-2.5 -ml-1 rounded-xl text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
               <span className="hidden min-[340px]:inline">{backLabel}</span>
@@ -582,7 +582,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           )}
           <ThemeToggle className="ml-auto" />
           <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs">
-            <img src="/assets/ccp-logo.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
+            <img src="/assets/ccp-logo-v2.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
           </span>
         </div>
       </header>
@@ -592,10 +592,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           <div className="min-w-0">
             {/* Intro */}
             <div className="mb-5 sm:mb-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
-                {isAdmin ? 'Admin · publishes immediately' : 'Staff event form · no login needed'}
+              <p className="eyebrow max-w-md">
+                <span>{isAdmin ? 'Admin · publishes immediately' : 'Staff event form · no login needed'}</span>
               </p>
-              <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+              <h1 className="mt-2 text-2xl sm:text-[2.375rem] sm:leading-tight font-medium text-slate-900 dark:text-white">
                 {isAdmin ? 'Create a new event' : 'Submit an upcoming event'}
               </h1>
               <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
@@ -605,7 +605,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               </p>
 
               {!isAdmin && (
-                <details className="mt-3 group rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/50 p-3.5 sm:p-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition-colors">
+                <details className="mt-3 group rounded-leaf-sm border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/50 p-3.5 sm:p-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300 transition-colors">
                   <summary className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer list-none select-none">
                     <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
                     <span>What can be included? Guidelines from CEO</span>
@@ -668,10 +668,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                       return (
                         <label
                           key={cat}
-                          className={`relative inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-full border text-sm font-medium cursor-pointer select-none transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+                          className={`relative inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded border text-sm font-medium cursor-pointer select-none transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                             selected
-                              ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                              : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/40 text-slate-700 dark:text-slate-200 hover:border-slate-400 dark:hover:border-slate-400'
+                              ? 'border-brand-600 bg-brand-600 text-white'
+                              : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/40 text-slate-700 dark:text-slate-200 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-700 dark:hover:text-brand-300'
                           }`}
                         >
                           <input
@@ -682,7 +682,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                             onChange={() => setCategory(cat)}
                             className="sr-only"
                           />
-                          <span className={`w-2.5 h-2.5 rounded-full ${getCategoryDotColor(cat)}`} aria-hidden="true" />
+                          <span className={`w-2.5 h-2.5 rounded-full ${getCategoryDotColor(cat)} ${selected ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
                           {cat}
                         </label>
                       );
@@ -941,8 +941,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
           {/* Sidebar: live preview + what happens next (desktop) */}
           <aside className="hidden lg:block sticky top-24 space-y-4" aria-label="Preview">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="px-5 pt-4 pb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-slate-800 rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="px-5 pt-4 pb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-600 dark:text-brand-300">
                 <Sparkles className="w-3.5 h-3.5" /> Preview
               </div>
               {posterPreview ? (
@@ -980,7 +980,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             </div>
 
             {!isAdmin && (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+              <div className="rounded-leaf-sm border border-slate-200 dark:border-slate-700 p-5 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5 flex items-center gap-2">
                     <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
@@ -999,7 +999,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                       ['It’s published', 'On the calendar and in Friday’s digest.']
                     ].map(([head, sub], i) => (
                       <li key={head} className="flex gap-3">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">{i + 1}</span>
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-ccp-green-600 text-xs font-bold flex items-center justify-center text-white">{i + 1}</span>
                         <span>
                           <span className="block font-medium text-slate-800 dark:text-slate-200">{head}</span>
                           <span className="text-xs text-slate-500 dark:text-slate-400">{sub}</span>
@@ -1027,7 +1027,7 @@ const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; full?: b
     type="submit"
     form="submit-event-form"
     disabled={isSubmitting}
-    className={`${full ? 'w-full' : 'shrink-0'} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-600/20 transition-colors text-[15px] disabled:opacity-60`}
+    className={`cta ${full ? 'w-full' : 'shrink-0'} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
   >
     {isSubmitting ? (
       <>

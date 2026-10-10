@@ -67,11 +67,11 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
   const getIcon = (type: ToastType) => {
     switch (type) {
       case 'success':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle className="h-5 w-5 text-ccp-green-500" />;
       case 'error':
         return <AlertCircle className="h-5 w-5 text-red-500" />;
       case 'warning':
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
       default:
         return <Info className="h-5 w-5 text-blue-500" />;
     }
@@ -81,22 +81,22 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
     if (isDark) {
       switch (type) {
         case 'success':
-          return 'bg-green-900/90 border-green-700 text-green-100';
+          return 'bg-ccp-green-900/90 border-ccp-green-700 text-ccp-green-100';
         case 'error':
           return 'bg-red-900/90 border-red-700 text-red-100';
         case 'warning':
-          return 'bg-yellow-900/90 border-yellow-700 text-yellow-100';
+          return 'bg-amber-900/90 border-amber-700 text-amber-100';
         default:
           return 'bg-blue-900/90 border-blue-700 text-blue-100';
       }
     }
     switch (type) {
       case 'success':
-        return 'bg-green-50 border-green-200 text-green-800';
+        return 'bg-ccp-green-50 border-ccp-green-200 text-ccp-green-800';
       case 'error':
         return 'bg-red-50 border-red-200 text-red-800';
       case 'warning':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+        return 'bg-amber-50 border-amber-200 text-amber-800';
       default:
         return 'bg-blue-50 border-blue-200 text-blue-800';
     }

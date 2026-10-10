@@ -43,47 +43,54 @@ const isEventOnDay = (event: Event, day: Date): boolean => {
   return target >= s && target <= e;
 };
 
-export const getCategoryColor = (category?: EventCategory): string => {
-  if (!category) return 'bg-brand-50 text-brand-800 dark:bg-brand-900 dark:text-brand-100';
+// Category colours (Tailwind cat-* scales, mirrored for the PDF in constants/categoryColors.ts)
+const CATEGORY_TONE: Record<string, string> = {
+  'Enterprise & Employment': 'enterprise',
+  'Community & Family': 'community',
+  'Education & Training': 'education',
+  'Special Visits & Celebrations': 'special',
+  'Public Information Session': 'info',
+  'Health & Wellbeing': 'health',
+  Other: 'other',
+  // Older category names
+  meeting: 'enterprise',
+  workshop: 'education',
+  social: 'health',
+  training: 'community',
+  community: 'special',
+  celebration: 'special',
+  other: 'other'
+};
 
-  const colors: Record<string, string> = {
-    'Enterprise & Employment': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
-    'Community & Family': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100',
-    'Education & Training': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
-    'Special Visits & Celebrations': 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
-    'Public Information Session': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-100',
-    'Health & Wellbeing': 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-100',
-    'Other': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100',
-    meeting: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
-    workshop: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
-    social: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-100',
-    training: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100',
-    community: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100',
-    celebration: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
-    other: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
-  };
-  return colors[category] || colors.Other || colors.other;
+// Full class names, so Tailwind finds them. The border colour only shows where a chip sets a border width.
+const CHIP_CLASSES: Record<string, string> = {
+  enterprise: 'bg-cat-enterprise-100 text-cat-enterprise-800 border-cat-enterprise-500 dark:bg-cat-enterprise-900 dark:text-cat-enterprise-100 dark:border-cat-enterprise-400',
+  community: 'bg-cat-community-100 text-cat-community-800 border-cat-community-500 dark:bg-cat-community-900 dark:text-cat-community-100 dark:border-cat-community-400',
+  education: 'bg-cat-education-100 text-cat-education-800 border-cat-education-500 dark:bg-cat-education-900 dark:text-cat-education-100 dark:border-cat-education-400',
+  special: 'bg-cat-special-100 text-cat-special-800 border-cat-special-500 dark:bg-cat-special-900 dark:text-cat-special-100 dark:border-cat-special-400',
+  info: 'bg-cat-info-100 text-cat-info-800 border-cat-info-500 dark:bg-cat-info-900 dark:text-cat-info-100 dark:border-cat-info-400',
+  health: 'bg-cat-health-100 text-cat-health-800 border-cat-health-500 dark:bg-cat-health-900 dark:text-cat-health-100 dark:border-cat-health-400',
+  other: 'bg-cat-other-100 text-cat-other-800 border-cat-other-400 dark:bg-cat-other-800 dark:text-cat-other-100 dark:border-cat-other-500'
+};
+
+const DOT_CLASSES: Record<string, string> = {
+  enterprise: 'bg-cat-enterprise-500',
+  community: 'bg-cat-community-500',
+  education: 'bg-cat-education-500',
+  special: 'bg-cat-special-500',
+  info: 'bg-cat-info-500',
+  health: 'bg-cat-health-500',
+  other: 'bg-cat-other-400'
+};
+
+export const getCategoryColor = (category?: EventCategory): string => {
+  if (!category) return 'bg-brand-50 text-brand-800 border-brand-500 dark:bg-brand-900 dark:text-brand-100 dark:border-brand-400';
+  return CHIP_CLASSES[CATEGORY_TONE[category] ?? 'other'];
 };
 
 export const getCategoryDotColor = (category?: EventCategory): string => {
   if (!category) return 'bg-brand-500';
-  const colors: Record<string, string> = {
-    'Enterprise & Employment': 'bg-blue-500',
-    'Community & Family': 'bg-emerald-500',
-    'Education & Training': 'bg-purple-500',
-    'Special Visits & Celebrations': 'bg-amber-500',
-    'Public Information Session': 'bg-cyan-500',
-    'Health & Wellbeing': 'bg-rose-500',
-    'Other': 'bg-slate-400',
-    meeting: 'bg-blue-500',
-    workshop: 'bg-purple-500',
-    social: 'bg-pink-500',
-    training: 'bg-emerald-500',
-    community: 'bg-orange-500',
-    celebration: 'bg-amber-500',
-    other: 'bg-slate-400'
-  };
-  return colors[category] || 'bg-brand-500';
+  return DOT_CLASSES[CATEGORY_TONE[category]] ?? 'bg-brand-500';
 };
 
 const formatTimeRange = (event: Event): string => {

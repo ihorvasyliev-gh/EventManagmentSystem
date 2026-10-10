@@ -337,7 +337,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
                 disabled:cursor-not-allowed disabled:opacity-50
                 ${
                   isSelected
-                    ? 'bg-brand-500 text-white font-semibold shadow-sm hover:bg-brand-600' +
+                    ? 'bg-brand-600 text-white font-semibold shadow-sm hover:bg-brand-700' +
                       (isToday ? ' ring-2 ring-brand-300 dark:ring-brand-400 ring-offset-1' : '')
                     : isToday
                     ? 'border-2 border-brand-500 text-brand-600 dark:text-brand-400 font-bold bg-brand-50/60 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/40'

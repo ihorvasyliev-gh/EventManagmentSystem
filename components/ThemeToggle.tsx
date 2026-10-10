@@ -12,7 +12,7 @@ const ThemeToggle: React.FC<{ className?: string }> = ({ className = '' }) => {
       onClick={toggleTheme}
       title={label}
       aria-label={label}
-      className={`inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800 transition-colors ${className}`}
+      className={`inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-600 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors ${className}`}
     >
       {theme === 'light' ? <Moon className="h-[18px] w-[18px]" /> : <Sun className="h-[18px] w-[18px]" />}
     </button>

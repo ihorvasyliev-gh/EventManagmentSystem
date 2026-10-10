@@ -56,19 +56,19 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({ isOpen, onClose }) => {
 
   const footer = created ? (
     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-      <button type="button" onClick={handleClose} className="h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+      <button type="button" onClick={handleClose} className="cta h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
         Done
       </button>
-      <button type="button" onClick={reset} className="h-11 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
+      <button type="button" onClick={reset} className="cta h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white">
         Add another
       </button>
     </div>
   ) : (
     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-      <button type="button" onClick={handleClose} disabled={isSaving} className="h-11 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60">
+      <button type="button" onClick={handleClose} disabled={isSaving} className="cta h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60">
         Cancel
       </button>
-      <button type="submit" form="add-staff-form" disabled={isSaving} className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-60">
+      <button type="submit" form="add-staff-form" disabled={isSaving} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
         {isSaving ? 'Creating…' : 'Create account'}
       </button>
@@ -86,7 +86,7 @@ const AddStaffModal: React.FC<AddStaffModalProps> = ({ isOpen, onClose }) => {
     >
       {created ? (
         <div className="text-center py-4">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-ccp-green-100 dark:bg-ccp-green-900/30 text-ccp-green-600 dark:text-ccp-green-400 flex items-center justify-center">
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <p className="text-lg font-semibold text-slate-900 dark:text-white">Account created</p>

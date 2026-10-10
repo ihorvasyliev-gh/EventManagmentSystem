@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/assets/ccp-logo.png" alt="Cork City Partnership" height="72" />
+<img src="public/assets/ccp-logo-v2.png" alt="Cork City Partnership" height="72" />
 
 # CCP Event Calendar
 
@@ -27,6 +27,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | ✅ **RSVPs & comments** | Both are tracked per occurrence. The browser reminds you the day before an event you've joined. |
 | 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
 | 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar. |
+| 🎨 **Cork City Partnership look** | Colours, Lato type, buttons and leaf-shaped boxes follow [corkcitypartnership.ie](https://corkcitypartnership.ie/), in light and dark mode, on screen and in the PDF. |
 | 🌙 **Comfort features** | Dark mode, keyboard shortcuts (`/` `←` `→` `T` `C` `E` `Esc`), pull-to-refresh and offline caching. |
 
 ## The fortnightly routine
@@ -152,7 +153,7 @@ The Pages Functions read the same Supabase variables at runtime. If the server s
 │   ├── recurrence.ts        Expands recurring events
 │   └── export.ts            ICS and Excel export
 ├── functions/api/           Cloudflare Pages Functions (upload, files, ICS feed)
-├── public/                  Logo, Inter fonts for the PDF, PWA manifest, service worker
+├── public/                  Logo, Lato fonts (site and PDF), PWA manifest, service worker
 ├── tests/                   Unit tests (node --test)
 ├── *.sql                    Database setup and migrations
 └── docs/                    Coordinator and staff guides

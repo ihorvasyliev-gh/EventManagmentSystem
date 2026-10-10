@@ -152,13 +152,18 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 ## Project layout
 
 ```
-├── App.tsx                  App shell: modals and event actions
-├── hooks/                   useSession, useEventsSync (load, cache, live updates), form helpers
-├── pages/                   Login and the public /submit form
-├── components/              Calendar and week views, event window, digest, export, inbox, staff, statistics
+├── App.tsx                  App shell: page layout and which window is open
+├── hooks/                   Session, events sync (load, cache, live updates), event and inbox actions,
+│                            links into the app, the /submit route, form helpers
+├── pages/                   Login and the /submit form
+├── components/
+│   ├── calendar/            Month grid, agenda, day popover, header (CalendarView puts them together)
+│   ├── event-modal/         Event details, the edit form and its sections, delete / category dialogs
+│   ├── submit/              /submit form sections, review and thank-you screens, saved draft
+│   └── …                    Week view, digest, export, inbox, staff, statistics, navigation
 ├── services/                Supabase and /api access: events, submissions, files, staff, auth
 ├── utils/
-│   ├── pdf/                 Events Digest PDF (digest.ts and its parts) and WhatsApp text
+│   ├── pdf/                 Events Digest PDF (digest/: layouts, page parts) and WhatsApp text
 │   ├── digestText.ts        Covering email for the digest (and helpers the PDF shares)
 │   ├── recurrence.ts        Expands recurring events
 │   └── export.ts            ICS and Excel export

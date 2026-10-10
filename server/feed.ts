@@ -159,27 +159,8 @@ export function expandRecurring(
             if (inclusiveEnd < endLimit) endLimit = inclusiveEnd;
         }
 
-        // Weekly on specific days of the week
-        if (type === 'weekly' && ev.recurrence_days_of_week && ev.recurrence_days_of_week.length > 0) {
-            const days = [...ev.recurrence_days_of_week].sort((a, b) => a - b);
-            const weekday = new Date(Date.UTC(base.y, base.m, base.d)).getUTCDay();
-            let count = 0;
-            for (let week = 0; week < MAX_INSTANCES_PER_EVENT && count < maxOccurrences; week++) {
-                const weekStartDay = base.d - weekday + week * 7 * interval;
-                let passedEnd = false;
-                for (const dow of days) {
-                    const start = fromWall(base.y, base.m, weekStartDay + dow, base.h, base.mi, base.s);
-                    if (start < baseStart) continue;
-                    if (start > endLimit) { passedEnd = true; break; }
-                    if (count >= maxOccurrences) break;
-                    count++;
-                    pushInstance(start);
-                }
-                if (passedEnd) break;
-            }
-            continue;
-        }
-
+        // (recurrence_days_of_week is not used: the app has no way to set it and ignores it,
+        // and the feed must list exactly what the calendar shows)
         for (let k = 0; k < MAX_INSTANCES_PER_EVENT && k < maxOccurrences; k++) {
             const start = nthOccurrence(base, type, k * interval);
             if (start > endLimit) break;

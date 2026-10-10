@@ -1,8 +1,13 @@
+# Content-Security-Policy: scripts only from this site (and Cloudflare Turnstile, the public
+# form's bot check), data only from this site and Supabase. Inline styles stay allowed (the page
+# and React set them); inline scripts don't (index.html loads /theme-init.js instead).
+# blob: is for the PDF preview, flyer previews and the PDF.js worker.
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' blob: data: https://*.supabase.co wss://*.supabase.co; worker-src 'self' blob:; frame-src 'self' blob: https://challenges.cloudflare.com; object-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  X-XSS-Protection: 1; mode=block
   Permissions-Policy: geolocation=(), microphone=(), camera=()
 
 # HTML - no cache, always revalidate

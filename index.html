@@ -12,17 +12,13 @@
     <link rel="preload" href="/fonts/Lato-Regular.woff2" as="font" type="font/woff2" crossorigin />
     
     <title>CCP Event Calendar</title>
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
 
     <!-- Apply the saved (or system) theme before first paint to avoid a light flash in dark mode -->
-    <script>
-      (function () {
-        try {
-          var saved = localStorage.getItem('theme');
-          var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (dark) document.documentElement.classList.add('dark');
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
     
     <!-- Inline Critical CSS for Above-the-Fold Content -->
     <style>

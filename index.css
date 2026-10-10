@@ -54,6 +54,8 @@
 }
 
 :root {
+    /* text-slate-400 (tailwind.config.js): readable grey for light and dark mode */
+    --text-muted: 115 115 115;
     --font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -76,6 +78,7 @@ html {
 
 .dark {
     accent-color: #DD7AA3;
+    --text-muted: 163 163 163;
 }
 
 /* The theme class lives on <html> (ThemeContext), so target body through it */

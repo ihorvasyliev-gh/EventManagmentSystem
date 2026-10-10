@@ -997,7 +997,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(category)}`} /> {category}
                 </span>
-                <p className={`text-lg font-bold leading-snug break-words ${title.trim() ? 'text-slate-900 dark:text-white' : 'text-slate-300 dark:text-slate-600'}`}>
+                <p className={`text-lg font-bold leading-snug break-words ${title.trim() ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
                   {title.trim() || 'Your event name'}
                 </p>
                 <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -1012,7 +1012,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                 </p>
                 <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
                   <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                  <span className="break-words">{placeLabel || <span className="text-slate-300 dark:text-slate-600">Venue</span>}</span>
+                  <span className="break-words">{placeLabel || <span className="text-slate-400">Venue</span>}</span>
                 </p>
                 {description.trim() && (
                   <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-4 whitespace-pre-line">{description.trim()}</p>

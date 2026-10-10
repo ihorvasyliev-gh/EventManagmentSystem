@@ -76,6 +76,12 @@ export default {
         'leaf-sm': '16px 0 16px 0',
         'leaf-xs': '10px 0 10px 0',
       },
+      // Muted text (text-slate-400): #A3A3A3 is too faint to read on white (2.5:1), so in light
+      // mode it is #737373 (4.7:1); dark mode keeps #A3A3A3, which reads well on #222.
+      // Only text changes: borders and backgrounds keep the site's greys.
+      textColor: {
+        slate: { ...neutral, 400: 'rgb(var(--text-muted) / <alpha-value>)' },
+      },
       colors: {
         slate: neutral,
         brand: {

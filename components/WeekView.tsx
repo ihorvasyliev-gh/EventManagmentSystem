@@ -398,7 +398,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     const colorClass = getCategoryColor(event.category);
                     const timeText = formatTimeRange(event);
                     const isMulti = isMultiDayEvent(event.date, event.endDate);
-                    const statusClass = event.status === 'draft' ? 'opacity-70 border-dashed' : '';
+                    const statusClass = event.status === 'draft' ? 'border-dashed italic' : '';
 
                     return (
                       <div

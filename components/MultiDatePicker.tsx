@@ -343,7 +343,8 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
                     ? 'border-2 border-brand-500 text-brand-600 dark:text-brand-400 font-bold bg-brand-50/60 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/40'
                     : cell.inMonth
                     ? 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                    : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                    // Days of the next/previous month can be picked too, so they stay readable
+                    : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
                 }
               `}
             >

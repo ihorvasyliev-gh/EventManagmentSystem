@@ -16,7 +16,7 @@ const SubmissionsBanner: React.FC<{ submissions: Event[]; onOpen: () => void }> 
       <span className="block text-sm font-semibold text-amber-900 dark:text-amber-100">
         {submissions.length} {submissions.length === 1 ? 'submission is' : 'submissions are'} waiting for review
       </span>
-      <span className="block text-xs text-amber-800/80 dark:text-amber-200/70 truncate">
+      <span className="block text-xs text-amber-800 dark:text-amber-200/80 truncate">
         {submissions.slice(0, 3).map((e) => e.title).join(' · ')}
       </span>
     </span>

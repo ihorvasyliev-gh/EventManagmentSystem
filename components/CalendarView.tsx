@@ -682,7 +682,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                       <div className="space-y-0.5 sm:space-y-1">
                         {dayEvents.slice(0, 3).map(ev => {
                           const colorClass = getCategoryColor(ev.category);
-                          const statusClass = ev.status === 'draft' ? 'opacity-70 dashed-border' : '';
+                          const statusClass = ev.status === 'draft' ? 'dashed-border italic' : '';
                           const rangeStr = formatEventRangeText(ev);
                           const itemTitle = `${ev.title}${rangeStr ? ` (${rangeStr})` : ''}${ev.status === 'draft' ? ' — pending review' : ''}`;
                           const timeStr = formatClock(ev.date);
@@ -696,7 +696,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               className={`w-full text-left ${colorClass} border-l-2 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm truncate lg:whitespace-normal lg:line-clamp-2 lg:break-words leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                               title={itemTitle}
                             >
-                              {!isContinuation && <span className="hidden lg:inline font-bold mr-1 opacity-80">{timeStr}</span>}
+                              {!isContinuation && <span className="hidden lg:inline font-bold mr-1">{timeStr}</span>}
                               {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                               {ev.title}
                             </div>

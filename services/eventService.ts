@@ -1,417 +1,59 @@
-import { Event, Attachment, EventComment, EventHistoryEntry, RecurrenceRule } from '../types';
+import { Event, Attachment, EventHistoryEntry, RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
+import { fetchAllPages } from './paging';
+import { EVENT_COLUMNS, EventRow, AttachmentRow, HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, eventToRow, toIsoList } from './eventMapper';
+import { deleteStoredFiles } from './fileService';
 
-/** Columns added by later migrations: while a database doesn't have one yet, events are saved without it. */
-const OPTIONAL_COLUMNS = {
-  recurrence_custom_end_dates: 'add-custom-end-dates-migration.sql',
-  recurrence_custom_locations: 'add-custom-locations-migration.sql',
-} as const;
-type OptionalColumn = keyof typeof OPTIONAL_COLUMNS;
+export { uploadPoster as uploadPosterToR2 } from './fileService';
 
-const toIsoList = (dates?: Date[]): string[] | null =>
-  dates ? dates.map(d => (d instanceof Date ? d : new Date(d)).toISOString()) : null;
-
-/**
- * Runs an insert/update and, if it fails because an optional column is missing from the
- * database, retries without that column (per-date times fall back to the series time,
- * per-date addresses to the event's own location).
- */
-async function withOptionalColumns<T extends { error: { message?: string } | null }>(
-  payload: Record<string, any>,
-  run: (payload: Record<string, any>) => PromiseLike<T>
-): Promise<T> {
-  let current = payload;
-  let result = await run(current);
-  let missing: string | undefined;
-  while (result.error && (missing = (Object.keys(OPTIONAL_COLUMNS) as OptionalColumn[]).find(col => col in current && result.error?.message?.includes(col)))) {
-    console.warn(`Database column "${missing}" is missing: run ${OPTIONAL_COLUMNS[missing as OptionalColumn]}. Saving without it.`);
-    const { [missing]: _dropped, ...rest } = current;
-    current = rest;
-    result = await run(current);
-  }
-  return result;
-}
-
-interface RelatedData {
-  attachmentsByEvent: Record<string, Attachment[]>;
-  commentsByEvent: Record<string, EventComment[]>;
-  historyByEvent: Record<string, EventHistoryEntry[]>;
-  rsvpsByEvent: Record<string, string[]>;
-  rsvpNamesByEvent: Record<string, { userId: string; userName: string }[]>;
-}
-
-/** Пакетная загрузка связанных данных для списка событий (4 запроса вместо 4×N) */
-const fetchRelatedBatch = async (eventIds: string[]): Promise<RelatedData> => {
-  if (eventIds.length === 0) {
-    return { attachmentsByEvent: {}, commentsByEvent: {}, historyByEvent: {}, rsvpsByEvent: {}, rsvpNamesByEvent: {} };
-  }
-
-  const [attachmentsRes, commentsRes, historyRes, rsvpsRes] = await Promise.all([
-    supabase
-      .from('event_attachments')
-      .select('*')
-      .in('event_id', eventIds)
-      .order('uploaded_at', { ascending: true }),
-    supabase
-      .from('event_comments')
-      .select('*')
-      .in('event_id', eventIds)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('event_history')
-      .select('*')
-      .in('event_id', eventIds)
-      .order('timestamp', { ascending: true }),
-    supabase
-      .from('rsvps')
-      .select('event_id, user_id, user_name')
-      .in('event_id', eventIds)
-      .eq('status', 'going')
-  ]);
-
-  const attachmentsByEvent: Record<string, Attachment[]> = {};
-  const commentsByEvent: Record<string, EventComment[]> = {};
-  const historyByEvent: Record<string, EventHistoryEntry[]> = {};
-  const rsvpsByEvent: Record<string, string[]> = {};
-  const rsvpNamesByEvent: Record<string, { userId: string; userName: string }[]> = {};
-
-  for (const att of attachmentsRes.data || []) {
-    const list = attachmentsByEvent[att.event_id] ??= [];
-    list.push({
-      id: att.id,
-      name: att.name,
-      url: att.url,
-      type: att.type,
-      size: att.size,
-      uploadedAt: new Date(att.uploaded_at)
-    });
-  }
-
-  for (const c of commentsRes.data || []) {
-    const list = commentsByEvent[c.event_id] ??= [];
-    list.push({
-      id: c.id,
-      eventId: c.event_id,
-      occurrenceDate: c.occurrence_date ? new Date(c.occurrence_date) : new Date(0),
-      userId: c.user_id,
-      userName: c.user_name,
-      content: c.content,
-      createdAt: new Date(c.created_at)
-    });
-  }
-
-  for (const h of historyRes.data || []) {
-    const list = historyByEvent[h.event_id] ??= [];
-    list.push({
-      id: h.id,
-      eventId: h.event_id,
-      userId: h.user_id,
-      userName: h.user_name,
-      action: h.action,
-      changes: h.changes || undefined,
-      timestamp: new Date(h.timestamp)
-    });
-  }
-
-  for (const r of rsvpsRes.data || []) {
-    const list = rsvpsByEvent[r.event_id] ??= [];
-    list.push(r.user_id);
-    const nameList = rsvpNamesByEvent[r.event_id] ??= [];
-    nameList.push({ userId: r.user_id, userName: r.user_name });
-  }
-
-  return { attachmentsByEvent, commentsByEvent, historyByEvent, rsvpsByEvent, rsvpNamesByEvent };
-};
-
-// Загрузка связанных данных для одного события (create/update/addComment).
-// occurrenceDate — дата вхождения (для повторяющихся событий — конкретное вхождение).
-const fetchRelatedForOne = async (eventId: string, occurrenceDate: Date): Promise<RelatedData> => {
-  const occurrenceIso = occurrenceDate.toISOString();
-  const [attachmentsRes, commentsRes, historyRes, rsvpsRes] = await Promise.all([
-    supabase
-      .from('event_attachments')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('uploaded_at', { ascending: true }),
-    supabase
-      .from('event_comments')
-      .select('*')
-      .eq('event_id', eventId)
-      .eq('occurrence_date', occurrenceIso)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('event_history')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('timestamp', { ascending: true }),
-    supabase
-      .from('rsvps')
-      .select('user_id, user_name')
-      .eq('event_id', eventId)
-      .eq('occurrence_date', occurrenceIso)
-      .eq('status', 'going')
-  ]);
-
-  const attachments: Attachment[] = (attachmentsRes.data || []).map((att: any) => ({
-    id: att.id,
-    name: att.name,
-    url: att.url,
-    type: att.type,
-    size: att.size,
-    uploadedAt: new Date(att.uploaded_at)
-  }));
-  const comments: EventComment[] = (commentsRes.data || []).map((c: any) => ({
-    id: c.id,
-    eventId: c.event_id,
-    occurrenceDate: new Date(c.occurrence_date),
-    userId: c.user_id,
-    userName: c.user_name,
-    content: c.content,
-    createdAt: new Date(c.created_at)
-  }));
-  const history: EventHistoryEntry[] = (historyRes.data || []).map((h: any) => ({
-    id: h.id,
-    eventId: h.event_id,
-    userId: h.user_id,
-    userName: h.user_name,
-    action: h.action,
-    changes: h.changes || undefined,
-    timestamp: new Date(h.timestamp)
-  }));
-  const attendees: string[] = (rsvpsRes.data || []).map((r: any) => r.user_id);
-  const attendeeNames: { userId: string; userName: string }[] = (rsvpsRes.data || []).map((r: any) => ({
-    userId: r.user_id,
-    userName: r.user_name
-  }));
-
-  return {
-    attachmentsByEvent: { [eventId]: attachments },
-    commentsByEvent: { [eventId]: comments },
-    historyByEvent: { [eventId]: history },
-    rsvpsByEvent: { [eventId]: attendees },
-    rsvpNamesByEvent: { [eventId]: attendeeNames }
-  };
-};
-
-/**
- * Lazy load full details for an event (for a specific occurrence).
- * occurrenceDate — date of the instance (event.date for the opened instance).
- */
-export const fetchEventDetails = async (
-  eventId: string,
-  occurrenceDate: Date
-): Promise<Partial<Event>> => {
-  const related = await fetchRelatedForOne(eventId, occurrenceDate);
-  const attachments = related.attachmentsByEvent[eventId] || [];
-  const comments = related.commentsByEvent[eventId] || [];
-  const history = related.historyByEvent[eventId] || [];
-  const attendees = related.rsvpsByEvent[eventId] || [];
-  const attendeeNames = related.rsvpNamesByEvent[eventId] || [];
-
-  return {
-    attachments,
-    comments,
-    history,
-    attendees,
-    attendeeNames
-  };
-}
-
-// Преобразуем данные из Supabase (snake_case) в TypeScript типы (camelCase)
-const mapSupabaseEventToEvent = async (
-  supabaseEvent: any,
-  related?: RelatedData,
-  skipRelatedFetch = false
-): Promise<Event> => {
-  const eventId = supabaseEvent.id;
-  let attachments: Attachment[] | undefined;
-  let comments: EventComment[] | undefined;
-  let history: EventHistoryEntry[] | undefined;
-  let attendees: string[] | undefined;
-  let attendeeNames: { userId: string; userName: string }[] | undefined;
-
-  if (related) {
-    attachments = related.attachmentsByEvent[eventId];
-    comments = related.commentsByEvent[eventId];
-    history = related.historyByEvent[eventId];
-    attendees = related.rsvpsByEvent[eventId];
-    attendeeNames = related.rsvpNamesByEvent[eventId];
-  } else if (!skipRelatedFetch) {
-    // Create/Update case: fetch everything immediately to return full object
-    const eventDate = new Date(supabaseEvent.date);
-    const one = await fetchRelatedForOne(eventId, eventDate);
-    attachments = one.attachmentsByEvent[eventId] ?? [];
-    comments = one.commentsByEvent[eventId] ?? [];
-    history = one.historyByEvent[eventId] ?? [];
-    attendees = one.rsvpsByEvent[eventId] ?? [];
-    attendeeNames = one.rsvpNamesByEvent[eventId] ?? [];
-  }
-  // If skipRelatedFetch is true and related is undefined, fields remain undefined (Lazy Load)
-
-  let recurrence: RecurrenceRule | undefined;
-  if (supabaseEvent.recurrence_type && supabaseEvent.recurrence_type !== 'none') {
-    recurrence = {
-      type: supabaseEvent.recurrence_type,
-      interval: supabaseEvent.recurrence_interval || undefined,
-      endDate: supabaseEvent.recurrence_end_date ? new Date(supabaseEvent.recurrence_end_date) : undefined,
-      occurrences: supabaseEvent.recurrence_occurrences || undefined,
-      daysOfWeek: supabaseEvent.recurrence_days_of_week || undefined,
-      customDates: supabaseEvent.recurrence_custom_dates
-        ? supabaseEvent.recurrence_custom_dates.map((d: string) => new Date(d))
-        : undefined,
-      customEndDates: supabaseEvent.recurrence_custom_end_dates
-        ? supabaseEvent.recurrence_custom_end_dates.map((d: string) => new Date(d))
-        : undefined,
-      customLocations: Array.isArray(supabaseEvent.recurrence_custom_locations)
-        ? supabaseEvent.recurrence_custom_locations.map((l: string | null) => l ?? '')
-        : undefined
-    };
-  }
-
-  // Use poster_url directly, or fallback to first image attachment if available
-  const posterAttachment = attachments?.find(att => att.type === 'image');
-  const posterUrl = supabaseEvent.poster_url || posterAttachment?.url || undefined;
-
-  const tags: string[] = supabaseEvent.tags || [];
-  const tagSubmitterName = tags.find((t: string) => t.startsWith('by:'))?.replace('by:', '');
-  const tagSubmitterEmail = tags.find((t: string) => t.startsWith('email:'))?.replace('email:', '');
-
-  return {
-    id: supabaseEvent.id,
-    title: supabaseEvent.title,
-    description: supabaseEvent.description || '',
-    date: new Date(supabaseEvent.date),
-    endDate: supabaseEvent.end_date ? new Date(supabaseEvent.end_date) : undefined,
-    location: supabaseEvent.location || '',
-    posterUrl,
-    attachments: attachments && attachments.length > 0 ? attachments : undefined,
-    category: supabaseEvent.category || undefined,
-    tags,
-    status: supabaseEvent.status,
-    submitterName: supabaseEvent.submitter_name || tagSubmitterName || undefined,
-    submitterEmail: supabaseEvent.submitter_email || tagSubmitterEmail || undefined,
-    recurrence,
-    rsvpEnabled: supabaseEvent.rsvp_enabled || false,
-    maxAttendees: supabaseEvent.max_attendees || undefined,
-    attendees: attendees && attendees.length > 0 ? attendees : undefined,
-    attendeeNames: attendeeNames && attendeeNames.length > 0 ? attendeeNames : undefined,
-    comments: comments && comments.length > 0 ? comments : undefined,
-    history: history && history.length > 0 ? history : undefined,
-    creatorId: supabaseEvent.creator_id || undefined,
-    createdAt: new Date(supabaseEvent.created_at),
-    updatedAt: supabaseEvent.updated_at ? new Date(supabaseEvent.updated_at) : undefined
-  };
-};
-
+/** Every event the signed-in user may see (row-level security decides which), oldest first */
 export const getEvents = async (): Promise<Event[]> => {
-  const { data: eventsData, error } = await supabase
-    .from('events')
-    .select('*')
-    .order('date', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching events:', error);
-    throw new Error(error.message || 'Failed to fetch events');
-  }
-
-  if (!eventsData || eventsData.length === 0) {
-    return [];
-  }
-
-  // OPTIMIZATION: Do NOT fetch related data (comments, history, etc) for the list view.
-  // Passing skipRelatedFetch=true lazy loads these on demand in EventModal.
-  const events = await Promise.all(
-    eventsData.map((e: any) => mapSupabaseEventToEvent(e, undefined, true))
+  const rows = await fetchAllPages<EventRow>((from, to) =>
+    supabase
+      .from('events')
+      .select(EVENT_COLUMNS, { count: 'exact' })
+      .order('date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to)
   );
-  return events;
+  return rows.map(row => mapEventRow(row));
 };
 
-/** Load comments, attachments, and poster for a list of events (e.g. for export). Comments are filtered by occurrence date. */
+/** Files and change history of one event, loaded when it is opened */
+export const fetchEventDetails = async (eventId: string): Promise<{ attachments: Attachment[]; history: EventHistoryEntry[] }> => {
+  const [attachmentsRes, historyRes] = await Promise.all([
+    supabase.from('event_attachments').select('*').eq('event_id', eventId).order('uploaded_at', { ascending: true }),
+    supabase.from('event_history').select('*').eq('event_id', eventId).order('timestamp', { ascending: true })
+  ]);
+  return {
+    attachments: ((attachmentsRes.data || []) as AttachmentRow[]).map(mapAttachmentRow),
+    history: ((historyRes.data || []) as HistoryRow[]).map(mapHistoryRow)
+  };
+};
+
+/** The events with their attachments (and a poster taken from an image attachment), e.g. for export */
 export const getEventsWithRelated = async (events: Event[]): Promise<Event[]> => {
   if (events.length === 0) return [];
   const eventIds = [...new Set(events.map(e => e.id))];
-  const related = await fetchRelatedBatch(eventIds);
+  const { data } = await supabase
+    .from('event_attachments')
+    .select('*')
+    .in('event_id', eventIds)
+    .order('uploaded_at', { ascending: true });
+  const byEvent = new Map<string, Attachment[]>();
+  for (const row of (data || []) as AttachmentRow[]) {
+    const list = byEvent.get(row.event_id) ?? [];
+    list.push(mapAttachmentRow(row));
+    byEvent.set(row.event_id, list);
+  }
   return events.map(event => {
-    const attachments = related.attachmentsByEvent[event.id] ?? [];
-    const allComments = related.commentsByEvent[event.id] ?? [];
-    const eventTime = event.date.getTime();
-    const comments = allComments.filter(c => c.occurrenceDate?.getTime() === eventTime);
-    const posterAttachment = attachments.find(att => att.type === 'image');
-    const posterUrl = event.posterUrl || posterAttachment?.url || undefined;
+    const attachments = byEvent.get(event.id) ?? [];
     return {
       ...event,
-      comments: comments.length > 0 ? comments : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
-      posterUrl
+      posterUrl: event.posterUrl || attachments.find(att => att.type === 'image')?.url || undefined
     };
   });
-};
-
-export const createEvent = async (eventData: Omit<Event, 'id' | 'createdAt'>, userId: string, userName: string): Promise<Event> => {
-  // Подготавливаем данные для вставки в БД
-  const eventInsert = {
-    title: eventData.title,
-    description: eventData.description || null,
-    date: eventData.date.toISOString(),
-    end_date: eventData.endDate ? eventData.endDate.toISOString() : null,
-    location: eventData.location || null,
-    poster_url: eventData.posterUrl || null,
-    status: eventData.status,
-    category: eventData.category || null,
-    tags: eventData.tags || [],
-    recurrence_type: eventData.recurrence?.type || 'none',
-    recurrence_interval: eventData.recurrence?.interval || null,
-    recurrence_end_date: eventData.recurrence?.endDate ? eventData.recurrence.endDate.toISOString() : null,
-    recurrence_occurrences: eventData.recurrence?.occurrences || null,
-    recurrence_days_of_week: eventData.recurrence?.daysOfWeek || null,
-    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
-    ...(eventData.recurrence?.customEndDates
-      ? { recurrence_custom_end_dates: toIsoList(eventData.recurrence.customEndDates) }
-      : {}),
-    ...(eventData.recurrence?.customLocations
-      ? { recurrence_custom_locations: eventData.recurrence.customLocations }
-      : {}),
-    rsvp_enabled: eventData.rsvpEnabled || false,
-    max_attendees: eventData.maxAttendees || null,
-    submitter_name: eventData.submitterName || null,
-    submitter_email: eventData.submitterEmail || null,
-    creator_id: userId
-  };
-
-  const { data: newEventData, error: eventError } = await withOptionalColumns(eventInsert, payload =>
-    supabase.from('events').insert(payload).select().single()
-  );
-
-  if (eventError || !newEventData) {
-    console.error('Error creating event:', eventError);
-    throw new Error(eventError?.message || 'Failed to create event');
-  }
-
-  // Если есть attachments, сохраняем их
-  if (eventData.attachments && eventData.attachments.length > 0) {
-    const attachmentsInsert = eventData.attachments.map(att => ({
-      event_id: newEventData.id,
-      name: att.name,
-      url: att.url,
-      type: att.type,
-      size: att.size,
-      uploaded_by: userId
-    }));
-
-    const { error: attachmentsError } = await supabase
-      .from('event_attachments')
-      .insert(attachmentsInsert);
-
-    if (attachmentsError) {
-      console.error('Error creating attachments:', attachmentsError);
-      // Не прерываем создание события, только логируем ошибку
-    }
-  }
-
-  // История создается автоматически через триггер, но можем убедиться
-  // Преобразуем обратно в Event формат
-  const createdEvent = await mapSupabaseEventToEvent(newEventData);
-  return createdEvent;
 };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -422,61 +64,35 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
     throw new Error('Invalid event ID. Please close and reopen the event.');
   }
 
-  // Сначала получаем старое событие для отслеживания изменений
+  // The saved event, to record what changed
   const { data: oldEventData, error: fetchError } = await supabase
     .from('events')
-    .select('*')
+    .select(EVENT_COLUMNS)
     .eq('id', id)
-    .single();
+    .single<EventRow>();
 
   if (fetchError || !oldEventData) {
     throw new Error('Event not found');
   }
 
-  // Определяем изменения
-  const changes: Record<string, { old: any; new: any }> = {};
+  const changes: Record<string, { old: unknown; new: unknown }> = {};
   if (eventData.title !== oldEventData.title) changes.title = { old: oldEventData.title, new: eventData.title };
   if (eventData.description !== oldEventData.description) changes.description = { old: oldEventData.description || '', new: eventData.description || '' };
   if (eventData.location !== oldEventData.location) changes.location = { old: oldEventData.location || '', new: eventData.location || '' };
   if (eventData.status !== oldEventData.status) changes.status = { old: oldEventData.status, new: eventData.status };
   if (eventData.category !== oldEventData.category) changes.category = { old: oldEventData.category || null, new: eventData.category || null };
 
-  // Подготавливаем данные для обновления
-  const eventUpdate = {
-    title: eventData.title,
-    description: eventData.description || null,
-    date: eventData.date.toISOString(),
-    end_date: eventData.endDate ? eventData.endDate.toISOString() : null,
-    location: eventData.location || null,
-    poster_url: eventData.posterUrl || null,
-    status: eventData.status,
-    category: eventData.category || null,
-    tags: eventData.tags || [],
-    recurrence_type: eventData.recurrence?.type || 'none',
-    recurrence_interval: eventData.recurrence?.interval || null,
-    recurrence_end_date: eventData.recurrence?.endDate ? eventData.recurrence.endDate.toISOString() : null,
-    recurrence_occurrences: eventData.recurrence?.occurrences || null,
-    recurrence_days_of_week: eventData.recurrence?.daysOfWeek || null,
-    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
-    recurrence_custom_end_dates: toIsoList(eventData.recurrence?.customEndDates),
-    recurrence_custom_locations: eventData.recurrence?.customLocations ?? null,
-    rsvp_enabled: eventData.rsvpEnabled || false,
-    max_attendees: eventData.maxAttendees || null,
-    submitter_name: eventData.submitterName || null,
-    submitter_email: eventData.submitterEmail || null
-  };
-
-  const { data: updatedEventData, error: updateError } = await withOptionalColumns(eventUpdate, payload =>
-    supabase.from('events').update(payload).eq('id', id).select().single()
-  );
+  const { data: updatedEventData, error: updateError } = await supabase
+    .from('events')
+    .update(eventToRow(eventData))
+    .eq('id', id)
+    .select(EVENT_COLUMNS)
+    .single<EventRow>();
 
   if (updateError || !updatedEventData) {
     console.error('Error updating event:', updateError);
     throw new Error(updateError?.message || 'Failed to update event');
   }
-
-  // Создаем запись в истории изменений
-  const action = 'updated';
 
   const { error: historyError } = await supabase
     .from('event_history')
@@ -484,95 +100,20 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
       event_id: id,
       user_id: userId,
       user_name: userName,
-      action: action,
+      action: 'updated',
       changes: Object.keys(changes).length > 0 ? changes : null
     });
-
   if (historyError) {
+    // The event is saved; only its history line is missing
     console.error('Error creating history entry:', historyError);
-    // Не прерываем обновление события, только логируем ошибку
   }
 
-  // Если есть новые attachments, добавляем их
-  if (eventData.attachments && eventData.attachments.length > 0) {
-    // Получаем существующие attachments
-    const { data: existingAttachments } = await supabase
-      .from('event_attachments')
-      .select('id, url')
-      .eq('event_id', id);
-
-    const existingUrls = new Set(existingAttachments?.map(att => att.url) || []);
-
-    // Добавляем только новые attachments
-    const newAttachments = eventData.attachments.filter(att => !existingUrls.has(att.url));
-
-    if (newAttachments.length > 0) {
-      const attachmentsInsert = newAttachments.map(att => ({
-        event_id: id,
-        name: att.name,
-        url: att.url,
-        type: att.type,
-        size: att.size,
-        uploaded_by: userId
-      }));
-
-      const { error: attachmentsError } = await supabase
-        .from('event_attachments')
-        .insert(attachmentsInsert);
-
-      if (attachmentsError) {
-        console.error('Error creating attachments:', attachmentsError);
-        // Не прерываем обновление события
-      }
-    }
+  // A replaced or removed poster is no longer needed (kept if another event still uses it)
+  if (oldEventData.poster_url && oldEventData.poster_url !== updatedEventData.poster_url) {
+    void deleteStoredFiles([oldEventData.poster_url]);
   }
 
-  // Преобразуем обратно в Event формат
-  const updatedEvent = await mapSupabaseEventToEvent(updatedEventData);
-  return updatedEvent;
-};
-
-// Cloudflare R2 Upload via Pages Functions
-export const uploadPosterToR2 = async (file: File): Promise<string> => {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const response = await fetch('/api/upload', {
-    method: 'PUT',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to upload poster');
-  }
-
-  const data = await response.json();
-  return data.url;
-};
-
-export const uploadAttachment = async (file: File): Promise<{ id: string; name: string; url: string; type: string; size: number; uploadedAt: Date }> => {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const response = await fetch('/api/upload', {
-    method: 'PUT',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to upload attachment');
-  }
-
-  const data = await response.json();
-
-  return {
-    id: data.key, // Use the R2 key as the ID for now, or generate one if needed
-    name: data.name,
-    url: data.url,
-    type: data.type.startsWith('image/') ? 'image' : data.type === 'application/pdf' ? 'pdf' : 'document',
-    size: data.size,
-    uploadedAt: new Date()
-  };
+  return mapEventRow(updatedEventData);
 };
 
 /**
@@ -609,14 +150,16 @@ export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<
  * and a long list of ids can't make the request URL too long.
  */
 export const getAllRecurrenceExceptions = async (): Promise<Map<string, Date[]>> => {
-  const { data, error } = await supabase
-    .from('recurrence_exceptions')
-    .select('event_id, exception_date');
-
-  if (error) throw new Error(error.message || 'Failed to fetch recurrence exceptions');
+  const rows = await fetchAllPages<{ event_id: string; exception_date: string }>((from, to) =>
+    supabase
+      .from('recurrence_exceptions')
+      .select('event_id, exception_date', { count: 'exact' })
+      .order('id', { ascending: true })
+      .range(from, to)
+  );
 
   const map = new Map<string, Date[]>();
-  for (const item of data || []) {
+  for (const item of rows) {
     const list = map.get(item.event_id) || [];
     list.push(new Date(item.exception_date));
     map.set(item.event_id, list);
@@ -713,7 +256,7 @@ export const saveCustomSchedule = async (
     recurrence_custom_locations: schedule.recurrence?.customLocations ?? null,
     updated_at: new Date().toISOString()
   };
-  const { error } = await withOptionalColumns(payload, p => supabase.from('events').update(p).eq('id', eventId));
+  const { error } = await supabase.from('events').update(payload).eq('id', eventId);
   if (error) {
     console.error('Error saving event dates:', error);
     throw new Error(error.message || 'Failed to update event dates');
@@ -748,39 +291,20 @@ export const clearRecurrenceExceptions = async (eventId: string): Promise<void> 
   if (error) console.error('Error clearing recurrence exceptions:', error);
 };
 
-/**
- * Удалить событие (всю серию, если оно повторяющееся)
- */
-export const deleteEvent = async (id: string, userId?: string, userName?: string): Promise<void> => {
-  // Сначала проверяем, существует ли событие
+/** Deletes an event (the whole series) and then its poster and attachments from R2 */
+export const deleteEvent = async (id: string): Promise<void> => {
   const { data: eventData, error: fetchError } = await supabase
     .from('events')
-    .select('id')
+    .select('id, poster_url')
     .eq('id', id)
-    .single();
+    .single<{ id: string; poster_url: string | null }>();
 
   if (fetchError || !eventData) {
     throw new Error('Event not found');
   }
+  const { data: attachments } = await supabase.from('event_attachments').select('url').eq('event_id', id);
 
-  // Добавляем запись в историю перед удалением (если есть userId и userName)
-  if (userId && userName) {
-    const { error: historyError } = await supabase
-      .from('event_history')
-      .insert({
-        event_id: id,
-        user_id: userId,
-        user_name: userName,
-        action: 'deleted'
-      });
-
-    if (historyError) {
-      console.error('Error creating history entry:', historyError);
-      // Не прерываем операцию, только логируем
-    }
-  }
-
-  // Удаляем событие (каскадное удаление удалит связанные записи автоматически)
+  // History, attachments and deleted dates go with it (on delete cascade)
   const { error: deleteError } = await supabase
     .from('events')
     .delete()
@@ -790,270 +314,6 @@ export const deleteEvent = async (id: string, userId?: string, userName?: string
     console.error('Error deleting event:', deleteError);
     throw new Error(deleteError.message || 'Failed to delete event');
   }
-};
 
-/** Добавить комментарий к событию (к конкретному вхождению для повторяющихся). */
-export const addComment = async (
-  eventId: string,
-  userId: string,
-  userName: string,
-  content: string,
-  occurrenceDate: Date
-): Promise<EventComment> => {
-  const { data: eventData, error: fetchError } = await supabase
-    .from('events')
-    .select('id')
-    .eq('id', eventId)
-    .single();
-
-  if (fetchError || !eventData) {
-    throw new Error('Event not found');
-  }
-
-  const occurrenceIso = occurrenceDate.toISOString();
-  const { data: commentData, error: commentError } = await supabase
-    .from('event_comments')
-    .insert({
-      event_id: eventId,
-      occurrence_date: occurrenceIso,
-      user_id: userId,
-      user_name: userName,
-      content: content
-    })
-    .select()
-    .single();
-
-  if (commentError || !commentData) {
-    console.error('Error adding comment:', commentError);
-    throw new Error(commentError?.message || 'Failed to add comment');
-  }
-
-  return {
-    id: commentData.id,
-    eventId: commentData.event_id,
-    occurrenceDate: new Date(commentData.occurrence_date),
-    userId: commentData.user_id,
-    userName: commentData.user_name,
-    content: commentData.content,
-    createdAt: new Date(commentData.created_at)
-  };
-};
-
-export const deleteComment = async (commentId: string): Promise<void> => {
-  const { error } = await supabase
-    .from('event_comments')
-    .delete()
-    .eq('id', commentId);
-
-  if (error) {
-    console.error('Error deleting comment:', error);
-    throw new Error(error.message || 'Failed to delete comment');
-  }
-};
-
-/**
- * Submit an event from the public/staff submission form.
- * Saved with status 'draft' and tags for submitter attribution.
- */
-export const submitEvent = async (eventData: {
-  title: string;
-  description: string;
-  date: Date;
-  endDate?: Date;
-  location: string;
-  category?: string;
-  submitterName: string;
-  submitterEmail: string;
-  posterFile?: File;
-  status?: 'draft' | 'published';
-  recurrence?: RecurrenceRule;
-}): Promise<Event> => {
-  let posterUrl: string | undefined;
-
-  // 1. If a poster file was provided, try uploading to Cloudflare R2 or Supabase storage
-  if (eventData.posterFile) {
-    try {
-      try {
-        // First try Cloudflare R2 (/api/upload Pages Function)
-        posterUrl = await uploadPosterToR2(eventData.posterFile);
-      } catch (r2Err) {
-        // Fallback to Supabase Storage bucket 'event-attachments'
-        const fileExt = eventData.posterFile.name.split('.').pop() || 'jpg';
-        const fileName = `submissions/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('event-attachments')
-          .upload(fileName, eventData.posterFile, {
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (!uploadError && uploadData) {
-          const { data: publicUrlData } = supabase.storage
-            .from('event-attachments')
-            .getPublicUrl(fileName);
-          posterUrl = publicUrlData.publicUrl;
-        } else {
-          console.warn('Poster upload skipped (storage not configured):', uploadError || r2Err);
-        }
-      }
-    } catch (uploadErr) {
-      console.warn('Error uploading poster:', uploadErr);
-    }
-  }
-
-  const eventStatus = eventData.status || 'draft';
-
-  // 2. Prepare tags including submitter info for redundancy
-  const tags: string[] = [
-    eventStatus === 'published' ? 'admin-created' : 'staff-submission',
-    `by:${eventData.submitterName.trim()}`,
-    `email:${eventData.submitterEmail.trim()}`
-  ];
-
-  // 3. Insert into events table
-  const insertPayload: any = {
-    title: eventData.title.trim(),
-    description: eventData.description.trim(),
-    date: eventData.date.toISOString(),
-    location: eventData.location.trim(),
-    category: eventData.category || null,
-    poster_url: posterUrl || null,
-    status: eventStatus,
-    tags,
-    submitter_name: eventData.submitterName.trim(),
-    submitter_email: eventData.submitterEmail.trim(),
-    end_date: eventData.endDate ? eventData.endDate.toISOString() : null,
-    recurrence_type: eventData.recurrence?.type || 'none',
-    recurrence_custom_dates: toIsoList(eventData.recurrence?.customDates),
-    ...(eventData.recurrence?.customEndDates
-      ? { recurrence_custom_end_dates: toIsoList(eventData.recurrence.customEndDates) }
-      : {}),
-    ...(eventData.recurrence?.customLocations
-      ? { recurrence_custom_locations: eventData.recurrence.customLocations }
-      : {})
-  };
-
-  // Check if current user is logged in
-  const { data: sessionData } = await supabase.auth.getSession();
-  const isAnonymous = !sessionData?.session?.user?.id;
-
-  if (sessionData?.session?.user?.id) {
-    insertPayload.creator_id = sessionData.session.user.id;
-  }
-
-  // If anonymous, insert without .select() because Postgres evaluates SELECT RLS on RETURNING,
-  // and anonymous visitors cannot read unapproved draft events
-  if (isAnonymous) {
-    const { error } = await withOptionalColumns(insertPayload, payload =>
-      supabase.from('events').insert([payload])
-    );
-
-    if (error) {
-      console.error('Error submitting event:', error);
-      // If error was due to unknown columns (in case DB migration isn't run yet), fallback without them:
-      if (error?.message?.includes('column') && (error?.message?.includes('submitter_') || error?.message?.includes('end_date') || error?.message?.includes('recurrence_'))) {
-        const minimalPayload = { ...insertPayload };
-        delete minimalPayload.submitter_name;
-        delete minimalPayload.submitter_email;
-        delete minimalPayload.end_date;
-        delete minimalPayload.recurrence_type;
-        delete minimalPayload.recurrence_custom_dates;
-        delete minimalPayload.recurrence_custom_end_dates;
-        delete minimalPayload.recurrence_custom_locations;
-        const { error: retryError } = await supabase
-          .from('events')
-          .insert([minimalPayload]);
-        if (retryError) {
-          throw new Error(retryError?.message || 'Failed to submit event');
-        }
-      } else {
-        throw new Error(error?.message || 'Failed to submit event');
-      }
-    }
-
-    return {
-      id: crypto.randomUUID(),
-      title: insertPayload.title,
-      description: insertPayload.description,
-      date: new Date(insertPayload.date),
-      endDate: insertPayload.end_date ? new Date(insertPayload.end_date) : undefined,
-      location: insertPayload.location,
-      category: insertPayload.category,
-      posterUrl: insertPayload.poster_url,
-      status: 'draft',
-      tags: insertPayload.tags,
-      submitterName: insertPayload.submitter_name,
-      submitterEmail: insertPayload.submitter_email,
-      recurrence: eventData.recurrence,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Event;
-  }
-
-  // Authenticated submission
-  const { data, error } = await withOptionalColumns(insertPayload, payload =>
-    supabase.from('events').insert([payload]).select().single()
-  );
-
-  if (error || !data) {
-    console.error('Error submitting event:', error);
-    throw new Error(error?.message || 'Failed to submit event');
-  }
-
-  return mapSupabaseEventToEvent(data);
-};
-
-/**
- * Fetch pending submissions for admins (status === 'draft').
- */
-export const getPendingSubmissions = async (): Promise<Event[]> => {
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .eq('status', 'draft')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching pending submissions:', error);
-    return [];
-  }
-
-  return Promise.all((data || []).map(row => mapSupabaseEventToEvent(row, undefined, true)));
-};
-
-/**
- * Approve and publish a submission.
- */
-export const approveSubmission = async (eventId: string): Promise<Event> => {
-  const { data, error } = await supabase
-    .from('events')
-    .update({
-      status: 'published',
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', eventId)
-    .select()
-    .single();
-
-  if (error || !data) {
-    console.error('Error approving submission:', error);
-    throw new Error(error?.message || 'Failed to approve submission');
-  }
-
-  return mapSupabaseEventToEvent(data);
-};
-
-/**
- * Reject / delete a submission.
- */
-export const rejectSubmission = async (eventId: string): Promise<void> => {
-  const { error } = await supabase
-    .from('events')
-    .delete()
-    .eq('id', eventId);
-
-  if (error) {
-    console.error('Error rejecting submission:', error);
-    throw new Error(error?.message || 'Failed to reject submission');
-  }
+  void deleteStoredFiles([eventData.poster_url, ...(attachments || []).map((a: { url: string }) => a.url)]);
 };

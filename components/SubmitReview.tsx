@@ -93,10 +93,14 @@ interface SubmitReviewProps {
   submitError: string | null;
   onEdit: (field?: ReviewField) => void;
   onSend: () => void;
+  /** Shown above the Send button (the anti-spam check for people without an account) */
+  beforeSend?: React.ReactNode;
+  /** false until that check is done */
+  canSend?: boolean;
 }
 
 /** Shown after "Submit": the event as it will look, to check before it is sent */
-const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWhen, isSubmitting, submitError, onEdit, onSend }) => {
+const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWhen, isSubmitting, submitError, onEdit, onSend, beforeSend, canSend = true }) => {
   const dateCount = summary.days.length;
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -221,6 +225,8 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           </div>
         </article>
 
+        {beforeSend && <div className="mt-5">{beforeSend}</div>}
+
         {submitError && (
           <div className="mt-5 flex items-start gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm text-red-800 dark:text-red-200" role="alert">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {submitError}
@@ -236,7 +242,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           >
             <Pencil className="w-4 h-4" /> Edit
           </button>
-          <SendButton isSubmitting={isSubmitting} onSend={onSend} />
+          <SendButton isSubmitting={isSubmitting} disabled={!canSend} onSend={onSend} />
         </div>
       </main>
 
@@ -249,17 +255,17 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
         >
           <Pencil className="w-4 h-4" /> Edit
         </button>
-        <SendButton isSubmitting={isSubmitting} onSend={onSend} full />
+        <SendButton isSubmitting={isSubmitting} disabled={!canSend} onSend={onSend} full />
       </div>
     </div>
   );
 };
 
-const SendButton: React.FC<{ isSubmitting: boolean; onSend: () => void; full?: boolean }> = ({ isSubmitting, onSend, full }) => (
+const SendButton: React.FC<{ isSubmitting: boolean; disabled?: boolean; onSend: () => void; full?: boolean }> = ({ isSubmitting, disabled, onSend, full }) => (
   <button
     type="button"
     onClick={onSend}
-    disabled={isSubmitting}
+    disabled={isSubmitting || disabled}
     className={`cta ${full ? 'flex-1' : ''} inline-flex items-center justify-center gap-2 h-12 px-6 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-md shadow-brand-600/20 transition-colors disabled:opacity-60`}
   >
     {isSubmitting ? (

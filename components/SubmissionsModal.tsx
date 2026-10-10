@@ -18,7 +18,8 @@ interface SubmissionsModalProps {
   events?: Event[];
   onApprove: (event: Event) => Promise<void>;
   onEdit: (event: Event) => void;
-  onReject: (eventId: string) => Promise<void>;
+  /** Declines (deletes) a submission; the reason goes to the submitter by email */
+  onReject: (eventId: string, reason: string) => Promise<void>;
   onApproveAll?: () => Promise<void>;
   /** Opens an existing event in full (to compare with a submission) */
   onOpenEvent?: (event: Event) => void;
@@ -48,6 +49,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [rejectConfirmId, setRejectConfirmId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   // Approving something that looks like an existing event needs a second click
   const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null);
   const [confirmApproveAll, setConfirmApproveAll] = useState(false);
@@ -65,8 +67,9 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
   const handleSingleReject = async (eventId: string) => {
     setProcessingId(eventId);
     try {
-      await onReject(eventId);
+      await onReject(eventId, rejectReason.trim());
       setRejectConfirmId(null);
+      setRejectReason('');
     } finally {
       setProcessingId(null);
     }
@@ -283,10 +286,21 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                       </div>
                     ) : isConfirmingReject ? (
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <span className="text-sm text-red-700 dark:text-red-300 font-medium mr-auto">Decline and delete this submission?</span>
+                        <label htmlFor={`decline-reason-${event.id}`} className="w-full text-sm text-red-700 dark:text-red-300 font-medium">
+                          Decline and delete this submission?
+                        </label>
+                        <textarea
+                          id={`decline-reason-${event.id}`}
+                          value={rejectReason}
+                          onChange={(e) => setRejectReason(e.target.value)}
+                          rows={2}
+                          maxLength={1000}
+                          placeholder={event.submitterEmail ? `Reason for ${event.submitterName || 'the submitter'} (optional, sent by email)` : 'Reason (optional)'}
+                          className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                        />
                         <button
                           type="button"
-                          onClick={() => setRejectConfirmId(null)}
+                          onClick={() => { setRejectConfirmId(null); setRejectReason(''); }}
                           className="cta px-3 py-2 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
                         >
                           Keep
@@ -304,7 +318,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                       <div className="grid grid-cols-[auto_1fr_1.4fr] sm:flex sm:justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setRejectConfirmId(event.id)}
+                          onClick={() => { setRejectConfirmId(event.id); setRejectReason(''); }}
                           disabled={isProcessing}
                           className="cta inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors sm:mr-auto"
                           title="Decline / delete submission"

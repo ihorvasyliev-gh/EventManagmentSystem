@@ -9,8 +9,40 @@ const mapSupabaseUserToUser = (supabaseUser: any): User => {
     id: supabaseUser.id,
     email: supabaseUser.email,
     fullName: supabaseUser.full_name || supabaseUser.email,
-    role: (supabaseUser.role as UserRole) || UserRole.STAFF
+    role: (supabaseUser.role as UserRole) || UserRole.STAFF,
+    mustChangePassword: !!supabaseUser.must_change_password
   };
+};
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+/** Plain-language version of Supabase's password errors */
+const passwordErrorMessage = (message?: string): string => {
+  if (!message) return 'The password could not be changed. Please try again.';
+  if (/different from the old/i.test(message)) return 'Please choose a password you haven’t used for this account before.';
+  if (/weak|characters|length|should contain/i.test(message)) return `That password is too weak: ${message}`;
+  if (/reauthenticat|recent login/i.test(message)) return 'For security, please sign out, sign in again and then change your password.';
+  return message;
+};
+
+/** Saves a new password for the signed-in user and clears the "must change password" flag */
+export const setNewPassword = async (newPassword: string): Promise<void> => {
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`The password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error || !data.user) throw new Error(passwordErrorMessage(error?.message));
+  const { error: flagError } = await supabase.from('users').update({ must_change_password: false }).eq('id', data.user.id);
+  if (flagError) console.error('Could not clear must_change_password:', flagError);
+};
+
+/** Changes the password after checking the current one (so an unattended open session can't) */
+export const changePassword = async (email: string, currentPassword: string, newPassword: string): Promise<void> => {
+  const { error } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+  if (error) {
+    throw new Error(error.status === 429 ? 'Too many attempts. Please wait a moment and try again.' : 'Your current password is not right.');
+  }
+  await setNewPassword(newPassword);
 };
 
 // Вспомогательная функция для таймаута запросов с поддержкой отмены
@@ -188,42 +220,4 @@ export const getCurrentUser = async (userId?: string): Promise<User | null> => {
 export const getSession = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
-};
-
-// Получить список пользователей по ID
-export const getUsersByIds = async (userIds: string[]): Promise<User[]> => {
-  if (!userIds || userIds.length === 0) {
-    return [];
-  }
-
-  // Убираем дубликаты и пустые/null значения
-  const uniqueIds = Array.from(new Set(userIds)).filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''));
-
-  if (uniqueIds.length === 0) {
-    return [];
-  }
-
-  try {
-    const { data: usersData, error } = await withTimeout(
-      supabase
-        .from('users')
-        .select('*')
-        .in('id', uniqueIds),
-      10000
-    );
-
-    if (error) {
-      console.error('Error fetching users by IDs:', error);
-      return [];
-    }
-
-    if (!usersData) {
-      return [];
-    }
-
-    return usersData.map(mapSupabaseUserToUser);
-  } catch (error) {
-    console.error('Error in getUsersByIds:', error);
-    return [];
-  }
 };

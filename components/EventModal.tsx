@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Event, UserRole, EventCategory, EventStatus, Attachment, EventComment, EventHistoryEntry } from '../types';
-import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, Users, CheckCircle, Trash2, Plus, ChevronDown, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
+import { Event, UserRole, EventCategory, EventStatus, Attachment, EventHistoryEntry } from '../types';
+import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, CheckCircle, Trash2, Plus, ChevronDown, Copy, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
 import { formatDate, formatTime, isSameDay, formatLocalDate, formatClock, APP_LOCALE } from '../utils/date';
-import { uploadPosterToR2, addComment, deleteComment, fetchEventDetails } from '../services/eventService';
-import { rsvpToEvent, cancelRsvp } from '../services/rsvpService';
+import { uploadPosterToR2, fetchEventDetails } from '../services/eventService';
 import { createCategory } from '../services/categoryService';
-import EventComments from './EventComments';
 import EventHistory from './EventHistory';
 import { validateEvent } from '../utils/validation';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,7 +16,6 @@ import { makeSlot, readScheduleFromEvent, materializeCustomSchedule } from '../u
 import { useEventSchedule } from '../hooks/useEventSchedule';
 import { getEventLocations, expandRecurringEvents } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
-import { supabase } from '../lib/supabase';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { useToast } from '../contexts/ToastContext';
 import { exportToICal, downloadFile } from '../utils/export';
@@ -49,11 +46,11 @@ interface EventModalProps {
   events?: Event[];
   role: UserRole;
   currentUserId?: string;
-  currentUserName?: string;
   onUpdate?: (id: string, eventData: Omit<Event, 'id' | 'createdAt'>) => Promise<void>;
-  onEventUpdate?: (event: Event) => void; // For RSVP and comment updates
   onDelete?: (id: string) => Promise<void>; // For event deletion
   onDeleteInstance?: (eventId: string, instanceDate: Date) => Promise<void>; // For instance deletion
+  /** Admins: start a new event from this one (same details, new dates) */
+  onDuplicate?: (event: Event) => void;
   initialMode?: 'view' | 'edit';
   autoApproveOnSave?: boolean;
   /** Unsaved form data to restore (e.g. after a failed save) */
@@ -71,11 +68,10 @@ const EventModal: React.FC<EventModalProps> = ({
   events = [],
   role,
   currentUserId = '1',
-  currentUserName = 'User',
   onUpdate,
-  onEventUpdate,
   onDelete,
   onDeleteInstance,
+  onDuplicate,
   initialMode = 'view',
   autoApproveOnSave = false,
   draft = null,
@@ -114,20 +110,13 @@ const EventModal: React.FC<EventModalProps> = ({
   const [tags, setTags] = useState<string>('');
   const [submitterName, setSubmitterName] = useState('');
   const [submitterEmail, setSubmitterEmail] = useState('');
-  const [rsvpEnabled, setRsvpEnabled] = useState(false);
-  const [maxAttendees, setMaxAttendees] = useState<number | ''>('');
   const poster = usePosterFile((message) => {
     if (message) showToast(message, 'warning');
   });
   const { file: posterFile, preview: previewUrl, pdf: posterPdf } = poster;
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  // Lazy loaded states
-  const [comments, setComments] = useState<EventComment[]>([]);
+  // Loaded when the event opens
   const [history, setHistory] = useState<EventHistoryEntry[]>([]);
-  const [attendees, setAttendees] = useState<string[]>([]);
-  const [attendeeNames, setAttendeeNames] = useState<{ userId: string; userName: string }[]>([]);
-
-  const [userHasRsvped, setUserHasRsvped] = useState(false);
 
   // Categories State
   const [customCategories, setCustomCategories] = useState<string[]>([]);
@@ -218,8 +207,6 @@ const EventModal: React.FC<EventModalProps> = ({
     [events]
   );
 
-  const hasInteractedWithRsvp = useRef(false);
-  const prevEventId = useRef<string | null>(null);
   // Unsaved-changes tracking (see formSnapshot below)
   const [baselineTick, setBaselineTick] = useState(0);
   const draftAppliedRef = useRef(false);
@@ -233,14 +220,6 @@ const EventModal: React.FC<EventModalProps> = ({
       draftAppliedRef.current = false;
       if (event) {
         // We have an event (View/Edit mode)
-
-        // Only reset interaction flag if we are viewing a different event or occurrence
-        const instanceKey = event.instanceKey ?? event.id;
-        if (instanceKey !== prevEventId.current) {
-          hasInteractedWithRsvp.current = false;
-          prevEventId.current = instanceKey;
-        }
-
         setTitle(event.title);
         setDescription(event.description);
         setCategory(event.category || '');
@@ -248,20 +227,11 @@ const EventModal: React.FC<EventModalProps> = ({
         setTags(event.tags?.join(', ') || '');
         setSubmitterName(event.submitterName || '');
         setSubmitterEmail(event.submitterEmail || '');
-        setRsvpEnabled(event.rsvpEnabled || false);
-        setMaxAttendees(event.maxAttendees || '');
         poster.reset(event.posterUrl || null);
 
         // Initial values from props (might be incomplete if lazy loaded)
         setAttachments(event.attachments || []);
-        setComments(event.comments || []);
         setHistory(event.history || []);
-        setAttendees(event.attendees || []);
-        setAttendeeNames(event.attendeeNames || []);
-
-        if (!hasInteractedWithRsvp.current) {
-          setUserHasRsvped(event.attendees?.includes(currentUserId) || false);
-        }
 
         // `event` may be one expanded occurrence of a series. The form edits the series,
         // so take dates from the stored series — otherwise saving would move the whole
@@ -290,24 +260,16 @@ const EventModal: React.FC<EventModalProps> = ({
         setFieldErrors({});
 
         // LAZY LOAD: If details are missing, fetch them in background (no loading state)
-        const needsLoading = !event.comments || !event.history || !event.attachments || !event.attendees || (!event.attendeeNames && role === UserRole.ADMIN);
+        const needsLoading = !event.history || !event.attachments;
 
         let isActive = true;
 
         if (needsLoading) {
-          fetchEventDetails(event.id, event.date).then(details => {
+          fetchEventDetails(event.id).then(details => {
             if (!isActive) return;
 
             if (details.attachments) setAttachments(details.attachments);
-            if (details.comments) setComments(details.comments);
             if (details.history) setHistory(details.history);
-            if (details.attendees) {
-              setAttendees(details.attendees);
-              if (details.attendeeNames) setAttendeeNames(details.attendeeNames);
-              if (!hasInteractedWithRsvp.current) {
-                setUserHasRsvped(details.attendees.includes(currentUserId));
-              }
-            }
           }).catch(err => {
             console.error('Failed to lazy load event details:', err);
           });
@@ -318,7 +280,7 @@ const EventModal: React.FC<EventModalProps> = ({
         };
       }
     }
-  }, [isOpen, event, currentUserId, currentUserName, initialMode, autoApproveOnSave, formResetKey]);
+  }, [isOpen, event, initialMode, autoApproveOnSave, formResetKey]);
 
   // Restore unsaved form data (e.g. the save failed and the modal was reopened)
   useEffect(() => {
@@ -331,8 +293,6 @@ const EventModal: React.FC<EventModalProps> = ({
     setTags(draft.tags?.join(', ') || '');
     setSubmitterName(draft.submitterName || '');
     setSubmitterEmail(draft.submitterEmail || '');
-    setRsvpEnabled(!!draft.rsvpEnabled);
-    setMaxAttendees(draft.maxAttendees || '');
     poster.reset(draft.posterUrl || null);
     setAttachments(draft.attachments || []);
     scheduleControls.reset(readScheduleFromEvent({ ...draft, location: draft.location || '' }));
@@ -347,7 +307,7 @@ const EventModal: React.FC<EventModalProps> = ({
   // Unsaved-changes tracking: snapshot of the form right after it was initialised
   const formSnapshot = JSON.stringify([
     title, description, category, status, tags, submitterName, submitterEmail,
-    rsvpEnabled, maxAttendees, scheduleControls.snapshot,
+    scheduleControls.snapshot,
     recurrenceType, recurrenceInterval, recurrenceEndDate, previewUrl, posterFile?.name ?? null
   ]);
   const baselineRef = useRef<string | null>(null);
@@ -500,8 +460,6 @@ const EventModal: React.FC<EventModalProps> = ({
       category: category || undefined,
       status: status || 'published',
       tags: tagsArray.length > 0 ? tagsArray : undefined,
-      rsvpEnabled,
-      maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
       recurrence
     };
 
@@ -519,29 +477,13 @@ const EventModal: React.FC<EventModalProps> = ({
     try {
       let finalPosterUrl: string | undefined = previewUrl || undefined;
 
-      // Upload to R2 or Supabase storage if a new file is selected
+      // A new poster is uploaded first: if that fails, nothing is saved and the form stays open
       if (posterFile) {
         try {
           finalPosterUrl = await uploadPosterToR2(posterFile);
-        } catch (r2Err) {
-          // Fallback to Supabase Storage bucket 'event-attachments'
-          const fileExt = posterFile.name.split('.').pop() || 'jpg';
-          const fileName = `posters/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('event-attachments')
-            .upload(fileName, posterFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
-
-          if (!uploadError && uploadData) {
-            const { data: publicUrlData } = supabase.storage
-              .from('event-attachments')
-              .getPublicUrl(fileName);
-            finalPosterUrl = publicUrlData.publicUrl;
-          } else {
-            console.warn('Poster upload skipped:', uploadError || r2Err);
-          }
+        } catch (uploadErr) {
+          const reason = uploadErr instanceof Error ? uploadErr.message : '';
+          throw new Error(`the poster could not be uploaded${reason ? ` (${reason})` : ''}. Your changes are still here — please try again`);
         }
       }
 
@@ -562,8 +504,6 @@ const EventModal: React.FC<EventModalProps> = ({
         tags: tagsArray.length > 0 ? tagsArray : undefined,
         submitterName: submitterName.trim() || undefined,
         submitterEmail: submitterEmail.trim() || undefined,
-        rsvpEnabled,
-        maxAttendees: maxAttendees ? Number(maxAttendees) : undefined,
         attachments,
         creatorId: event?.creatorId || currentUserId,
         recurrence
@@ -582,117 +522,6 @@ const EventModal: React.FC<EventModalProps> = ({
       }
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleRsvp = async () => {
-    if (!event) return;
-    hasInteractedWithRsvp.current = true;
-
-    // Optimistic update: update UI immediately
-    const wasRsvped = userHasRsvped;
-    const previousAttendees = [...(attendees || [])];
-
-    // Update local state immediately
-    if (wasRsvped) {
-      setUserHasRsvped(false);
-      const newAttendees = attendees.filter(id => id !== currentUserId);
-      setAttendees(newAttendees);
-      if (onEventUpdate && event) {
-        const updatedEvent = { ...event, attendees: newAttendees };
-        onEventUpdate(updatedEvent);
-      }
-    } else {
-      setUserHasRsvped(true);
-      const newAttendees = [...attendees, currentUserId];
-      setAttendees(newAttendees);
-      if (onEventUpdate && event) {
-        const updatedEvent = { ...event, attendees: newAttendees };
-        onEventUpdate(updatedEvent);
-      }
-    }
-
-    // Sync with server in background (no loading state); per-occurrence for recurring
-    try {
-      if (wasRsvped) {
-        await cancelRsvp(event.id, currentUserId, event.date);
-      } else {
-        await rsvpToEvent(event.id, currentUserId, currentUserName, event.date);
-      }
-    } catch (err) {
-      console.error('Failed to sync RSVP with server:', err);
-      // Rollback optimistic update on error
-      setUserHasRsvped(wasRsvped);
-      setAttendees(previousAttendees);
-      if (onEventUpdate && event) {
-        const updatedEvent = { ...event, attendees: previousAttendees };
-        onEventUpdate(updatedEvent);
-      }
-      // Show error toast (non-blocking)
-      showToast('Failed to update RSVP. Please try again.', 'error');
-    }
-  };
-
-  const handleAddComment = async (content: string) => {
-    if (!event) return;
-
-    const occurrenceDate = event.date;
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
-    const optimisticComment: EventComment = {
-      id: tempId,
-      eventId: event.id,
-      occurrenceDate,
-      userId: currentUserId,
-      userName: currentUserName,
-      content: content,
-      createdAt: new Date()
-    };
-
-    setComments(prev => [...prev, optimisticComment]);
-    if (onEventUpdate) {
-      const updatedEvent = { ...event, comments: [...(event.comments || []), optimisticComment] };
-      onEventUpdate(updatedEvent);
-    }
-
-    try {
-      const serverComment = await addComment(event.id, currentUserId, currentUserName, content, occurrenceDate);
-      // Replace temporary comment with server response
-      setComments(prev => prev.map(c => c.id === tempId ? serverComment : c));
-      if (onEventUpdate) {
-        const updatedEvent = {
-          ...event,
-          comments: (event.comments || []).map(c => c.id === tempId ? serverComment : c)
-        };
-        onEventUpdate(updatedEvent);
-      }
-    } catch (err) {
-      console.error('Failed to sync comment with server:', err);
-      // Rollback optimistic update on error
-      setComments(prev => prev.filter(c => c.id !== tempId));
-      if (onEventUpdate) {
-        const updatedEvent = {
-          ...event,
-          comments: (event.comments || []).filter(c => c.id !== tempId)
-        };
-        onEventUpdate(updatedEvent);
-      }
-      showToast('Failed to post comment. Please try again.', 'error');
-      throw err; // Re-throw so the comment box keeps the text
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
-    try {
-      await deleteComment(commentId);
-      setComments(prev => prev.filter(c => c.id !== commentId));
-      if (onEventUpdate && event) {
-        const updatedEvent = { ...event, comments: (event.comments || []).filter(c => c.id !== commentId) };
-        onEventUpdate(updatedEvent);
-      }
-    } catch (error) {
-      console.error('Failed to delete comment', error);
-      showToast('Failed to delete comment', 'error');
     }
   };
 
@@ -954,46 +783,6 @@ const EventModal: React.FC<EventModalProps> = ({
                   <p className="whitespace-pre-line leading-relaxed">{event.description}</p>
                 </div>
 
-                {/* RSVP Section */}
-                {event.rsvpEnabled && (
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <Users className="h-4 w-4 text-slate-500" /> RSVP Status
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {attendees.length} {event.maxAttendees ? `/ ${event.maxAttendees}` : ''} attending
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleRsvp}
-                        disabled={!!(event.maxAttendees && attendees.length >= event.maxAttendees && !userHasRsvped)}
-                        className={`cta px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded transition-all active:scale-95 ${userHasRsvped
-                          ? 'bg-white text-red-600 border border-red-100 hover:bg-red-50'
-                          : 'bg-ccp-green-600 text-white hover:bg-ccp-green-700'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        {userHasRsvped ? 'Cancel RSVP' : 'Join Event'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Admin: Show Attendee Names */}
-                {role === UserRole.ADMIN && attendeeNames.length > 0 && (
-                  <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Attendee List</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {attendeeNames.map((attendee, idx) => (
-                        <span key={idx} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-sm">
-                          {attendee.userName || 'Unknown User'}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div className="relative">
                   <button
                     onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
@@ -1048,13 +837,6 @@ const EventModal: React.FC<EventModalProps> = ({
                   )}
                 </div>
 
-                <EventComments
-                  comments={comments}
-                  currentUserId={currentUserId}
-                  currentUserName={currentUserName}
-                  onAddComment={handleAddComment}
-                  onDeleteComment={handleDeleteComment}
-                />
                 {history.length > 0 && <EventHistory history={history} />}
               </div>
             ) : (
@@ -1546,6 +1328,17 @@ const EventModal: React.FC<EventModalProps> = ({
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
                 </button>
+                {onDuplicate && (
+                  <button
+                    type="button"
+                    onClick={() => onDuplicate(event)}
+                    className="cta inline-flex justify-center items-center gap-1.5 rounded px-3 sm:px-4 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
+                    title="New event with the same details"
+                  >
+                    <Copy className="h-4 w-4" />
+                    <span className="hidden min-[400px]:inline">Duplicate</span>
+                  </button>
+                )}
                 <span className="flex-1" />
                 <button type="button" onClick={onClose} className="cta hidden sm:inline-flex justify-center items-center rounded px-5 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all">
                   Close

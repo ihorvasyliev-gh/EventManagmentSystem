@@ -29,10 +29,6 @@ export const validateEvent = (eventData: Partial<Event>): ValidationError[] => {
     errors.push({ field: 'date', message: 'Date is required' });
   }
 
-  if (eventData.maxAttendees !== undefined && eventData.maxAttendees < 1) {
-    errors.push({ field: 'maxAttendees', message: 'Max attendees must be at least 1' });
-  }
-
   if (eventData.tags && eventData.tags.length > 10) {
     errors.push({ field: 'tags', message: 'Maximum 10 tags allowed' });
   }

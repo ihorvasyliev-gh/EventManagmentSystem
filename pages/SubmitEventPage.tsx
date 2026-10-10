@@ -3,7 +3,7 @@ import {
   MapPin, User, Mail, CheckCircle2, AlertCircle, UploadCloud, X, ArrowLeft, Send, Clock, CalendarDays,
   ImageIcon, Info, RotateCcw, Sparkles, ChevronDown, Loader2
 } from 'lucide-react';
-import { submitEvent, getEvents } from '../services/eventService';
+import { submitEvent, getPublishedEventsForSubmitters } from '../services/submissionService';
 import { User as AuthUser, UserRole, Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import SessionPlaces from '../components/SessionPlaces';
@@ -25,9 +25,12 @@ import SubmitReview, { ScheduleList, SubmissionSummary, ReviewField } from '../c
 import PdfPagePicker from '../components/PdfPagePicker';
 import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
 import { usePosterFile } from '../hooks/usePosterFile';
+import TurnstileWidget, { TURNSTILE_ENABLED, TurnstileHandle } from '../components/TurnstileWidget';
 
 const CATEGORIES = EVENT_CATEGORIES;
 const DESCRIPTION_SOFT_LIMIT = 600;
+/** The server refuses longer descriptions (server/submission.ts) */
+const DESCRIPTION_MAX = 2000;
 
 // Staff submit most weeks: remember who they are on this device
 const SUBMITTER_STORAGE_KEY = 'ccp_submitter_details';
@@ -92,6 +95,8 @@ interface SubmitEventPageProps {
   events?: Event[];
   /** Pre-selected date (admin adding an event from a calendar day) */
   initialDate?: Date | null;
+  /** Admins: an event to copy ("Duplicate"): its details are filled in, the dates are left to pick */
+  template?: Event | null;
 }
 
 const inputBase =
@@ -157,7 +162,7 @@ const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date | null): 
   };
 };
 
-const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate }) => {
+const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate, template }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   // No date is picked up front, except the day an admin opened the form from
@@ -168,8 +173,23 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     return d;
   }, [initialDate]);
 
-  // A saved draft is offered back unless the admin came here for a specific day
-  const [restoredDraft] = useState<SavedDraft | null>(() => (initialDate ? null : readDraft()));
+  // A saved draft is offered back unless the admin came here for a specific day or to duplicate
+  // an event, whose details then fill the form instead (dates are left to pick)
+  const [restoredDraft] = useState<SavedDraft | null>(() => {
+    if (template) {
+      const category = CATEGORIES.find((c) => c === template.category);
+      return {
+        title: template.title,
+        category: category ?? CATEGORIES[0],
+        dates: [],
+        location: template.location,
+        description: template.description,
+        submitterName: template.submitterName,
+        submitterEmail: template.submitterEmail
+      };
+    }
+    return initialDate ? null : readDraft();
+  });
 
   const [title, setTitle] = useState(restoredDraft?.title ?? '');
   const [category, setCategory] = useState<EventCategoryName>(
@@ -180,27 +200,29 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const { dates: selectedDates, shared: sharedTimes, sameTime: sameTimeForAll, perDate: perDateTimes, samePlace, location, places } = schedule;
   const setLocation = (value: string) => updateSchedule({ location: value });
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
-  const [submitterName, setSubmitterName] = useState(() => currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
-  const [submitterEmail, setSubmitterEmail] = useState(() => currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
-  const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft);
+  const [submitterName, setSubmitterName] = useState(() => (template && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
+  const [submitterEmail, setSubmitterEmail] = useState(() => (template && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
+  const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft && !template);
   const rememberedSubmitter = !currentUser && !!readSavedSubmitter().email;
 
+  // Events at the same time are shown as a heads-up. Signed in, they're the calendar's own;
+  // without an account the server lists what's published (people can't read the table).
   const [activeEvents, setActiveEvents] = useState<Event[]>(events || []);
   useEffect(() => {
-    if (events && events.length > 0) {
+    if (currentUser || (events && events.length > 0)) {
       setActiveEvents(events);
       return;
     }
     let isMounted = true;
-    getEvents()
+    getPublishedEventsForSubmitters()
       .then((fetched) => {
-        if (isMounted && fetched && fetched.length > 0) setActiveEvents(fetched);
+        if (isMounted && fetched.length > 0) setActiveEvents(fetched);
       })
       .catch((err) => console.warn('Failed to load events for conflict detection in SubmitEventPage:', err));
     return () => {
       isMounted = false;
     };
-  }, [events]);
+  }, [events, currentUser]);
 
   const conflictInfo = useMemo(
     () => detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(activeEvents, selectedDates)),
@@ -223,7 +245,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setErrors((prev) => (prev.poster === (message ?? undefined) ? prev : { ...prev, poster: message ?? undefined }))
   );
   const { file: posterFile, preview: posterPreview, pdf: posterPdf } = poster;
+  // Duplicating: start with the original's poster (it stays shared until replaced)
+  const templatePosterUrl = template?.posterUrl ?? null;
+  useEffect(() => {
+    if (templatePosterUrl) poster.reset(templatePosterUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the template
+  }, [templatePosterUrl]);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Anti-spam check for people without an account (only when Turnstile is set up)
+  const needsHumanCheck = TURNSTILE_ENABLED && !currentUser;
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Status
@@ -297,6 +330,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       if (placeError) next.location = placeError;
     }
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
+    else if (description.trim().length > DESCRIPTION_MAX) next.description = `Please shorten the description to ${DESCRIPTION_MAX} characters.`;
     if (!submitterName.trim()) next.name = 'Please enter your name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
     if (poster.busy) next.poster = 'Your PDF is still being turned into an image — one moment, then send again.';
@@ -387,8 +421,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         submitterName: submitterName.trim(),
         submitterEmail: submitterEmail.trim(),
         posterFile: posterFile || undefined,
-        status: isAdmin ? 'published' : 'draft',
-        recurrence
+        existingPosterUrl: !posterFile && posterPreview && posterPreview === templatePosterUrl ? templatePosterUrl : null,
+        publish: isAdmin,
+        recurrence,
+        turnstileToken
       });
 
       clearDraft();
@@ -404,6 +440,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       }
     } catch (err: unknown) {
       console.error('Submission error:', err);
+      // A check token works once; the next attempt needs a new one
+      if (needsHumanCheck) turnstileRef.current?.reset();
       const message = err instanceof Error && err.message ? err.message : '';
       setSubmitError(
         message
@@ -547,6 +585,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         submitError={submitError}
         onEdit={handleEditFromReview}
         onSend={() => void sendEvent()}
+        beforeSend={needsHumanCheck ? <TurnstileWidget ref={turnstileRef} onToken={setTurnstileToken} /> : undefined}
+        canSend={!needsHumanCheck || !!turnstileToken}
       />
     );
   }
@@ -771,6 +811,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   <textarea
                     id="field-description"
                     rows={4}
+                    maxLength={DESCRIPTION_MAX}
                     value={description}
                     onChange={(e) => { setDescription(e.target.value); clearError('description'); }}
                     placeholder="Who is it for, what happens, anything people should bring or book in advance…"

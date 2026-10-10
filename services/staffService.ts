@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { callApi } from './apiClient';
 
 export interface NewStaffAccount {
   fullName: string;
@@ -6,23 +6,27 @@ export interface NewStaffAccount {
   password: string;
 }
 
-/** Creates a staff account through the admin-only /api/staff function */
-export const createStaffAccount = async (account: NewStaffAccount): Promise<{ email: string; fullName: string }> => {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('Your session has expired. Please sign in again.');
+export interface StaffAccount {
+  id: string;
+  email: string;
+  fullName: string;
+  role: 'staff' | 'admin';
+  mustChangePassword: boolean;
+  createdAt: string;
+}
 
-  let res: Response;
-  try {
-    res = await fetch('/api/staff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(account)
-    });
-  } catch {
-    throw new Error('Could not reach the server. Please check your connection and try again.');
-  }
-  const body = await res.json().catch(() => ({})) as { error?: string; email?: string; fullName?: string };
-  if (!res.ok) throw new Error(body.error || `Could not create the account (error ${res.status}).`);
-  return { email: body.email ?? account.email, fullName: body.fullName ?? account.fullName };
+/** Every account (admins only) */
+export const listStaff = async (): Promise<StaffAccount[]> => {
+  const { staff } = await callApi<{ staff: StaffAccount[] }>('/api/staff');
+  return staff;
 };
+
+/** Creates a staff account through the admin-only /api/staff function */
+export const createStaffAccount = async (account: NewStaffAccount): Promise<{ email: string; fullName: string; mustChangePassword: boolean }> => {
+  const body = await callApi<{ email?: string; fullName?: string; mustChangePassword?: boolean }>('/api/staff', { method: 'POST', body: account });
+  return { email: body.email ?? account.email, fullName: body.fullName ?? account.fullName, mustChangePassword: !!body.mustChangePassword };
+};
+
+/** Gives someone who forgot their password a temporary one (shown once to the admin) */
+export const resetStaffPassword = async (userId: string): Promise<{ tempPassword: string; mustChangePassword: boolean }> =>
+  callApi<{ tempPassword: string; mustChangePassword: boolean }>('/api/staff-password', { method: 'POST', body: { userId } });

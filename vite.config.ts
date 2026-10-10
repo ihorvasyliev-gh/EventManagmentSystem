@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
     },
     plugins: [react()],
+    // Which build an error report came from (Cloudflare Pages sets the commit at build time)
+    define: {
+      __APP_RELEASE__: JSON.stringify((process.env.CF_PAGES_COMMIT_SHA || 'local').slice(0, 7)),
+    },
     // Production: remove all console.* and debugger from the bundle
     esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
     build: {

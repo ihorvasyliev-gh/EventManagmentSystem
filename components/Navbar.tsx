@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, UserPlus } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -15,7 +15,11 @@ interface NavbarProps {
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
   onOpenSubmitEvent?: () => void;
-  onOpenAddStaff?: () => void;
+  /** Admins: staff accounts and password resets */
+  onOpenStaff?: () => void;
+  /** Admins: event statistics for Board reports */
+  onOpenStats?: () => void;
+  onChangePassword?: () => void;
 }
 
 const initialsOf = (name: string): string =>
@@ -41,10 +45,14 @@ const Navbar: React.FC<NavbarProps> = ({
   onOpenSubmissions,
   onOpenFortnightlyBulletin,
   onOpenSubmitEvent,
-  onOpenAddStaff
+  onOpenStaff,
+  onOpenStats,
+  onChangePassword
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
   const isAdmin = user.role === UserRole.ADMIN;
   const isBusy = loadingEvents || isRefreshing;
 
@@ -57,13 +65,34 @@ const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isMenuOpen]);
 
+  // Account menu (desktop): closes on Escape or a click elsewhere
+  useEffect(() => {
+    if (!isAccountOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAccountOpen(false);
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (!accountRef.current?.contains(e.target as Node)) setIsAccountOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    document.addEventListener('mousedown', handleClick);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('mousedown', handleClick);
+    };
+  }, [isAccountOpen]);
+
   const closeMenuAnd = (action?: () => void) => () => {
     setIsMenuOpen(false);
+    setIsAccountOpen(false);
     action?.();
   };
 
   const primaryAction = isAdmin ? onAddEventClick : onOpenSubmitEvent;
   const primaryLabel = isAdmin ? 'New Event' : 'Submit Event';
+
+  const accountItem =
+    'w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors';
 
   const menuItem =
     'w-full flex items-center gap-3 text-left px-3 py-3 min-h-[48px] rounded-xl font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors';
@@ -115,17 +144,6 @@ const Navbar: React.FC<NavbarProps> = ({
                   <span>Export</span>
                 </button>
               )}
-              {isAdmin && onOpenAddStaff && (
-                <button
-                  type="button"
-                  onClick={onOpenAddStaff}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
-                  title="Create a staff account"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  <span>Add staff</span>
-                </button>
-              )}
               {isAdmin && onOpenSubmissions && (
                 <button
                   type="button"
@@ -167,27 +185,53 @@ const Navbar: React.FC<NavbarProps> = ({
               )}
 
               {/* Account (desktop) */}
-              <div className="hidden lg:flex items-center gap-2 pl-3 ml-1.5 border-l border-slate-200 dark:border-slate-800">
-                <span
-                  className="w-9 h-9 rounded-full bg-ccp-green-600 text-white text-xs font-bold inline-flex items-center justify-center"
-                  title={`${user.fullName} (${user.role})`}
-                  aria-hidden="true"
-                >
-                  {initialsOf(user.fullName)}
-                </span>
-                <span className="hidden xl:flex flex-col leading-tight max-w-[10rem]">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{user.fullName}</span>
-                  <span className="text-[10px] text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] font-bold">{user.role}</span>
-                </span>
+              <div ref={accountRef} className="relative hidden lg:flex items-center pl-3 ml-1.5 border-l border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={onLogout}
-                  aria-label="Sign out"
-                  title="Sign out"
-                  className={`${iconButton} hover:!text-red-600 dark:hover:!text-red-400`}
+                  onClick={() => setIsAccountOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountOpen}
+                  aria-controls="account-menu"
+                  className="flex items-center gap-2 rounded-xl pl-1 pr-2 py-1 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                  title={`${user.fullName} (${user.role})`}
                 >
-                  <LogOut className="h-[18px] w-[18px]" />
+                  <span className="w-9 h-9 rounded-full bg-ccp-green-600 text-white text-xs font-bold inline-flex items-center justify-center" aria-hidden="true">
+                    {initialsOf(user.fullName)}
+                  </span>
+                  <span className="hidden xl:flex flex-col items-start leading-tight max-w-[10rem]">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-full">{user.fullName}</span>
+                    <span className="text-[10px] text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] font-bold">{user.role}</span>
+                  </span>
+                  <span className="sr-only xl:hidden">Account menu</span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
+                {isAccountOpen && (
+                  <div id="account-menu" role="menu" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 animate-scale-in origin-top-right ${theme === 'dark' ? 'bg-slate-900' : 'bg-white'}`}>
+                    <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                    </div>
+                    {onChangePassword && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onChangePassword)} className={accountItem}>
+                        <KeyRound className="h-4 w-4 text-slate-400" /> Change password
+                      </button>
+                    )}
+                    {isAdmin && onOpenStaff && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenStaff)} className={accountItem}>
+                        <Users className="h-4 w-4 text-slate-400" /> Staff accounts
+                      </button>
+                    )}
+                    {isAdmin && onOpenStats && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenStats)} className={accountItem}>
+                        <BarChart3 className="h-4 w-4 text-slate-400" /> Statistics
+                      </button>
+                    )}
+                    <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                    <button type="button" role="menuitem" onClick={closeMenuAnd(onLogout)} className={`${accountItem} !text-red-600 dark:!text-red-400`}>
+                      <LogOut className="h-4 w-4" /> Sign out
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Menu (phones & tablets) */}
@@ -255,10 +299,16 @@ const Navbar: React.FC<NavbarProps> = ({
                     <span className="text-xs text-slate-400">PDF · WhatsApp</span>
                   </button>
                 )}
-                {isAdmin && onOpenAddStaff && (
-                  <button type="button" onClick={closeMenuAnd(onOpenAddStaff)} className={menuItem}>
-                    <UserPlus className="h-5 w-5 text-slate-400" />
-                    <span className="flex-1">Add staff account</span>
+                {isAdmin && onOpenStaff && (
+                  <button type="button" onClick={closeMenuAnd(onOpenStaff)} className={menuItem}>
+                    <Users className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Staff accounts</span>
+                  </button>
+                )}
+                {isAdmin && onOpenStats && (
+                  <button type="button" onClick={closeMenuAnd(onOpenStats)} className={menuItem}>
+                    <BarChart3 className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Statistics</span>
                   </button>
                 )}
                 {onExportClick && (
@@ -280,6 +330,12 @@ const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {onChangePassword && (
+                  <button type="button" onClick={closeMenuAnd(onChangePassword)} className={menuItem}>
+                    <KeyRound className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Change password</span>
+                  </button>
+                )}
                 <button type="button" onClick={closeMenuAnd(onLogout)} className={`${menuItem} !text-red-600 dark:!text-red-400 hover:!bg-red-50 dark:hover:!bg-red-950/30`}>
                   <LogOut className="h-5 w-5" />
                   <span>Sign out</span>

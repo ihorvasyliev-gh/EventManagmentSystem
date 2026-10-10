@@ -170,8 +170,6 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
     { header: 'Recurrence', key: 'recurrence', width: 16 },
     { header: 'Contact Name', key: 'submitterName', width: 22 },
     { header: 'Contact Email', key: 'submitterEmail', width: 26 },
-    { header: 'RSVP / Attendees', key: 'attendees', width: 22 },
-    { header: 'Comments', key: 'comments', width: 40 },
     { header: 'Attachments', key: 'attachments', width: 35 }
   ];
 
@@ -223,34 +221,9 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
       ? RECURRENCE_LABELS[event.recurrence.type] || event.recurrence.type
       : '';
 
-    const commentsText = (event.comments ?? [])
-      .filter(c => {
-        const cDate = c.occurrenceDate instanceof Date ? c.occurrenceDate : new Date(c.occurrenceDate);
-        return cDate.getTime() === startDate.getTime();
-      })
-      .map(c => {
-        const createdAt = c.createdAt instanceof Date ? c.createdAt : new Date(c.createdAt);
-        return `${c.userName} (${formatDateStr(createdAt)} ${formatTimeStr(createdAt)}): ${c.content}`;
-      })
-      .join('\n');
-
     const attachmentsText = (event.attachments ?? [])
       .map(a => `${a.name}: ${a.url}`)
       .join('\n');
-
-    let attendeesText = '';
-    if (event.attendeeNames && event.attendeeNames.length > 0) {
-      attendeesText = `${event.attendeeNames.length} (${event.attendeeNames.map(a => a.userName).join(', ')})`;
-    } else if (event.attendees && event.attendees.length > 0) {
-      attendeesText = `${event.attendees.length} attendee(s)`;
-    } else if (event.rsvpEnabled) {
-      attendeesText = '0 attendees';
-    } else {
-      attendeesText = 'RSVP disabled';
-    }
-    if (event.maxAttendees) {
-      attendeesText += ` [Max: ${event.maxAttendees}]`;
-    }
 
     const row = worksheet.addRow({
       poster: '',
@@ -266,8 +239,6 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
       recurrence: recurrenceLabel || 'None',
       submitterName: event.submitterName || '',
       submitterEmail: event.submitterEmail || '',
-      attendees: attendeesText,
-      comments: commentsText,
       attachments: attachmentsText
     });
 

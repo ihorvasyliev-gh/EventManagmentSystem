@@ -27,11 +27,6 @@ function serialize(events: Event[]): string {
       ...a,
       uploadedAt: a.uploadedAt instanceof Date ? a.uploadedAt.toISOString() : new Date(a.uploadedAt).toISOString()
     })),
-    comments: e.comments?.map((c) => ({
-      ...c,
-      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : new Date(c.createdAt).toISOString(),
-      occurrenceDate: c.occurrenceDate instanceof Date ? c.occurrenceDate.toISOString() : new Date(c.occurrenceDate).toISOString()
-    })),
     history: e.history?.map((h) => ({
       ...h,
       timestamp: h.timestamp instanceof Date ? h.timestamp.toISOString() : new Date(h.timestamp).toISOString()
@@ -58,11 +53,6 @@ function deserialize(json: string): Event[] {
     createdAt: new Date(e.createdAt),
     updatedAt: e.updatedAt ? new Date(e.updatedAt) : undefined,
     attachments: e.attachments?.map((a: any) => ({ ...a, uploadedAt: new Date(a.uploadedAt) })),
-    comments: e.comments?.map((c: any) => ({
-      ...c,
-      createdAt: new Date(c.createdAt),
-      occurrenceDate: c.occurrenceDate ? new Date(c.occurrenceDate) : new Date(c.createdAt)
-    })),
     history: e.history?.map((h: any) => ({ ...h, timestamp: new Date(h.timestamp) })),
     recurrence: e.recurrence
       ? {

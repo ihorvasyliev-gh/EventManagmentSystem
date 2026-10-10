@@ -14,6 +14,8 @@ interface ModalShellProps {
   /** Sticky action bar at the bottom of the dialog */
   footer?: React.ReactNode;
   size?: 'md' | 'lg' | 'xl';
+  /** false: no close button, and Escape / a click outside do nothing (a step that must be finished) */
+  dismissible?: boolean;
   children: React.ReactNode;
 }
 
@@ -39,13 +41,15 @@ const ModalShell: React.FC<ModalShellProps> = ({
   headerActions,
   footer,
   size = 'md',
+  dismissible = true,
   children
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   // Focus starts on the dialog itself so screen readers announce the title
   // and no button looks pre-selected
-  useModalFocusTrap(isOpen, onClose, panelRef, true);
+  const close = dismissible ? onClose : () => undefined;
+  useModalFocusTrap(isOpen, close, panelRef, true);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -65,7 +69,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
       <div
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] animate-fade-in"
         aria-hidden="true"
-        onClick={onClose}
+        onClick={close}
       />
       <div
         ref={panelRef}
@@ -93,14 +97,16 @@ const ModalShell: React.FC<ModalShellProps> = ({
             {subtitle && <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
           </div>
           {headerActions}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="shrink-0 -mr-1.5 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {dismissible && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="shrink-0 -mr-1.5 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6 py-5">

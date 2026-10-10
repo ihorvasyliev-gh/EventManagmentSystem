@@ -5,6 +5,8 @@ import { exportToICal, exportToExcel, downloadFile, downloadBlob, isPublished } 
 import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import ModalShell from './ModalShell';
+import { EVENT_CATEGORIES } from '../constants/categories';
+import { getCategoryDotColor } from './WeekView';
 import { useToast } from '../contexts/ToastContext';
 
 const EXPORT_RANGE_YEARS = 2;
@@ -22,18 +24,22 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   const [exportFormat, setExportFormat] = useState<'ical' | 'excel'>('ical');
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Subscribe to some categories only (none ticked = everything)
+  const [feedCategories, setFeedCategories] = useState<string[]>([]);
   const { showToast } = useToast();
 
   if (!isOpen) return null;
 
   // Build the subscription URL based on current origin
   const feedPath = '/api/calendar';
-  const feedUrl = `${window.location.origin}${feedPath}`;
+  const feedQuery = feedCategories.length > 0 ? `?category=${feedCategories.map(encodeURIComponent).join(',')}` : '';
+  const feedUrl = `${window.location.origin}${feedPath}${feedQuery}`;
+  const feedName = feedCategories.length === 1 ? `${FEED_NAME}: ${feedCategories[0]}` : FEED_NAME;
   // webcal:// only opens apps that register for it (Apple Calendar, desktop Outlook) —
   // Android has none, so Google Calendar and Outlook on the web get their own links
   const webcalUrl = feedUrl.replace(/^https?:/, 'webcal:');
   const googleSubscribeUrl = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcalUrl)}`;
-  const outlookSubscribeUrl = `https://outlook.office.com/calendar/0/addfromweb?url=${encodeURIComponent(feedUrl)}&name=${encodeURIComponent(FEED_NAME)}`;
+  const outlookSubscribeUrl = `https://outlook.office.com/calendar/0/addfromweb?url=${encodeURIComponent(feedUrl)}&name=${encodeURIComponent(feedName)}`;
 
   const handleCopyUrl = async () => {
     try {
@@ -227,7 +233,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
               Export published events as
             </legend>
             {formatOption('ical', <Calendar className="h-5 w-5 text-cat-enterprise-500 dark:text-cat-enterprise-400" />, 'Calendar file (.ics)', 'Import into Outlook, Google Calendar or Apple Calendar')}
-            {formatOption('excel', <FileSpreadsheet className="h-5 w-5 text-ccp-green-500 dark:text-ccp-green-400" />, 'Excel spreadsheet (.xlsx)', 'Every event with dates, venues, posters and comments')}
+            {formatOption('excel', <FileSpreadsheet className="h-5 w-5 text-ccp-green-500 dark:text-ccp-green-400" />, 'Excel spreadsheet (.xlsx)', 'Every event with dates, venues, posters and contacts')}
           </fieldset>
         </div>
       ) : (
@@ -235,6 +241,36 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Subscribe once and new or changed events show up in your own calendar automatically.
           </p>
+
+          <fieldset>
+            <legend className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+              Which events? <span className="font-normal">(nothing ticked = all of them)</span>
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              {EVENT_CATEGORIES.map((cat) => {
+                const checked = feedCategories.includes(cat);
+                return (
+                  <label
+                    key={cat}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-medium cursor-pointer select-none transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+                      checked
+                        ? 'border-brand-600 bg-brand-600 text-white'
+                        : 'border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-brand-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={checked}
+                      onChange={() => setFeedCategories((prev) => (checked ? prev.filter((c) => c !== cat) : [...prev, cat]))}
+                    />
+                    <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)} ${checked ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
+                    {cat}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <div className="space-y-2">
             {subscribeOption(googleSubscribeUrl, 'Google Calendar', 'Opens Google Calendar in your browser', true)}

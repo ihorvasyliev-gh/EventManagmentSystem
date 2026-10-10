@@ -8,6 +8,8 @@ export interface User {
   email: string;
   fullName: string;
   role: UserRole;
+  /** Set after an admin created the account or reset the password: the app asks for a new one */
+  mustChangePassword?: boolean;
 }
 
 export type EventStatus = 'draft' | 'published';
@@ -51,17 +53,6 @@ export interface Attachment {
   uploadedAt: Date;
 }
 
-export interface EventComment {
-  id: string;
-  eventId: string;
-  /** Дата вхождения (для повторяющихся событий — конкретное вхождение) */
-  occurrenceDate: Date;
-  userId: string;
-  userName: string;
-  content: string;
-  createdAt: Date;
-}
-
 export interface EventHistoryEntry {
   id: string;
   eventId: string;
@@ -89,11 +80,6 @@ export interface Event {
   submitterName?: string;
   submitterEmail?: string;
   recurrence?: RecurrenceRule;
-  rsvpEnabled?: boolean;
-  maxAttendees?: number;
-  attendees?: string[]; // User IDs
-  attendeeNames?: { userId: string; userName: string }[]; // User Names (for admins)
-  comments?: EventComment[];
   history?: EventHistoryEntry[];
   creatorId?: string;
   createdAt: Date;

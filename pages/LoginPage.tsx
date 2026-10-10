@@ -5,6 +5,18 @@ import { Lock, Loader2, Mail, Eye, EyeOff, AlertCircle, CalendarPlus, ArrowRight
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import ThemeToggle from '../components/ThemeToggle';
 
+/** Email to the app's contact asking for a password reset (with the account filled in) */
+const forgotPasswordMailto = (email: string): string => {
+  const body = [
+    'Hi,',
+    '',
+    'I forgot my password for the CCP Event Calendar. Could you reset it, please?',
+    '',
+    `My login email: ${email.trim() || '(please fill in)'}`
+  ].join('\n');
+  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('CCP Event Calendar: password reset')}&body=${encodeURIComponent(body)}`;
+};
+
 interface LoginPageProps {
   onLogin: (user: User) => void;
   onOpenSubmitEvent?: () => void;
@@ -17,6 +29,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotHelp, setShowForgotHelp] = useState(false);
   const requestIdRef = React.useRef(0);
   const isMountedRef = React.useRef(true);
 
@@ -170,6 +183,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <label className="flex items-center gap-2.5 cursor-pointer select-none text-sm text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
@@ -179,6 +193,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
               />
               <span>Keep me signed in on this device</span>
             </label>
+              <button
+                type="button"
+                onClick={() => setShowForgotHelp((v) => !v)}
+                aria-expanded={showForgotHelp}
+                aria-controls="forgot-password-help"
+                className="text-sm font-medium text-brand-600 dark:text-brand-300 hover:underline"
+              >
+                Forgot your password?
+              </button>
+            </div>
+
+            {showForgotHelp && (
+              <div id="forgot-password-help" className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 p-3.5 text-sm text-slate-600 dark:text-slate-300">
+                Email{' '}
+                <a href={forgotPasswordMailto(email)} className="font-semibold text-brand-600 dark:text-brand-300 underline underline-offset-2 break-all">{CONTACT_EMAIL}</a>
+                {' '}and ask for a password reset. You’ll get a temporary password; sign in with it and you’ll be asked to choose a new one.
+              </div>
+            )}
 
             <button
               type="submit"

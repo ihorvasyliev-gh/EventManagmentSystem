@@ -98,7 +98,7 @@ const overlapsRange = (start: Date, end: Date | undefined, rangeStart: Date, ran
  * Every instance keeps the original event duration (its own `endDate`), so recurring
  * occurrences render on the right day in the month/week grids.
  *
- * `instanceKey` format is `${id}_${startTimestamp}` — RSVPs rely on it.
+ * `instanceKey` format is `${id}_${startTimestamp}`.
  */
 export const expandRecurringEvents = (
   events: Event[],

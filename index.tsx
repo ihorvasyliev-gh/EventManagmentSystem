@@ -3,6 +3,9 @@ import './index.css';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { registerServiceWorker } from './sw-register';
+import { initErrorReporting } from './utils/errorReporting';
+
+initErrorReporting();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

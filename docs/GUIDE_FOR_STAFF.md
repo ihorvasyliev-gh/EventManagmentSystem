@@ -71,7 +71,7 @@ This includes:
 | **Venue / Location** | Be specific with the venue name, room number, or address. <br>*Example:* "Hollyhill Library, Meeting Room 2, Harbour View Rd, Knocknaheeny, Cork" *(This automatically links to Google Maps on the PDF!)* <br>If it moves between venues, untick **Same place for all dates** and enter the address for each date and time. |
 | **Short Description** | **A few lines explaining what the event is about** (up to 2,000 characters): <br>• Who is it for? <br>• What will happen? <br>• Do attendees need to book or register in advance? |
 | **Event Poster / Flyer** *(Optional)* | Upload a clear image of your event flyer or poster (PNG, JPG, or WEBP up to 10MB), or the flyer as a PDF (up to 25MB). A PDF is turned into a print-quality image of one page (300 DPI): if it has several pages, you tap the page to use as the poster. It will be embedded as a thumbnail directly into the Board's digest! |
-| **Your Name & Email** | Your contact details so Elizabeth can reach out if she needs to confirm any details before publishing. Use an address you read: that is where the calendar tells you whether your event was published. |
+| **Your Name & Email** | Your contact details so Elizabeth can reach out if she needs to confirm any details before publishing. |
 
 ---
 
@@ -85,8 +85,7 @@ Before the form sends, you check everything on a review screen. Sometimes a smal
    * It immediately appears on the interactive company calendar.
    * It is automatically included in Friday morning's **Upcoming Events Digest** sent to the Board and staff.
    * It is included in the Friday WhatsApp digest.
-   * You get a short email saying your event is on the calendar.
-4. **If it can't go on the calendar** (for example, it was sent twice), Elizabeth declines it and you get an email, usually with the reason. Fix what is needed and send it again.
+4. **If it can't go on the calendar** (for example, it was sent twice), Elizabeth declines it and it won't appear on the calendar.
 
 ---
 

@@ -36,11 +36,11 @@ export const useSubmissionActions = ({ isAdmin, events, setEvents, syncAfterChan
     }
   }, [setEvents, syncAfterChange, showToast]);
 
-  const handleRejectSubmission = useCallback(async (eventId: string, reason: string) => {
+  const handleRejectSubmission = useCallback(async (eventId: string) => {
     const rejected = events.find((e) => e.id === eventId);
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     try {
-      await declineSubmissions([eventId], reason);
+      await declineSubmissions([eventId]);
       showToast('Submission declined', 'info');
       syncAfterChange();
     } catch (err) {

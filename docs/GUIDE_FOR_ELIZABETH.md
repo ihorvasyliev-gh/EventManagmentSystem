@@ -101,8 +101,6 @@ Cork City Partnership CLG
 
 When staff submit events, they arrive directly in your **Submissions Inbox** with status `Pending Review`.
 
-> 📧 If email notifications are switched on, you also get an email for each new submission. The link in it opens the Submissions Inbox straight away (sign in first if asked).
-
 ### How to Moderate:
 
 1. **Log in to the Calendar:**
@@ -125,9 +123,9 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
      * **Flyer preview** (click the thumbnail to view the full image).
 
 5. **Take Action:**
-   * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest. If email notifications are on, the submitter is told it was published.
+   * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest.
    * **Edit (Pencil Icon):** Need to fix a typo, clarify the venue, or refine the time? Click **Edit** to modify the event details, then save.
-   * **Decline (Trash Icon):** If a submission is a duplicate, spam or not suitable, click **Decline**. You can type a short reason (optional) — with email notifications on, it is sent to the submitter so they know what to change. Click **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
+   * **Decline (Trash Icon):** If a submission is a duplicate, spam or not suitable, click **Decline**, then **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
    * **Approve All:** If you have verified all entries at once, click **"Approve all"** in the top right of the modal.
 
 ---

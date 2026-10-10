@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import type React from 'react';
 import { type Event, type User } from '../types';
 import { updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions } from '../services/eventService';
-import { approveSubmissions } from '../services/submissionService';
 import { cacheExceptions } from '../utils/eventsCache';
 import { isSameDay } from '../utils/date';
 import { isRecurringEvent } from '../utils/recurrence';
@@ -92,8 +91,6 @@ export const useEventActions = ({
       syncAfterChange();
 
       if (isDraftBeingPublished) {
-        // Tells the submitter it's on the calendar (the event itself is already saved)
-        approveSubmissions([id]).catch((err) => console.error('Approval email not sent:', err));
         showToast(`Event "${serverEvent.title}" updated and approved!`, 'success');
       } else {
         showToast('Event updated successfully', 'success');

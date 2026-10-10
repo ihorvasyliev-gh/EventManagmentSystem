@@ -140,7 +140,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/file/:key` | `GET` | anyone | Serves a poster or attachment from R2 |
 | `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
 | `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
-| `/api/submissions` | `POST` | admins | Approve (and email the submitter) or decline (email the reason, delete) |
+| `/api/submissions` | `POST` | admins | Approve (publish) or decline (delete) submissions |
 | `/api/staff` | `GET` / `POST` | admins | List accounts / create a staff account |
 | `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |
 | `/api/client-error` | `POST` | anyone | Error reports from browsers (stored in `client_errors`) |

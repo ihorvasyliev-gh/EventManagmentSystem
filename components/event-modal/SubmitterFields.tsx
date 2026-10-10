@@ -8,7 +8,7 @@ interface SubmitterFieldsProps {
   onEmailChange: (value: string) => void;
 }
 
-/** Edit form: who sent the event in (they get the approval / decline emails) */
+/** Edit form: who sent the event in */
 const SubmitterFields: React.FC<SubmitterFieldsProps> = ({ name, onNameChange, email, onEmailChange }) => (
   <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
     <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">

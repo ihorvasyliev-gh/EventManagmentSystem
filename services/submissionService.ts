@@ -65,18 +65,15 @@ export const getPendingSubmissions = async (): Promise<Event[]> => {
   return rows.map(row => mapEventRow(row));
 };
 
-/**
- * Publishes submissions and emails each submitter that their event is on the calendar.
- * Also called after "Save & approve" (the event is already published then; only the email goes).
- */
+/** Publishes submissions */
 export const approveSubmissions = async (ids: string[]): Promise<Event[]> => {
   const { events } = await callApi<{ events: EventRow[] }>('/api/submissions', { method: 'POST', body: { action: 'approve', ids } });
   return events.map(row => mapEventRow(row));
 };
 
-/** Declines submissions: emails each submitter (with the reason), then deletes them and their flyers */
-export const declineSubmissions = async (ids: string[], reason: string): Promise<string[]> => {
-  const { declined } = await callApi<{ declined: string[] }>('/api/submissions', { method: 'POST', body: { action: 'decline', ids, reason } });
+/** Declines submissions: deletes them and their flyers */
+export const declineSubmissions = async (ids: string[]): Promise<string[]> => {
+  const { declined } = await callApi<{ declined: string[] }>('/api/submissions', { method: 'POST', body: { action: 'decline', ids } });
   return declined;
 };
 

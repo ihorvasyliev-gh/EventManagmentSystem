@@ -12,7 +12,7 @@ test('the login page explains how to get a forgotten password reset', async ({ p
   await assertNoCsp();
 });
 
-test('an admin signs in, sees the calendar and declines a submission with a reason', async ({ page }) => {
+test('an admin signs in, sees the calendar and declines a submission', async ({ page }) => {
   const assertNoCsp = await watchCsp(page);
   await mockSupabase(page, {
     events: [
@@ -36,10 +36,9 @@ test('an admin signs in, sees the calendar and declines a submission with a reas
 
   await page.getByText('1 submission is waiting for review').click();
   await page.getByRole('button', { name: 'Decline' }).click();
-  await page.getByPlaceholder(/Reason for Sam Staff/).fill('This one is not a CCP event.');
   await page.getByRole('button', { name: 'Yes, decline' }).click();
   await expect(page.getByText('Submission declined')).toBeVisible();
-  expect(declined).toEqual({ action: 'decline', ids: ['10000000-0000-0000-0000-000000000002'], reason: 'This one is not a CCP event.' });
+  expect(declined).toEqual({ action: 'decline', ids: ['10000000-0000-0000-0000-000000000002'] });
   await assertNoCsp();
 });
 

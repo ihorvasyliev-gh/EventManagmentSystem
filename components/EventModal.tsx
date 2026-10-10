@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { type Event, UserRole, type EventCategory, type EventStatus, type Attachment, type EventHistoryEntry } from '../types';
-import { X, MapPin, Calendar as CalendarIcon, Download, Upload, Loader2, Pencil, Tag, CheckCircle, Trash2, Plus, ChevronDown, Copy, ExternalLink, User, Mail, AlertCircle, Link2, Repeat, Maximize2 } from 'lucide-react';
-import { formatDate, formatTime, isSameDay, formatLocalDate, formatClock, APP_LOCALE } from '../utils/date';
+import { X, MapPin, Upload, Loader2, Pencil, CheckCircle, Trash2, Plus, Copy, User, Mail, AlertCircle, Repeat } from 'lucide-react';
+import { formatLocalDate } from '../utils/date';
 import { uploadPosterToR2, fetchEventDetails } from '../services/eventService';
 import { createCategory } from '../services/categoryService';
-import EventHistory from './EventHistory';
+import EventDetails from './event-modal/EventDetails';
+import DeleteEventDialog from './event-modal/DeleteEventDialog';
+import AddCategoryDialog from './event-modal/AddCategoryDialog';
 import { validateEvent } from '../utils/validation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
-import LazyImage from './LazyImage';
-import PosterLightbox, { PosterDownloadButton } from './PosterLightbox';
+import PosterLightbox from './PosterLightbox';
 import MultiDatePicker from './MultiDatePicker';
 import SessionPlaces from './SessionPlaces';
 import { makeSlot, readScheduleFromEvent, materializeCustomSchedule } from '../utils/multiDateUtils';
@@ -18,11 +19,9 @@ import { getEventLocations, expandRecurringEvents } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { useToast } from '../contexts/ToastContext';
-import { exportToICal, downloadFile } from '../utils/export';
 import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
 import { usePosterFile } from '../hooks/usePosterFile';
 import PdfPagePicker from './PdfPagePicker';
-import { getCategoryColor } from './WeekView';
 
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
@@ -31,10 +30,6 @@ const parseLocalDateInput = (value: string): Date | undefined => {
   if (!y || !m || !d) return undefined;
   return new Date(y, m - 1, d);
 };
-
-/** Event end for calendar invites: the real end time, or 1 hour when none is set */
-const getEventEnd = (ev: Event): Date =>
-  ev.endDate && ev.endDate > ev.date ? ev.endDate : new Date(ev.date.getTime() + 60 * 60 * 1000);
 
 const isRecurringEvent = (ev?: Event | null): boolean =>
   !!ev?.recurrence && ev.recurrence.type !== 'none';
@@ -530,35 +525,6 @@ const EventModal: React.FC<EventModalProps> = ({
     }
   };
 
-  const getCalendarLinks = () => {
-    if (!event) return null;
-
-    const title = encodeURIComponent(event.title || '');
-    const description = encodeURIComponent(event.description || '');
-    const location = encodeURIComponent(event.location || '');
-
-    // Format dates (UTC)
-    const formatDate = (date: Date) => {
-      return date.toISOString().replace(/-|:|\.\d+/g, '');
-    };
-
-    const endDate = getEventEnd(event);
-    const start = formatDate(event.date);
-    const end = formatDate(endDate);
-
-    return {
-      google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${description}&location=${location}`,
-      outlook: `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${endDate.toISOString()}`,
-      office365: `https://outlook.office.com/calendar/0/deeplink/compose?subject=${title}&body=${description}&location=${location}&startdt=${event.date.toISOString()}&enddt=${endDate.toISOString()}`,
-    };
-  };
-
-  const handleDownloadIcs = () => {
-    if (!event) return;
-    downloadFile(exportToICal([{ ...event, endDate: getEventEnd(event) }]), `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`, 'text/calendar;charset=utf-8');
-    setShowCalendarDropdown(false);
-  };
-
   const handleCopyLink = async () => {
     if (!event || !getShareLink) return;
     const link = getShareLink(event);
@@ -632,218 +598,17 @@ const EventModal: React.FC<EventModalProps> = ({
 
             {/* VIEW MODE */}
             {!showForm && event ? (
-              <div className="space-y-6">
-                {/* Header Info */}
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {event.status === 'draft' && <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full">Draft</span>}
-                    {event.category && (
-                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-[0.12em] ${getCategoryColor(event.category)}`}>
-                        {event.category}
-                      </span>
-                    )}
-                    {(event.submitterName || event.submitterEmail) && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
-                        <User className="w-3 h-3 text-slate-400" />
-                        <span>{event.submitterName || 'Staff Member'}</span>
-                        {event.submitterEmail && <span className="text-slate-400 text-[11px]">({event.submitterEmail})</span>}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex justify-between items-start gap-3">
-                    <h2 className={`text-2xl sm:text-[1.75rem] font-semibold leading-tight break-words ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                      {event.title}
-                    </h2>
-                    {getShareLink && (
-                      <button
-                        onClick={handleCopyLink}
-                        className="shrink-0 p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all"
-                        title="Copy link to this event"
-                        aria-label="Copy link to this event"
-                      >
-                        <Link2 className="h-5 w-5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Poster & Attachments */}
-                {(event.posterUrl || attachments.length > 0) && (
-                  <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800">
-                    {event.posterUrl && (
-                      <div className="relative group">
-                        <button
-                          type="button"
-                          onClick={() => setShowPosterPreview(true)}
-                          className="block w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
-                          aria-label="Open full poster"
-                          title="Open full poster"
-                        >
-                          <LazyImage
-                            src={event.posterUrl}
-                            alt={event.title}
-                            className="w-full h-56"
-                          />
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors">
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 dark:bg-slate-800/90 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                              <Maximize2 className="h-3.5 w-3.5" /> View full poster
-                            </span>
-                          </span>
-                        </button>
-                        <PosterDownloadButton
-                          url={event.posterUrl}
-                          title={event.title}
-                          className="absolute bottom-3 right-3 p-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-all text-slate-700 dark:text-slate-200 hover:scale-105"
-                        />
-                      </div>
-                    )}
-                    {attachments.length > 0 && (
-                      <div className={`p-4 ${event.posterUrl ? 'border-t border-slate-100 dark:border-slate-800' : ''} bg-slate-50/50 dark:bg-slate-800/30`}>
-                        <h4 className="text-[10px] font-bold text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] mb-2">Attachments</h4>
-                        <div className="grid gap-2">
-                          {attachments.map((att, idx) => (
-                            <a key={idx} href={att.url} download={att.name} className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-700 rounded-lg border border-slate-100 dark:border-slate-600 hover:border-brand-200 transition-colors group">
-                              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{att.name}</span>
-                              <Download className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Details Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="flex items-center p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
-                    <CalendarIcon className="h-5 w-5 mr-3 text-brand-600 dark:text-brand-300 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em]">Date & Time</p>
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">
-                        {event.endDate && !isSameDay(event.date, event.endDate) ? (
-                          <>
-                            <span>{formatDate(event.date)} at {formatTime(event.date)}</span>
-                            <span className="text-slate-400 dark:text-slate-500 mx-1.5 font-bold">→</span>
-                            <span>{formatDate(event.endDate)} at {formatTime(event.endDate)}</span>
-                          </>
-                        ) : event.endDate ? (
-                          <>
-                            {formatDate(event.date)}, {formatTime(event.date)} – {formatTime(event.endDate)}
-                          </>
-                        ) : (
-                          <>
-                            {formatDate(event.date)} at {formatTime(event.date)}
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
-                    <MapPin className="h-5 w-5 mr-3 text-brand-600 dark:text-brand-300 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em]">Location</p>
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-brand-600 break-words block">
-                        {event.location}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                {seriesDates.upcoming.length > 0 && (
-                  <div className="p-3 rounded-leaf-xs border border-slate-200 dark:border-slate-700">
-                    <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em] flex items-center gap-1.5">
-                      <Repeat className="h-3 w-3" /> Other upcoming dates
-                    </p>
-                    <ul className="mt-2 flex flex-wrap gap-1.5">
-                      {seriesDates.upcoming.map((o) => (
-                        <li key={o.instanceKey ?? o.date.getTime()} className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 tabular-nums">
-                          {o.date.toLocaleDateString(APP_LOCALE, { weekday: 'short', day: 'numeric', month: 'short' })} · {formatClock(o.date)}
-                          {o.location?.trim() && o.location.trim() !== event.location?.trim() && (
-                            <span className="font-normal text-slate-500 dark:text-slate-400"> · {o.location.trim()}</span>
-                          )}
-                        </li>
-                      ))}
-                      {seriesDates.more > 0 && (
-                        <li className="px-1 py-1 text-xs text-slate-500 dark:text-slate-400">
-                          +{seriesDates.more} more in the next 12 months
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-
-                {event.tags && event.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {event.tags.map((tag, idx) => (
-                      <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                        <Tag className="w-3 h-3 mr-1.5 opacity-50" />
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="prose prose-sm max-w-none text-slate-600 dark:text-slate-300">
-                  <p className="whitespace-pre-line leading-relaxed">{event.description}</p>
-                </div>
-
-                <div className="relative">
-                  <button
-                    onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
-                    className="cta w-full py-3 sm:py-2.5 min-h-[44px] sm:min-h-0 border border-brand-600 dark:border-brand-400 rounded text-brand-600 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <CalendarIcon className="h-4 w-4" />
-                    Add to Calendar
-                    <ChevronDown className={`h-4 w-4 transition-transform ${showCalendarDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {showCalendarDropdown && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowCalendarDropdown(false)} />
-                      <div className="absolute bottom-full left-0 right-0 mb-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 animate-scale-in origin-bottom">
-                        <a
-                          href={getCalendarLinks()?.office365}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
-                        >
-                          <span className="flex-1 font-medium">Office 365</span>
-                          <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
-                        </a>
-                        <a
-                          href={getCalendarLinks()?.outlook}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
-                        >
-                          <span className="flex-1">Outlook.com</span>
-                          <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
-                        </a>
-                        <a
-                          href={getCalendarLinks()?.google}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
-                        >
-                          <span className="flex-1">Google Calendar</span>
-                          <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
-                        </a>
-                        <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
-                        <button
-                          onClick={handleDownloadIcs}
-                          className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group text-left"
-                        >
-                          <span className="flex-1">Download .ics File</span>
-                          <Download className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {history.length > 0 && <EventHistory history={history} />}
-              </div>
+              <EventDetails
+                event={event}
+                attachments={attachments}
+                history={history}
+                seriesDates={seriesDates}
+                onOpenPoster={() => setShowPosterPreview(true)}
+                onCopyLink={getShareLink ? handleCopyLink : undefined}
+                calendarOpen={showCalendarDropdown}
+                onToggleCalendar={() => setShowCalendarDropdown((open) => !open)}
+                onCloseCalendar={() => setShowCalendarDropdown(false)}
+              />
             ) : (
               // FORM MODE
               <form id="event-form" onSubmit={handleSubmit} className="space-y-5">
@@ -1188,127 +953,28 @@ const EventModal: React.FC<EventModalProps> = ({
 
           {/* Delete Confirmation Dialog */}
           {showDeleteDialog && event && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={() => !isDeleting && setShowDeleteDialog(false)}>
-              <div className={`relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 ${theme === 'dark' ? 'glass-panel-dark' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-                  <h3 className={`text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                    Delete Event
-                  </h3>
-                  <button onClick={() => !isDeleting && setShowDeleteDialog(false)} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none" disabled={isDeleting}>
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <div className="px-6 py-6">
-                  {event.recurrence && event.recurrence.type !== 'none' ? (
-                    <div className="space-y-4">
-                      <p className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
-                        This is a recurring event. What would you like to delete?
-                      </p>
-                      <div className="space-y-3">
-                        <button
-                          onClick={() => handleDeleteConfirm(false)}
-                          disabled={isDeleting}
-                          className="w-full px-4 py-3 text-left rounded-lg border-2 border-slate-200 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 transition-all disabled:opacity-50"
-                        >
-                          <div className="font-semibold text-slate-900 dark:text-white">Delete only this occurrence</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            Remove this specific instance from the series
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteConfirm(true)}
-                          disabled={isDeleting}
-                          className="w-full px-4 py-3 text-left rounded-lg border-2 border-red-200 dark:border-red-800 hover:border-red-500 dark:hover:border-red-500 transition-all disabled:opacity-50"
-                        >
-                          <div className="font-semibold text-red-600 dark:text-red-400">Delete entire series</div>
-                          <div className="text-xs text-red-500 dark:text-red-400 mt-1">
-                            Remove all occurrences of this event
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <p className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Are you sure you want to delete "{event.title}"? This action cannot be undone.
-                      </p>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleDeleteConfirm(true)}
-                          disabled={isDeleting}
-                          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all disabled:opacity-50 font-medium"
-                        >
-                          {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Delete'}
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteDialog(false)}
-                          disabled={isDeleting}
-                          className="flex-1 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 transition-all disabled:opacity-50 font-medium"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <DeleteEventDialog
+              event={event}
+              isDark={theme === 'dark'}
+              isDeleting={isDeleting}
+              onConfirm={(deleteAll) => void handleDeleteConfirm(deleteAll)}
+              onCancel={() => setShowDeleteDialog(false)}
+            />
           )}
 
           {/* Add Category Modal */}
           {showAddCategoryModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAddCategoryModal(false)}>
-              <div className={`relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 ${theme === 'dark' ? 'glass-panel-dark' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-                  <h3 className={`text-lg font-semibold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                    Add New Category
-                  </h3>
-                  <button onClick={() => setShowAddCategoryModal(false)} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <div className="px-6 py-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Category Name</label>
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddCategory();
-                        }
-                      }}
-                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium placeholder-slate-400"
-                      placeholder="Enter category name"
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={handleAddCategory}
-                    disabled={isCreatingCategory || !newCategoryName.trim()}
-                    className="inline-flex justify-center rounded-lg px-5 py-2 bg-slate-900 text-white font-medium hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 text-sm"
-                  >
-                    {isCreatingCategory ? <Loader2 className="animate-spin h-4 w-4" /> : 'Add Category'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddCategoryModal(false);
-                      setNewCategoryName('');
-                    }}
-                    disabled={isCreatingCategory}
-                    className="inline-flex justify-center rounded-lg px-5 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 border border-slate-200 dark:border-slate-600 transition-all text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AddCategoryDialog
+              isDark={theme === 'dark'}
+              name={newCategoryName}
+              onNameChange={setNewCategoryName}
+              isCreating={isCreatingCategory}
+              onAdd={handleAddCategory}
+              onCancel={() => {
+                setShowAddCategoryModal(false);
+                setNewCategoryName('');
+              }}
+            />
           )}
 
           {/* Footer */}

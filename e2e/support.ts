@@ -57,7 +57,7 @@ interface BackendOptions {
 export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassword = false, events = [] }: BackendOptions = {}) => {
   const user = { id: ADMIN_ID, aud: 'authenticated', role: 'authenticated', email: 'ada@partnershipcork.ie', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
   const profile = { id: ADMIN_ID, email: user.email, full_name: 'Ada Admin', role, must_change_password: mustChangePassword };
-  const state = { profile, events, passwordChanges: [] as string[] };
+  const state = { profile, events, passwordChanges: [] as string[], writes: [] as Array<{ method: string; id: string; body: unknown }> };
 
   await page.routeWebSocket(/\/realtime\/v1\/websocket/, () => {
     // Accept the connection and stay quiet: no live changes in these tests
@@ -88,7 +88,26 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
     return json(route, single ? state.profile : [state.profile]);
   });
   await page.route(`${SUPABASE}/rest/v1/events**`, (route) => {
-    const url = new URL(route.request().url());
+    const req = route.request();
+    const url = new URL(req.url());
+    const id = url.searchParams.get('id')?.replace(/^eq\./, '');
+    const single = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
+    if (req.method() === 'PATCH' && id) {
+      const changes = JSON.parse(req.postData() || '{}');
+      state.events = state.events.map((e) => (e.id === id ? { ...e, ...changes } : e));
+      state.writes.push({ method: 'PATCH', id, body: changes });
+      const row = state.events.find((e) => e.id === id);
+      return json(route, single ? row : [row]);
+    }
+    if (req.method() === 'DELETE' && id) {
+      state.events = state.events.filter((e) => e.id !== id);
+      state.writes.push({ method: 'DELETE', id, body: null });
+      return route.fulfill({ status: 204 });
+    }
+    if (id) {
+      const row = state.events.find((e) => e.id === id);
+      return single ? json(route, row ?? {}, row ? 200 : 406) : json(route, row ? [row] : []);
+    }
     const drafts = url.searchParams.get('status') === 'eq.draft';
     const rows = state.events.filter((e) => !drafts || e.status === 'draft');
     return json(route, rows, 200, { 'Content-Range': `0-${Math.max(0, rows.length - 1)}/${rows.length}` });
@@ -97,7 +116,9 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
     json(route, [], 200, { 'Content-Range': '*/0' })
   );
   await page.route(`${SUPABASE}/rest/v1/event_attachments**`, (route) => json(route, []));
-  await page.route(`${SUPABASE}/rest/v1/event_history**`, (route) => json(route, []));
+  await page.route(`${SUPABASE}/rest/v1/event_history**`, (route) =>
+    route.request().method() === 'POST' ? route.fulfill({ status: 201 }) : json(route, [])
+  );
   return state;
 };
 

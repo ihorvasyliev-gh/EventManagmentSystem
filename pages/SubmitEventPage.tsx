@@ -1,7 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
-  MapPin, User, Mail, CheckCircle2, AlertCircle, UploadCloud, X, ArrowLeft, Send, Clock, CalendarDays,
-  ImageIcon, Info, RotateCcw, Sparkles, ChevronDown, Loader2
+  MapPin, User, Mail, AlertCircle, UploadCloud, X, ArrowLeft, Send, Info, RotateCcw, ChevronDown, Loader2
 } from 'lucide-react';
 import { submitEvent, getPublishedEventsForSubmitters } from '../services/submissionService';
 import { type User as AuthUser, UserRole, type Event } from '../types';
@@ -21,7 +20,9 @@ import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import ThemeToggle from '../components/ThemeToggle';
 import OverlapList from '../components/OverlapList';
 import { groupOverlaps } from '../utils/duplicateDetection';
-import SubmitReview, { ScheduleList, type SubmissionSummary, type ReviewField } from '../components/SubmitReview';
+import SubmitReview, { type SubmissionSummary, type ReviewField } from '../components/SubmitReview';
+import SubmitSuccess from '../components/submit/SubmitSuccess';
+import SubmitPreview from '../components/submit/SubmitPreview';
 import PdfPagePicker from '../components/PdfPagePicker';
 import { POSTER_ACCEPT, MAX_POSTER_IMAGE_MB, MAX_POSTER_PDF_MB } from '../utils/posterFile';
 import { usePosterFile } from '../hooks/usePosterFile';
@@ -479,98 +480,14 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
   // --- Success screen ---------------------------------------------------------
   if (submitted) {
-    const steps: Array<[string, string, 'done' | 'current' | 'next']> = isAdmin
-      ? [['Published', 'Live on the calendar now', 'done'], ['Upcoming Events Digest', 'Included in the next issue', 'next']]
-      : [
-          ['Sent', 'We have your event', 'done'],
-          ['Review', 'Elizabeth checks the details', 'current'],
-          ['On the calendar', "And in Friday's Upcoming Events Digest", 'next']
-        ];
     return (
-      <div className="relative min-h-[100dvh] bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center px-3 py-8 sm:p-6">
-        <ThemeToggle className="absolute top-3 right-3 pt-[env(safe-area-inset-top)] box-content" />
-        <div className="max-w-lg w-full animate-scale-in">
-          <div className="text-center mb-6">
-            <div className="relative w-16 h-16 mx-auto mb-4">
-              <span className="absolute inset-0 rounded-full bg-ccp-green-400/30 animate-ping [animation-iteration-count:2]" aria-hidden="true" />
-              <span className="relative w-16 h-16 bg-ccp-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-ccp-green-500/30">
-                <CheckCircle2 className="w-9 h-9" />
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white">
-              {isAdmin ? 'Event published' : 'Thank you — event sent!'}
-            </h1>
-            <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300">
-              {isAdmin
-                ? 'It is live on the calendar and will appear in the next Upcoming Events Digest.'
-                : 'It will appear on the calendar once it has been reviewed.'}
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 rounded-leaf shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div className="flex gap-4 p-4 sm:p-5">
-              {submitted.posterUrl && (
-                <img src={submitted.posterUrl} alt="" className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 object-cover rounded-xl border border-slate-200 dark:border-slate-700" />
-              )}
-              <div className="min-w-0 flex-1">
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(submitted.category)}`} /> {submitted.category}
-                </span>
-                <p className="mt-1 text-lg font-bold leading-snug text-slate-900 dark:text-white break-words">{submitted.title}</p>
-                {submitted.location && (
-                  <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-                    <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> <span className="break-words">{submitted.location}</span>
-                  </p>
-                )}
-                {!isAdmin && (
-                  <p className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Waiting for review
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 text-sm">
-              <ScheduleList days={submitted.days} compact />
-            </div>
-            <ol className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 space-y-3">
-              {steps.map(([label, hint, state], i) => (
-                <li key={label} className="flex items-start gap-3">
-                  <span className={`mt-0.5 w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold ${
-                    state === 'done' ? 'bg-ccp-green-500 text-white'
-                      : state === 'current' ? 'bg-amber-400 text-amber-950'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
-                  }`}>
-                    {state === 'done' ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-slate-900 dark:text-white">{label}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{hint}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2.5 mt-5">
-            <button
-              type="button"
-              onClick={handleSubmitAnother}
-              className="cta flex-1 h-12 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded shadow-sm transition-colors"
-            >
-              {isAdmin ? 'Create another event' : 'Submit another event'}
-            </button>
-            {onBackToLogin && (
-              <button
-                type="button"
-                onClick={onBackToLogin}
-                className="cta flex-1 h-12 px-4 bg-white hover:bg-brand-50 dark:bg-transparent dark:hover:bg-brand-950/40 border border-brand-600 dark:border-brand-400 text-brand-600 dark:text-brand-300 rounded transition-colors"
-              >
-                {currentUser ? 'Back to calendar' : 'Go to staff login'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <SubmitSuccess
+        summary={submitted}
+        isAdmin={isAdmin}
+        signedIn={!!currentUser}
+        onSubmitAnother={handleSubmitAnother}
+        onBack={onBackToLogin}
+      />
     );
   }
 
@@ -981,77 +898,16 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
           </div>
 
           {/* Sidebar: live preview + what happens next (desktop) */}
-          <aside className="hidden lg:block sticky top-24 space-y-4" aria-label="Preview">
-            <div className="bg-white dark:bg-slate-800 rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="px-5 pt-4 pb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-600 dark:text-brand-300">
-                <Sparkles className="w-3.5 h-3.5" /> Preview
-              </div>
-              {posterPreview ? (
-                <img src={posterPreview} alt="" className="w-full h-40 object-cover border-y border-slate-100 dark:border-slate-700" />
-              ) : (
-                <div className="h-24 mx-5 mb-1 rounded-xl bg-slate-100 dark:bg-slate-900/50 flex items-center justify-center text-slate-300 dark:text-slate-600">
-                  <ImageIcon className="w-7 h-7" />
-                </div>
-              )}
-              <div className="p-5 space-y-2.5">
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(category)}`} /> {category}
-                </span>
-                <p className={`text-lg font-bold leading-snug break-words ${title.trim() ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
-                  {title.trim() || 'Your event name'}
-                </p>
-                <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                  <span>
-                    {sortedDates.length === 0 ? 'No date yet' : sortedDates.slice(0, 4).map(fmtChipDate).join(', ')}
-                    {sortedDates.length > 4 && ` +${sortedDates.length - 4} more`}
-                  </span>
-                </p>
-                <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <Clock className="w-4 h-4 shrink-0 text-slate-400" /> {timeLabel}
-                </p>
-                <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
-                  <span className="break-words">{placeLabel || <span className="text-slate-400">Venue</span>}</span>
-                </p>
-                {description.trim() && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-4 whitespace-pre-line">{description.trim()}</p>
-                )}
-              </div>
-            </div>
-
-            {!isAdmin && (
-              <div className="rounded-leaf-sm border border-slate-200 dark:border-slate-700 p-5 space-y-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5 flex items-center gap-2">
-                    <Info className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
-                    <span>What can be included?</span>
-                  </p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Any event held by CCP, co-hosted, or funded by CCP that colleagues, Board members, or City Hall could attend or share (from talks & festivals to local coffee mornings).
-                  </p>
-                </div>
-                <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-3">What happens next</p>
-                  <ol className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                    {[
-                      ['You submit', 'Any time — Wednesdays are best.'],
-                      ['Elizabeth reviews', 'Usually on Thursday.'],
-                      ['It’s published', 'On the calendar and in Friday’s digest.']
-                    ].map(([head, sub], i) => (
-                      <li key={head} className="flex gap-3">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-ccp-green-600 text-xs font-bold flex items-center justify-center text-white">{i + 1}</span>
-                        <span>
-                          <span className="block font-medium text-slate-800 dark:text-slate-200">{head}</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{sub}</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              </div>
-            )}
-          </aside>
+          <SubmitPreview
+            isAdmin={isAdmin}
+            title={title}
+            category={category}
+            description={description}
+            posterPreview={posterPreview}
+            dates={sortedDates}
+            timeLabel={timeLabel}
+            placeLabel={placeLabel}
+          />
         </div>
       </div>
 

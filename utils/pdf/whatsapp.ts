@@ -7,13 +7,15 @@ import { eventContacts } from '../contacts';
 
 /**
  * Generate a preformatted text digest for WhatsApp groups (clean plain text without * or _ formatting).
- * `baseUrl` (the site) adds links to the live calendar and the submission form at the end.
+ * `baseUrl` (the site) adds links to the live calendar and the submission form at the end;
+ * `pdfUrl` a link to the digest PDF (so the file needn't be sent separately).
  */
 export const generateWhatsAppSummary = (
   events: Event[],
   startDate: Date | string,
   endDate: Date | string,
-  baseUrl?: string
+  baseUrl?: string,
+  pdfUrl?: string | null
 ): string => {
   const cleanWa = (val?: string | null) => (val || '').replace(/[*_]/g, '').trim();
 
@@ -30,6 +32,7 @@ export const generateWhatsAppSummary = (
   const submitUrl = toAbsoluteHttpUrl('/submit', baseUrl);
   const links = () => {
     let out = `────────────────────────────\n`;
+    if (pdfUrl) out += `📄 Digest PDF: ${pdfUrl}\n`;
     if (calendarUrl) out += `📌 Live calendar: ${calendarUrl}\n`;
     if (submitUrl) out += `✍️ Running an event? Send it in (no login needed): ${submitUrl}`;
     return out.trimEnd();

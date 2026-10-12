@@ -22,7 +22,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. A declined submission can carry a reason. Updates arrive in real time. |
 | ✉️ **Emails (optional)** | Admins hear about new submissions; submitters hear when their event is approved or declined (with the reason). |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
-| 📲 **WhatsApp & email text** | One click copies an emoji-friendly WhatsApp version of the digest, or a ready-to-send covering email for the Board that lists every event. |
+| 📲 **WhatsApp, email & a link** | Admins copy an emoji-friendly WhatsApp version of the digest, or open a ready-to-send covering email for the Board that lists every event. Both carry a link to the digest PDF (uploaded once, open to anyone with the link for six months), so nothing needs attaching. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
 | 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. You can delete a single occurrence. |
 | 👥 **Staff accounts** | Admins add staff and reset forgotten passwords: the person gets a temporary password and chooses their own at the next sign-in. Everyone can change their password from the account menu. |
@@ -47,7 +47,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
    - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title, then an overview: an *At a glance* month grid for periods up to six weeks, or an *In this digest* list with page numbers (click a row to jump to the event) for longer ones. Events follow week by week (*This week*, *Next week*, then dates), each day's date beside its cards, with category colours, descriptions, contact people (an event can list several), flyers and add-to-calendar buttons.
    - **Compact table.** A dense day-by-day agenda that fits the most events per page.
 
-   **Preview** opens the PDF in a new tab and **Download PDF** saves it. **Email** (admins only) opens a new email in your email app with the subject and covering text filled in (one line per event, ending with “Kind regards,”); add the recipients and attach the PDF. **WhatsApp text** copies the group-chat version. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
+   **Preview** opens the PDF in a new tab and **Download PDF** saves it; staff see only these two. Admins also get **Email**, **WhatsApp** and **Link**: the PDF is uploaded to R2 (`/api/digest`, kept six months) and its link goes into a new email in your email app with the subject and covering text filled in (one line per event, ending with “Kind regards,”), into the group-chat text, or on its own to the clipboard. The same digest (same day, period, layout and events) reuses its link; any change to the events makes a new one. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
 
 Step-by-step instructions, including email templates, are in the [coordinator guide](docs/GUIDE_FOR_ELIZABETH.md).
 
@@ -110,6 +110,8 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Review submissions and see drafts | | ✅ |
 | Manage categories | | ✅ |
 | Add staff accounts, reset passwords, see statistics | | ✅ |
+| Preview and download the Events Digest | ✅ | ✅ |
+| Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 
 Row-level security enforces these rules in the database: staff read published events (and their own drafts) and can only create drafts. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
 
@@ -137,9 +139,10 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish) |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
 | `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
-| `/api/file/:key` | `GET` | anyone | Serves a poster or attachment from R2 |
+| `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
 | `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
 | `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
+| `/api/digest` | `POST` | admins | Uploads the digest PDF under `digests/` and returns its link (kept six months; older digests are deleted) |
 | `/api/submissions` | `POST` | admins | Approve (publish) or decline (delete) submissions |
 | `/api/staff` | `GET` / `POST` | admins | List accounts / create a staff account |
 | `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |

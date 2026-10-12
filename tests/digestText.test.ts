@@ -133,3 +133,23 @@ test('toAbsoluteHttpUrl resolves site paths and refuses other schemes', () => {
   assert.equal(toAbsoluteHttpUrl('javascript:alert(1)', BASE), null);
   assert.equal(toAbsoluteHttpUrl(undefined, BASE), null);
 });
+
+test('with a link to the uploaded PDF, the email links to it instead of saying it is attached', () => {
+  const pdfUrl = `${BASE}/api/file/digests/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events.pdf`;
+  const events = [makeEvent('a', new Date(2026, 9, 13, 13, 0), { title: 'Coffee morning' })];
+  const { body } = generateDigestEmail(events, start, end, { baseUrl: BASE, pdfUrl });
+  assert.match(body, /Here is our Upcoming Events Digest for Friday 9 October – Friday 23 October 2026 \(PDF, the link works for six months\):\n/);
+  assert.ok(body.split('\n').includes(pdfUrl));
+  assert.match(body, /It has one event:/);
+  assert.doesNotMatch(body, /attached/);
+  const mailto = decodeURIComponent(generateDigestMailto(events, start, end, { baseUrl: BASE, pdfUrl }));
+  assert.ok(mailto.includes(pdfUrl));
+
+  // A long list still fits the mailto: limit, the link kept and the rest counted
+  const many = Array.from({ length: 40 }, (_, i) =>
+    makeEvent(`e${i}`, new Date(2026, 9, 10 + (i % 12), 9 + (i % 8)), { title: `A rather long event name number ${i}`, location: 'Heron House, Room 4, Cork' }));
+  const link = generateDigestMailto(many, start, end, { baseUrl: BASE, pdfUrl });
+  assert.ok(link.length <= MAILTO_MAX_LENGTH);
+  assert.ok(decodeURIComponent(link).includes(pdfUrl));
+  assert.match(decodeURIComponent(link), /more events in the PDF/);
+});

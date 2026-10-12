@@ -127,7 +127,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   type="button"
                   onClick={onOpenFortnightlyBulletin}
                   className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
-                  title="Generate the Upcoming Events Digest (PDF & WhatsApp)"
+                  title={isAdmin ? 'Generate the Upcoming Events Digest (PDF & WhatsApp)' : 'Generate the Upcoming Events Digest (PDF)'}
                 >
                   <FileText className="h-4 w-4" />
                   <span>Digest</span>
@@ -296,7 +296,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   <button type="button" onClick={closeMenuAnd(onOpenFortnightlyBulletin)} className={menuItem}>
                     <FileText className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Events digest</span>
-                    <span className="text-xs text-slate-400">PDF · WhatsApp</span>
+                    <span className="text-xs text-slate-400">{isAdmin ? 'PDF · WhatsApp' : 'PDF'}</span>
                   </button>
                 )}
                 {isAdmin && onOpenStaff && (

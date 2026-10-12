@@ -85,6 +85,7 @@ Before the form sends, you check everything on a review screen. Sometimes a smal
    * It immediately appears on the interactive company calendar.
    * It is automatically included in Friday morning's **Upcoming Events Digest** sent to the Board and staff.
    * It is included in the Friday WhatsApp digest.
+   * You can also open **Digest** yourself to preview or download the PDF for any period.
 4. **If it can't go on the calendar** (for example, it was sent twice), Elizabeth declines it and it won't appear on the calendar.
 
 ---

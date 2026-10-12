@@ -45,10 +45,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     // Older uploads were not type-checked: never let a stored file run as a page on this origin.
     const contentType = (headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     headers.set('X-Content-Type-Options', 'nosniff');
+    // Saved under its own name, without the random part of the key (or the digests/ folder)
+    const fileName = (key.split('/').pop() ?? key).replace(/^[0-9a-f-]{36}-/i, '').replace(/"/g, '');
     if (!INLINE_TYPES.has(contentType)) {
       headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
-      const fileName = key.replace(/^[0-9a-f-]{36}-/i, '');
-      headers.set('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+      headers.set('Content-Disposition', `attachment; filename="${fileName}"`);
+    } else {
+      headers.set('Content-Disposition', `inline; filename="${fileName}"`);
     }
 
     // Keys contain a random UUID, so the content behind a URL never changes

@@ -156,14 +156,20 @@ Once submissions are approved, you can generate both the **branded PDF** and the
   `CCP-Events-Digest-YYYY-MM-DD.pdf`
 
 ### 5. Copy the WhatsApp Digest
-* Click **"WhatsApp text"**.
+* Click **"WhatsApp"** (admins only, like **Email** and **Link** below; staff see just **Preview** and **Download PDF**).
 * A green message confirms it was copied.
-* You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end links to the live calendar and the submission form.
+* You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end a link to the digest PDF (so you don't need to send the file as well), the live calendar and the submission form.
 
 ### 6. Open the covering email
-* Click **"Email"** (only admins see this button). Your email app (e.g. Outlook) opens a new email with the subject and text filled in: a greeting, one line per event (day, time, title, venue and any other dates), where to send in an event, and *Kind regards,* with no name under it.
-* Add the recipients, attach the PDF you downloaded in Step 4, and send. You no longer need to type the highlights by hand.
-* In a busy period the email names the first few events and adds *"…and N more events in the attached PDF"*: a longer email would not open from the browser.
+* Click **"Email"**. The digest PDF is uploaded (a few seconds), then your email app (e.g. Outlook) opens a new email with the subject and text filled in: a greeting, **a link to the PDF**, one line per event (day, time, title, venue and any other dates), where to send in an event, and *Kind regards,* with no name under it.
+* Add the recipients and send. There is nothing to attach: anyone with the link can open or download the PDF, without signing in, for **six months**; after that the link stops working.
+* In a busy period the email names the first few events and adds *"…and N more events in the PDF"*: a longer email would not open from the browser.
+* If the upload fails (for example, no internet), the email opens without the link: attach the PDF from Step 4 by hand.
+
+### 7. Just the link
+* **Link** copies the link to the PDF on its own, to paste into Teams, a calendar invite or anywhere else.
+
+> **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
 
 > **Long periods:** for more than six weeks, page 1 of the Executive digest shows an *In this digest* list with page numbers instead of the month grid; clicking a row jumps to that event.
 

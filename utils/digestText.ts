@@ -94,13 +94,14 @@ const EMAIL_LIST_LIMIT = 20;
 /**
  * Covering email for the PDF (the routine sends it to the Board and staff every fortnight):
  * subject, greeting, one line per event, how to send in an event, and "Kind regards," with no
- * name under it. `listLimit` caps how many events are named.
+ * name under it. `listLimit` caps how many events are named. With `pdfUrl` the email links to
+ * the PDF instead of saying it is attached.
  */
 export const generateDigestEmail = (
   events: Event[],
   startDate: Date,
   endDate: Date,
-  options: { baseUrl?: string; listLimit?: number } = {}
+  options: { baseUrl?: string; listLimit?: number; pdfUrl?: string | null } = {}
 ): DigestEmail => {
   const groups = digestGroupsFor(events, startDate, endDate);
   const period = formatPeriodShort(startDate, endDate);
@@ -111,11 +112,18 @@ export const generateDigestEmail = (
   if (groups.length === 0) {
     lines.push(`There are no events scheduled for ${period} yet, so there is no digest this time.`);
   } else {
-    lines.push(
-      `Please find attached our Upcoming Events Digest for ${formatLongRange(startDate, endDate)}. ` +
-      (groups.length === 1 ? 'It has one event:' : `It has ${groups.length} events:`),
-      ''
-    );
+    const count = groups.length === 1 ? 'It has one event:' : `It has ${groups.length} events:`;
+    if (options.pdfUrl) {
+      lines.push(
+        `Here is our Upcoming Events Digest for ${formatLongRange(startDate, endDate)} (PDF, the link works for six months):`,
+        options.pdfUrl,
+        '',
+        count,
+        ''
+      );
+    } else {
+      lines.push(`Please find attached our Upcoming Events Digest for ${formatLongRange(startDate, endDate)}. ${count}`, '');
+    }
     groups.slice(0, listLimit).forEach((group) => {
       const ev = group.event;
       const s = toDate(ev.date) || startDate;
@@ -128,7 +136,7 @@ export const generateDigestEmail = (
     });
     if (groups.length > listLimit) {
       const more = groups.length - listLimit;
-      lines.push(`• …and ${more} more ${more === 1 ? 'event' : 'events'} in the attached PDF`);
+      lines.push(`• …and ${more} more ${more === 1 ? 'event' : 'events'} in the ${options.pdfUrl ? '' : 'attached '}PDF`);
     }
     lines.push(
       '',
@@ -155,22 +163,25 @@ const toMailto = ({ subject, body }: DigestEmail): string =>
   `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`;
 
 /**
- * Link that opens a new email with the subject and text filled in and no recipient; the PDF is
- * attached by hand (a link cannot carry a file). When the full list makes the link too long,
- * fewer events are named and the rest counted ("…and 6 more events in the attached PDF").
+ * Link that opens a new email with the subject and text filled in and no recipient. A mailto:
+ * link can't carry a file: the text links to the uploaded PDF (`pdfUrl`), or the PDF is attached
+ * by hand. When the full list makes the link too long, fewer events are named and the rest
+ * counted ("…and 6 more events in the attached PDF").
  */
 export const generateDigestMailto = (
   events: Event[],
   startDate: Date,
   endDate: Date,
-  options: { baseUrl?: string; maxLength?: number } = {}
+  options: { baseUrl?: string; maxLength?: number; pdfUrl?: string | null } = {}
 ): string => {
   const maxLength = options.maxLength ?? MAILTO_MAX_LENGTH;
   let limit = Math.min(EMAIL_LIST_LIMIT, digestGroupsFor(events, startDate, endDate).length);
-  let link = toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit: limit }));
+  const email = (listLimit: number) =>
+    toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit, pdfUrl: options.pdfUrl }));
+  let link = email(limit);
   while (link.length > maxLength && limit > 1) {
     limit -= 1;
-    link = toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit: limit }));
+    link = email(limit);
   }
   return link;
 };

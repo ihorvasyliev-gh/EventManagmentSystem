@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail
+  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2
 } from 'lucide-react';
 import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestMailto } from '../utils/digestText';
+import { shareDigestPdf } from '../services/digestService';
+import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
 import { calculatePresetDateRange, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { groupDigestOccurrences, formatAlsoOnDates } from '../utils/digestGrouping';
@@ -20,8 +22,8 @@ interface FortnightlyBulletinModalProps {
   recurrenceExceptions?: Map<string, Date[]>;
   /** Admins: open the submissions inbox (shown when pending events fall in the period) */
   onOpenSubmissions?: () => void;
-  /** Admins: open the covering email for the Board in the email app */
-  canEmail?: boolean;
+  /** Admins: the covering email, the WhatsApp text and a link to the PDF (staff preview and download it) */
+  canShare?: boolean;
 }
 
 const PRESETS: Array<{ id: DateRangePreset; label: string }> = [
@@ -47,6 +49,35 @@ const writePref = (key: string, value: string) => {
     // Preference just isn't remembered
   }
 };
+
+/**
+ * Copies text that may still be on its way (the digest link is uploaded first). Safari only lets a
+ * page write to the clipboard during the click itself, so where it can the text goes in as a promise.
+ * Rejects when the text can't be had.
+ */
+const copyText = async (text: Promise<string>): Promise<void> => {
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })]);
+      return;
+    } catch {
+      // Not supported this way, or not allowed: the plain ways below
+    }
+  }
+  const value = await text;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const input = document.createElement('textarea');
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+  }
+};
+
+const spinner = <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />;
 
 const fmtDay = (d: Date) => d.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
 const fmtTime = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -93,7 +124,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   events,
   recurrenceExceptions,
   onOpenSubmissions,
-  canEmail = false
+  canShare = false
 }) => {
   const { showToast } = useToast();
 
@@ -101,8 +132,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [startDateStr, setStartDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).startDateStr);
   const [endDateStr, setEndDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).endDateStr);
   const [format, setFormat] = useState<'executive' | 'compact'>(() => (readPref(FORMAT_KEY) === 'compact' ? 'compact' : 'executive'));
-  const [busy, setBusy] = useState<'download' | 'preview' | null>(null);
+  const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [showList, setShowList] = useState(true);
 
   // Always start from the default fortnight when the dialog opens
@@ -141,6 +173,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       pendingCount: new Set(inRange.filter((e) => e.status === 'draft').map((e) => e.id)).size
     };
   }, [periodEvents, startDate, endDate]);
+
+  // Admins share the PDF as a link (in the email, the WhatsApp text or copied on its own)
+  const shareable = canShare && groups.length > 0;
 
   const dayCount = rangeValid ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0;
 
@@ -186,33 +221,97 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     }
   };
 
-  const handleCopyWhatsApp = async () => {
-    const text = generateWhatsAppSummary(periodEvents, startDate, endDate, window.location.origin);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const input = document.createElement('textarea');
-      input.value = text;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
-    }
-    setCopied(true);
-    showToast('WhatsApp summary copied — paste it into the group chat', 'success');
-    setTimeout(() => setCopied(false), 2500);
+  /**
+   * The digest PDF is uploaded once and its link reused (remembered on this device) while the day,
+   * period, layout and events stay the same; any change to them makes a new PDF and link.
+   */
+  const shared = useRef<{ key: string; link: Promise<string> } | null>(null);
+  const getShareLink = (): Promise<string> => {
+    const key = digestKeyOf({ start: startDateStr, end: endDateStr, format, events: periodEvents });
+    if (shared.current?.key === key) return shared.current.link;
+    const remembered = rememberedDigestLink(key);
+    const link = remembered ? Promise.resolve(remembered) : (async () => {
+      const blob = await generateEventsDigestPDF(periodEvents, { ...pdfOptions, output: 'blob' });
+      if (!blob) throw new Error('the PDF could not be made');
+      const result = await shareDigestPdf(blob, digestFileName(startDate, endDate));
+      rememberDigestLink(key, result);
+      return result.url;
+    })();
+    shared.current = { key, link };
+    // After a failure the next click tries again
+    link.catch(() => {
+      if (shared.current?.link === link) shared.current = null;
+    });
+    return link;
   };
 
-  // New email in the email app: subject and text filled in, no recipient, PDF attached by hand
-  const handleEmail = () => {
-    window.location.href = generateDigestMailto(periodEvents, startDate, endDate, { baseUrl: window.location.origin });
-    showToast('Opening your email app — attach the digest PDF before sending', 'info');
+  const handleCopyWhatsApp = async () => {
+    const summary = (pdfUrl?: string) => generateWhatsAppSummary(periodEvents, startDate, endDate, window.location.origin, pdfUrl);
+    let linkFailed = false;
+    const text = shareable
+      ? getShareLink().then(summary, (err) => {
+          console.error('Sharing the digest PDF failed:', err);
+          linkFailed = true;
+          return summary();
+        })
+      : Promise.resolve(summary());
+    if (shareable) setBusy('whatsapp');
+    try {
+      await copyText(text);
+      setCopied(true);
+      showToast(
+        linkFailed
+          ? 'WhatsApp summary copied, without the PDF link (the upload failed)'
+          : 'WhatsApp summary copied — paste it into the group chat',
+        linkFailed ? 'warning' : 'success'
+      );
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      showToast('The summary could not be copied. Please try again.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // New email in the email app: subject and text filled in, no recipient, the text links to the PDF
+  const handleEmail = async () => {
+    let pdfUrl: string | null = null;
+    if (shareable) {
+      setBusy('email');
+      try {
+        pdfUrl = await getShareLink();
+      } catch (err) {
+        console.error('Sharing the digest PDF failed:', err);
+      } finally {
+        setBusy(null);
+      }
+    }
+    window.location.href = generateDigestMailto(periodEvents, startDate, endDate, { baseUrl: window.location.origin, pdfUrl });
+    if (pdfUrl) showToast('Opening your email app — the text links to the digest PDF', 'info');
+    else if (shareable) showToast('The PDF could not be uploaded — attach it to the email by hand', 'warning');
+    else showToast('Opening your email app', 'info');
+  };
+
+  const handleCopyLink = async () => {
+    setBusy('link');
+    try {
+      await copyText(getShareLink());
+      setLinkCopied(true);
+      showToast('Link copied — anyone with it can open this PDF for six months', 'success');
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch (err) {
+      console.error('Sharing the digest PDF failed:', err);
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
+      showToast(`The link could not be made${reason}. Please try again.`, 'error');
+    } finally {
+      setBusy(null);
+    }
   };
 
   const disabled = !rangeValid || busy !== null;
 
   const footer = (
-    <div className={`grid ${canEmail ? 'grid-cols-3' : 'grid-cols-2'} sm:flex sm:items-center gap-2`}>
+    <div className={`grid ${canShare ? 'grid-cols-2' : 'grid-cols-1'} sm:flex sm:items-center gap-2`}>
       <button
         type="button"
         onClick={handleDownloadPDF}
@@ -226,35 +325,51 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         type="button"
         onClick={handlePreviewPDF}
         disabled={disabled}
-        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-brand-600 dark:text-brand-300 bg-white dark:bg-transparent border border-brand-600 dark:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors disabled:opacity-50"
+        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-brand-600 dark:text-brand-300 bg-white dark:bg-transparent border border-brand-600 dark:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors disabled:opacity-50"
       >
         {busy === 'preview' ? <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
         Preview
       </button>
-      {canEmail && (
+      {canShare && (
         <button
           type="button"
           onClick={handleEmail}
-          disabled={!rangeValid}
-          title="Opens a new email for the Board and staff with the subject and text filled in. Add the recipients and attach the PDF."
-          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
+          disabled={disabled}
+          title="Opens a new email for the Board and staff with the subject and text filled in, and a link to the PDF. Add the recipients."
+          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
         >
-          <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />
+          {busy === 'email' ? spinner : <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
           Email
         </button>
       )}
-      <button
-        type="button"
-        onClick={handleCopyWhatsApp}
-        disabled={!rangeValid}
-        title="Copies a plain-text summary for WhatsApp groups"
-        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-2.5 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 border border-ccp-green-600 hover:border-ccp-green-700 transition-colors disabled:opacity-50"
-      >
-        {/* Under 400px the three small buttons are words only: with icons "WhatsApp" didn't fit */}
-        {copied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <MessageSquare className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
-        <span className="sm:hidden">{copied ? 'Copied!' : 'WhatsApp'}</span>
-        <span className="hidden sm:inline">{copied ? 'Copied!' : 'WhatsApp text'}</span>
-      </button>
+      {canShare && (
+        <button
+          type="button"
+          onClick={handleCopyLink}
+          disabled={disabled || !shareable}
+          aria-label="Copy link"
+          title="Uploads this PDF and copies a link to it that anyone can open for six months"
+          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
+        >
+          {busy === 'link' ? spinner : linkCopied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <Link2 className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
+          {/* From sm up the dialog's row only fits "Link" beside the other four */}
+          <span className="sm:hidden">{linkCopied ? 'Copied!' : 'Copy link'}</span>
+          <span className="hidden sm:inline">Link</span>
+        </button>
+      )}
+      {canShare && (
+        <button
+          type="button"
+          onClick={handleCopyWhatsApp}
+          disabled={disabled}
+          title="Copies a plain-text summary for WhatsApp groups, with a link to the PDF"
+          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 border border-ccp-green-600 hover:border-ccp-green-700 transition-colors disabled:opacity-50"
+        >
+          {/* Under 400px the small buttons are words only: with icons "WhatsApp" didn't fit */}
+          {busy === 'whatsapp' ? spinner : copied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <MessageSquare className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
+          {copied ? 'Copied!' : 'WhatsApp'}
+        </button>
+      )}
       <div className="hidden sm:block sm:order-3 flex-1" />
     </div>
   );
@@ -264,7 +379,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Upcoming Events Digest"
-      subtitle={canEmail ? 'A branded PDF, plus email and WhatsApp text, for the Board & staff' : 'A branded PDF and WhatsApp text for the Board & staff'}
+      subtitle={canShare ? 'A branded PDF, a link to it, plus email and WhatsApp text, for the Board & staff' : 'A branded PDF of the upcoming events'}
       icon={<FileText className="w-5 h-5" />}
       size="lg"
       footer={footer}

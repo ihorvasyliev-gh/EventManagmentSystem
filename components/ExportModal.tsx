@@ -222,7 +222,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
               <FileText className="w-5 h-5 shrink-0 text-brand-600 dark:text-brand-400" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold text-brand-900 dark:text-brand-100">Looking for the Events Digest?</span>
-                <span className="block text-xs text-brand-700 dark:text-brand-300 mt-0.5">The branded PDF & WhatsApp summary for the Board & staff.</span>
+                <span className="block text-xs text-brand-700 dark:text-brand-300 mt-0.5">The branded PDF of the upcoming events for the Board & staff.</span>
               </span>
               <ExternalLink className="w-4 h-4 shrink-0 text-brand-500" />
             </button>

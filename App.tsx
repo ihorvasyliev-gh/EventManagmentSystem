@@ -316,7 +316,7 @@ const AppContent: React.FC = () => {
             onClose={() => setIsBulletinModalOpen(false)}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
-            canEmail={isAdmin}
+            canShare={isAdmin}
             onOpenSubmissions={isAdmin ? () => {
               setIsBulletinModalOpen(false);
               setIsSubmissionsModalOpen(true);

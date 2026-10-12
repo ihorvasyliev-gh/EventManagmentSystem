@@ -18,6 +18,7 @@ if (supabaseUrl.includes('your-project') || supabaseAnonKey.includes('your-anon'
 }
 
 import { authStorageAdapter } from '../utils/authStorage';
+import { withContactsColumnFallback } from '../services/contactsColumnFallback';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -25,5 +26,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true
-  }
+  },
+  // Keeps working before migration 013 adds events.extra_contacts
+  global: { fetch: withContactsColumnFallback((input, init) => fetch(input, init)) }
 });

@@ -36,6 +36,21 @@ test('submissions are refused when required fields are missing or too long', () 
   assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly' }).ok, false);
 });
 
+test('more contact people are checked like the submitter: a name and a valid email each, up to five in all', () => {
+  const ok = checkSubmission({ ...valid, extra_contacts: [{ name: ' Ann ', email: 'Ann@X.ie' }] });
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.row.extra_contacts, [{ name: 'Ann', email: 'ann@x.ie' }]);
+  const none = checkSubmission(valid);
+  assert.ok(none.ok);
+  assert.deepEqual(none.row.extra_contacts, []);
+  assert.equal(checkSubmission({ ...valid, extra_contacts: [{ name: '', email: 'a@x.ie' }] }).ok, false);
+  assert.equal(checkSubmission({ ...valid, extra_contacts: [{ name: 'Ann', email: 'nope' }] }).ok, false);
+  assert.equal(checkSubmission({ ...valid, extra_contacts: 'Ann' }).ok, false);
+  const five = Array.from({ length: 5 }, (_, i) => ({ name: `P${i}`, email: `p${i}@x.ie` }));
+  assert.equal(checkSubmission({ ...valid, extra_contacts: five.slice(0, 4) }).ok, true);
+  assert.equal(checkSubmission({ ...valid, extra_contacts: five }).ok, false);
+});
+
 test('a multi-date submission keeps its per-date times and places, which must match the dates', () => {
   const dates = ['2026-11-05T10:00:00.000Z', '2026-11-12T14:00:00.000Z'];
   const ok = checkSubmission({
@@ -81,6 +96,9 @@ test('emails name the event, its first date in Irish time and how many more date
   assert.match(declined.text, /Reason:\nNot a CCP event/);
   assert.match(declined.text, /^Hi Ann,/);
   assert.match(newSubmissionEmail(ev, 'https://app.test').text, /https:\/\/app\.test\/\?inbox/);
+  assert.doesNotMatch(newSubmissionEmail(ev, 'https://app.test').text, /Other contacts/);
+  const withOthers = { ...ev, extra_contacts: [{ name: 'Bob', email: 'bob@x.ie' }, { name: 'Cat', email: 'cat@x.ie' }] };
+  assert.match(newSubmissionEmail(withOthers, 'https://app.test').text, /Other contacts: Bob \(bob@x\.ie\), Cat \(cat@x\.ie\)/);
 });
 
 test('selectAll pages through every row instead of stopping at the API limit', async () => {

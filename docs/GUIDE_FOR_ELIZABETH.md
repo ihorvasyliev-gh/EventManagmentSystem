@@ -216,11 +216,14 @@ You can simply approve the submission in the **Submissions Inbox**, then click *
 4. Update the date, time, or location, and click **Save**.
 5. The live calendar and any newly generated digest will reflect the update instantly.
 
+### An event has more than one contact person
+In the form, under **Contact person**, click **Add another contact person** and enter their name and email (up to five people in all). When editing an event, use **Add contact person** under **Contact Details**. Everyone listed appears as a contact on the event, in the digest PDF and in the WhatsApp text.
+
 ### Can staff view the submissions inbox?
 No. The **Submissions** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff only see published events on the public calendar.
 
 ### An event repeats with small changes — do I have to type it all again?
-No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact and flyer. Pick the new date, change anything else that is different and click **Publish event**.
+No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact people and flyer. Pick the new date, change anything else that is different and click **Publish event**.
 
 ### The Board asks how many events we ran this quarter
 Open the **account menu** (your name, top right) → **Statistics**. Pick a period (this quarter, last quarter, this year, …, or your own dates) to see the number of events and dates held, by category, by month and by venue. **Copy as text** puts a short summary on the clipboard for an email or report.

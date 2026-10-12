@@ -1,4 +1,4 @@
-import { type Event, type RecurrenceRule } from '../types';
+import { type Event, type EventContact, type RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
 import { callApi } from './apiClient';
 import { fetchAllPages } from './paging';
@@ -13,6 +13,8 @@ export interface SubmissionData {
   category?: string;
   submitterName: string;
   submitterEmail: string;
+  /** More contact people besides the submitter */
+  extraContacts?: EventContact[];
   posterFile?: File;
   /** Admins only: publish straight away instead of sending it for review */
   publish?: boolean;
@@ -43,6 +45,7 @@ export const submitEvent = async (data: SubmissionData): Promise<{ id: string; s
     recurrence_custom_locations: data.recurrence?.type === 'custom' ? data.recurrence.customLocations ?? null : null,
     submitter_name: data.submitterName.trim(),
     submitter_email: data.submitterEmail.trim(),
+    extra_contacts: data.extraContacts ?? [],
     publish: !!data.publish,
     poster_url: data.posterFile ? null : data.existingPosterUrl ?? null
   }));

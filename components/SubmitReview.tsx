@@ -6,6 +6,7 @@ import { getCategoryDotColor } from './WeekView';
 import ThemeToggle from './ThemeToggle';
 import OverlapList from './OverlapList';
 import type { OverlapEntry } from '../utils/duplicateDetection';
+import type { EventContact } from '../types';
 
 /** What the submitter entered, ready to show back to them */
 export interface SubmissionSummary {
@@ -17,8 +18,8 @@ export interface SubmissionSummary {
   location: string;
   description: string;
   posterUrl: string | null;
-  name: string;
-  email: string;
+  /** The person sending it in first, then anyone else to contact */
+  contacts: EventContact[];
 }
 
 export type ReviewField = 'title' | 'dates' | 'location' | 'description' | 'poster' | 'name';
@@ -216,11 +217,24 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
               <p className="whitespace-pre-line leading-relaxed text-slate-600 dark:text-slate-300 break-words">{summary.description}</p>
             </Block>
 
-            <Block icon={<User className="w-4 h-4" />} label="Contact" onEdit={() => onEdit('name')} editLabel="Edit contact details">
-              <p className="font-medium">{summary.name}</p>
-              <p className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 break-all">
-                <Mail className="w-3.5 h-3.5 shrink-0" /> {summary.email}
-              </p>
+            <Block
+              icon={<User className="w-4 h-4" />}
+              label={summary.contacts.length > 1 ? 'Contacts' : 'Contact'}
+              onEdit={() => onEdit('name')}
+              editLabel="Edit contact details"
+            >
+              <ul className="space-y-2">
+                {summary.contacts.map((contact, i) => (
+                  <li key={i}>
+                    <p className="font-medium">{contact.name}</p>
+                    {contact.email && (
+                      <p className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 break-all">
+                        <Mail className="w-3.5 h-3.5 shrink-0" /> {contact.email}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </Block>
           </div>
         </article>

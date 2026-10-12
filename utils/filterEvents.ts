@@ -1,5 +1,6 @@
 import { type Event, type EventFilters, UserRole } from '../types.ts';
 import { expandRecurringEvents, getEventLocations } from './recurrence.ts';
+import { eventContacts } from './contacts.ts';
 
 // Open-ended date filters still need a finite window to look for occurrences in
 const OPEN_RANGE_YEARS = 5;
@@ -15,7 +16,7 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
       (event.description || '').toLowerCase().includes(searchLower) ||
       getEventLocations(event).some(l => l.toLowerCase().includes(searchLower)) ||
       (event.category || '').toLowerCase().includes(searchLower) ||
-      (event.submitterName || '').toLowerCase().includes(searchLower) ||
+      eventContacts(event).some(c => c.name.toLowerCase().includes(searchLower)) ||
       event.tags?.some(tag => tag.toLowerCase().includes(searchLower))
     );
   }

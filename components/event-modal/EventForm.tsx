@@ -239,6 +239,11 @@ const EventForm: React.FC<EventFormProps> = ({
         onNameChange={form.setSubmitterName}
         email={form.submitterEmail}
         onEmailChange={form.setSubmitterEmail}
+        extra={form.extraContacts}
+        onExtraChange={form.changeContact}
+        onAddContact={form.addContact}
+        onRemoveContact={form.removeContact}
+        error={fieldErrors.contacts}
       />
 
       {/* 8. Recurrence */}

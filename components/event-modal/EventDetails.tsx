@@ -7,6 +7,7 @@ import { PosterDownloadButton } from '../PosterLightbox';
 import EventHistory from '../EventHistory';
 import { getCategoryColor } from '../WeekView';
 import AddToCalendarMenu from './AddToCalendarMenu';
+import { eventContacts } from '../../utils/contacts';
 
 interface EventDetailsProps {
   event: Event;
@@ -36,13 +37,19 @@ const EventDetails: React.FC<EventDetailsProps> = ({
             {event.category}
           </span>
         )}
-        {(event.submitterName || event.submitterEmail) && (
-          <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+        {eventContacts(event).map((contact, i) => (
+          <span key={i} className="inline-flex items-center gap-1.5 min-w-0 max-w-full text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
             <User className="w-3 h-3 shrink-0 text-slate-400" />
-            <span className="shrink-0">{event.submitterName || 'Staff Member'}</span>
-            {event.submitterEmail && <span className="min-w-0 truncate text-slate-400 text-[11px]">({event.submitterEmail})</span>}
+            {contact.name || i === 0 ? (
+              <>
+                <span className="shrink-0">{contact.name || 'Staff Member'}</span>
+                {contact.email && <span className="min-w-0 truncate text-slate-400 text-[11px]">({contact.email})</span>}
+              </>
+            ) : (
+              <span className="min-w-0 truncate">{contact.email}</span>
+            )}
           </span>
-        )}
+        ))}
       </div>
 
       <div className="flex justify-between items-start gap-3">

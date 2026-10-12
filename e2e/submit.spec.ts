@@ -29,10 +29,18 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
   await page.getByLabel('Short description').fill('Tea, chats and information about local courses.');
   await page.getByLabel('Full name').fill('Sam Staff');
   await page.getByLabel('Work email').fill('sam@partnershipcork.ie');
+  // A second contact person: a started row needs both a name and an email
+  await page.getByRole('button', { name: 'Add another contact person' }).click();
+  await expect(page.locator('#field-contact-0-name')).toBeFocused();
+  await page.locator('#field-contact-0-name').fill('Ann Partner');
+  await page.getByRole('button', { name: 'Check & submit' }).last().click();
+  await expect(page.locator('#err-contact-0-email')).toHaveText('Please enter a valid email address.');
+  await page.locator('#field-contact-0-email').fill('ann@partnershipcork.ie');
   await page.getByRole('button', { name: 'Check & submit' }).last().click();
 
   // The review screen, then send
   await expect(page.getByText('Coffee morning').first()).toBeVisible();
+  await expect(page.getByText('ann@partnershipcork.ie')).toBeVisible();
   await page.getByRole('button', { name: 'Send for review' }).last().click();
   await expect(page.getByRole('heading', { name: /event sent/i })).toBeVisible();
 
@@ -42,6 +50,7 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
     location: 'Mahon Community Centre',
     submitter_name: 'Sam Staff',
     submitter_email: 'sam@partnershipcork.ie',
+    extra_contacts: [{ name: 'Ann Partner', email: 'ann@partnershipcork.ie' }],
     publish: false
   });
   expect(submitted!.hasPoster).toBe(false);

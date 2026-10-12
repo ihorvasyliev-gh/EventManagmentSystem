@@ -81,6 +81,9 @@ test('the edit form checks fields, asks before dropping changes and saves repeat
   await form.locator('input[type="number"]').fill('2');
   await form.getByPlaceholder('e.g. Sarah Murphy').fill('Sam Staff');
   await form.getByPlaceholder('e.g. sarah@corkcitypartnership.ie').fill('sam@partnershipcork.ie');
+  await form.getByRole('button', { name: 'Add contact person' }).click();
+  await form.getByLabel('Contact 2 Name').fill('Ann Partner');
+  await form.getByLabel('Contact 2 Email').fill('ann@partnershipcork.ie');
   await form.getByRole('button', { name: 'Save Changes' }).click();
   await expect(page.getByText('Event updated successfully')).toBeVisible();
   expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({
@@ -92,7 +95,8 @@ test('the edit form checks fields, asks before dropping changes and saves repeat
     recurrence_type: 'weekly',
     recurrence_interval: 2,
     submitter_name: 'Sam Staff',
-    submitter_email: 'sam@partnershipcork.ie'
+    submitter_email: 'sam@partnershipcork.ie',
+    extra_contacts: [{ name: 'Ann Partner', email: 'ann@partnershipcork.ie' }]
   });
 });
 

@@ -259,6 +259,7 @@ const EventModal: React.FC<EventModalProps> = ({
         tags: values.tags,
         submitterName: values.submitterName,
         submitterEmail: values.submitterEmail,
+        extraContacts: values.extraContacts,
         attachments,
         creatorId: event?.creatorId || currentUserId,
         recurrence: values.recurrence

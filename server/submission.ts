@@ -17,6 +17,12 @@ export interface SubmissionInput {
   recurrence_custom_locations?: unknown;
   submitter_name?: unknown;
   submitter_email?: unknown;
+  extra_contacts?: unknown;
+}
+
+export interface SubmissionContact {
+  name: string;
+  email: string;
 }
 
 export interface SubmissionRow {
@@ -32,6 +38,8 @@ export interface SubmissionRow {
   recurrence_custom_locations: (string | null)[] | null;
   submitter_name: string;
   submitter_email: string;
+  /** More contact people besides the submitter */
+  extra_contacts: SubmissionContact[];
 }
 
 export const LIMITS = {
@@ -41,7 +49,9 @@ export const LIMITS = {
   category: 80,
   name: 120,
   email: 254,
-  dates: 366
+  dates: 366,
+  /** Contact people besides the submitter (utils/contacts.ts MAX_CONTACTS, less the submitter) */
+  extraContacts: 4
 } as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,6 +73,23 @@ const isoList = (value: unknown): string[] | null | undefined => {
   if (!Array.isArray(value) || value.length === 0 || value.length > LIMITS.dates) return undefined;
   const list = value.map(isoDate);
   return list.every((d): d is string => d !== null) ? list : undefined;
+};
+
+/** More contact people, each with a name and a valid email (or what's wrong with the list) */
+const contactList = (value: unknown): SubmissionContact[] | string => {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) return 'The contact people are not valid.';
+  if (value.length > LIMITS.extraContacts) return `Please list up to ${LIMITS.extraContacts + 1} contact people.`;
+  const contacts: SubmissionContact[] = [];
+  for (const item of value) {
+    const entry = item && typeof item === 'object' ? (item as { name?: unknown; email?: unknown }) : {};
+    const name = text(entry.name, LIMITS.name);
+    if (!name) return 'Please enter a name for each contact person.';
+    const email = text(entry.email, LIMITS.email)?.toLowerCase() ?? null;
+    if (!email || !EMAIL_RE.test(email)) return `Please enter a valid email address for ${name}.`;
+    contacts.push({ name, email });
+  }
+  return contacts;
 };
 
 export type SubmissionCheck = { ok: true; row: SubmissionRow } | { ok: false; error: string };
@@ -87,6 +114,8 @@ export const checkSubmission = (input: SubmissionInput): SubmissionCheck => {
   if (!name) return { ok: false, error: 'Please enter your name.' };
   const email = text(input.submitter_email, LIMITS.email)?.toLowerCase() ?? null;
   if (!email || !EMAIL_RE.test(email)) return { ok: false, error: 'Please enter a valid email address.' };
+  const extraContacts = contactList(input.extra_contacts);
+  if (typeof extraContacts === 'string') return { ok: false, error: extraContacts };
 
   const type = input.recurrence_type === 'custom' ? 'custom' : 'none';
   if (input.recurrence_type !== undefined && input.recurrence_type !== 'none' && input.recurrence_type !== 'custom') {
@@ -126,7 +155,8 @@ export const checkSubmission = (input: SubmissionInput): SubmissionCheck => {
       recurrence_custom_end_dates: customEnds,
       recurrence_custom_locations: customPlaces,
       submitter_name: name,
-      submitter_email: email
+      submitter_email: email,
+      extra_contacts: extraContacts
     }
   };
 };

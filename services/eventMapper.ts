@@ -1,11 +1,12 @@
 import type { Event, Attachment, EventHistoryEntry, RecurrenceRule } from '../types.ts';
+import { readContacts } from '../utils/contacts.ts';
 
 /** Columns the app reads from events (no `select *`: old columns stay out of every response) */
 export const EVENT_COLUMNS = [
   'id', 'title', 'description', 'date', 'end_date', 'location', 'poster_url', 'status', 'category', 'tags',
   'recurrence_type', 'recurrence_interval', 'recurrence_end_date', 'recurrence_occurrences',
   'recurrence_days_of_week', 'recurrence_custom_dates', 'recurrence_custom_end_dates',
-  'recurrence_custom_locations', 'submitter_name', 'submitter_email', 'creator_id', 'created_at', 'updated_at'
+  'recurrence_custom_locations', 'submitter_name', 'submitter_email', 'extra_contacts', 'creator_id', 'created_at', 'updated_at'
 ].join(',');
 
 /** An events row as Supabase returns it (columns may be missing from shorter selects) */
@@ -30,6 +31,8 @@ export interface EventRow {
   recurrence_custom_locations?: (string | null)[] | null;
   submitter_name?: string | null;
   submitter_email?: string | null;
+  /** More contact people: [{ name, email }] */
+  extra_contacts?: unknown;
   creator_id?: string | null;
   created_at?: string;
   updated_at?: string | null;
@@ -99,6 +102,7 @@ export const mapEventRow = (row: EventRow, attachments?: Attachment[]): Event =>
   // Older submissions kept the submitter in tags only
   const tagValue = (prefix: string) => tags.find(t => t.startsWith(prefix))?.slice(prefix.length);
   const posterAttachment = attachments?.find(att => att.type === 'image');
+  const extraContacts = readContacts(row.extra_contacts);
   return {
     id: row.id,
     title: row.title,
@@ -113,6 +117,7 @@ export const mapEventRow = (row: EventRow, attachments?: Attachment[]): Event =>
     status: row.status,
     submitterName: row.submitter_name || tagValue('by:') || undefined,
     submitterEmail: row.submitter_email || tagValue('email:') || undefined,
+    extraContacts: extraContacts.length > 0 ? extraContacts : undefined,
     recurrence: mapRecurrence(row),
     creatorId: row.creator_id || undefined,
     createdAt: row.created_at ? new Date(row.created_at) : new Date(row.date),
@@ -140,5 +145,6 @@ export const eventToRow = (event: Omit<Event, 'id' | 'createdAt'>) => ({
   recurrence_custom_end_dates: toIsoList(event.recurrence?.customEndDates),
   recurrence_custom_locations: event.recurrence?.customLocations ?? null,
   submitter_name: event.submitterName || null,
-  submitter_email: event.submitterEmail || null
+  submitter_email: event.submitterEmail || null,
+  extra_contacts: readContacts(event.extraContacts)
 });

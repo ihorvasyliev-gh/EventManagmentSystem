@@ -3,6 +3,7 @@ import { isMultiDayEvent } from '../date';
 import { formatAlsoOnDates } from '../digestGrouping';
 import { toAbsoluteHttpUrl, toDate, MONTHS_LONG, WEEKDAYS_LONG, digestGroupsFor } from '../digestText.ts';
 import { formatDateRange, formatEventTime } from './dates';
+import { eventContacts } from '../contacts';
 
 /**
  * Generate a preformatted text digest for WhatsApp groups (clean plain text without * or _ formatting).
@@ -82,9 +83,12 @@ export const generateWhatsAppSummary = (
         text += `ℹ️ ${cleanDesc}\n`;
       }
     }
-    if (ev.submitterName) {
-      // The email lets people ask the organiser directly
-      text += `👤 Contact: ${cleanWa(ev.submitterName)}${ev.submitterEmail ? ` (${ev.submitterEmail.trim()})` : ''}\n`;
+    const contacts = eventContacts(ev)
+      .map((c) => `${cleanWa(c.name)}${c.email ? (c.name ? ` (${c.email})` : c.email) : ''}`.trim())
+      .filter(Boolean);
+    if (contacts.length) {
+      // The emails let people ask the organisers directly
+      text += `👤 ${contacts.length > 1 ? 'Contacts' : 'Contact'}: ${contacts.join(', ')}\n`;
     }
     text += `\n`;
   });

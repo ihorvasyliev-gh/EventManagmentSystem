@@ -110,3 +110,30 @@ test('when the event cannot be saved, the uploaded flyer is removed again', asyn
   assert.equal(bucket.stored.size, 0);
   assert.equal(bucket.deleted.length, 1);
 });
+
+test('more contact people are saved with the event; a database without them yet still takes the event', async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  mockFetch(dbRoutes(inserted));
+  const extra = [{ name: 'Ann', email: 'Ann@x.ie' }];
+  const res = await onRequestPost({ request: send({ event: { ...event, extra_contacts: extra } }), env });
+  assert.equal(res.status, 201);
+  assert.deepEqual(inserted[0].extra_contacts, [{ name: 'Ann', email: 'ann@x.ie' }]);
+
+  // Before migration 013 the column doesn't exist: the insert is refused naming it, then retried without it
+  const retried: Array<Record<string, unknown>> = [];
+  mockFetch([
+    ({ url, method, body }: { url: string; method: string; body: string | null }) => {
+      if (method !== 'POST' || !url.includes('/rest/v1/events')) return undefined;
+      const row = JSON.parse(body!);
+      retried.push(row);
+      return 'extra_contacts' in row
+        ? json({ code: 'PGRST204', message: "Could not find the 'extra_contacts' column of 'events' in the schema cache" }, 400)
+        : json([{ id: 'new-id' }], 201);
+    },
+    ...dbRoutes([])
+  ]);
+  const old = await onRequestPost({ request: send({ event: { ...event, extra_contacts: extra } }), env });
+  assert.equal(old.status, 201);
+  assert.equal(retried.length, 2);
+  assert.ok(!('extra_contacts' in retried[1]));
+});

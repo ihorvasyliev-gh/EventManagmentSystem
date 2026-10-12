@@ -7,6 +7,7 @@ export interface NotifiedEvent {
   recurrence_custom_dates?: string[] | null;
   submitter_name?: string | null;
   submitter_email?: string | null;
+  extra_contacts?: Array<{ name?: string | null; email?: string | null }> | null;
 }
 
 const whenFormatter = new Intl.DateTimeFormat('en-IE', {
@@ -34,12 +35,20 @@ const eventLines = (ev: NotifiedEvent): string[] => [
   ...(ev.location?.trim() ? [`Where: ${ev.location.trim()}`] : [])
 ];
 
+/** "Ann (ann@x.ie), Bob (bob@x.ie)": the contact people besides the submitter */
+const otherContacts = (ev: NotifiedEvent): string =>
+  (ev.extra_contacts ?? [])
+    .map((c) => `${c.name?.trim() ?? ''}${c.email?.trim() ? ` (${c.email.trim()})` : ''}`.trim())
+    .filter(Boolean)
+    .join(', ');
+
 export const newSubmissionEmail = (ev: NotifiedEvent, appUrl: string) => ({
   subject: `New event submitted: ${ev.title}`,
   text: [
     `${ev.submitter_name || 'A member of staff'}${ev.submitter_email ? ` (${ev.submitter_email})` : ''} submitted an event for the CCP calendar.`,
     '',
     ...eventLines(ev),
+    ...(otherContacts(ev) ? [`Other contacts: ${otherContacts(ev)}`] : []),
     '',
     `Review it in the submissions inbox: ${appUrl}/?inbox`,
     '',

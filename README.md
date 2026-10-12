@@ -44,7 +44,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 1. **Submit.** Staff open [`/submit`](https://ccp-event-calendar.pages.dev/submit) on any device. Each new event is saved as a *pending* draft.
 2. **Review.** Admins see a badge on **Submissions**. From there they check the details and poster, then approve, edit or decline. An approved event appears on the calendar straight away.
 3. **Circulate.** Open **Events Digest**, pick the period (the next 14 days by default) and choose a layout:
-   - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title, then an overview: an *At a glance* month grid for periods up to six weeks, or an *In this digest* list with page numbers (click a row to jump to the event) for longer ones. Events follow week by week (*This week*, *Next week*, then dates), each day's date beside its cards, with category colours, descriptions, contact details, flyers and add-to-calendar buttons.
+   - **Executive cards.** Page 1 has the period totals (events, days with events, venues) beside the title, then an overview: an *At a glance* month grid for periods up to six weeks, or an *In this digest* list with page numbers (click a row to jump to the event) for longer ones. Events follow week by week (*This week*, *Next week*, then dates), each day's date beside its cards, with category colours, descriptions, contact people (an event can list several), flyers and add-to-calendar buttons.
    - **Compact table.** A dense day-by-day agenda that fits the most events per page.
 
    **Preview** opens the PDF in a new tab and **Download PDF** saves it. **Email** (admins only) opens a new email in your email app with the subject and covering text filled in (one line per event, ending with “Kind regards,”); add the recipients and attach the PDF. **WhatsApp text** copies the group-chat version. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
@@ -70,7 +70,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `012_access_accounts_and_cleanup.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `013_extra_contacts.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 

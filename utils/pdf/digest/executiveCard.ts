@@ -12,6 +12,7 @@ import { BRAND, INK, BODY, MUTED, BORDER, BG, WHITE, PLACE, BRAND_TINT, BRAND_TI
 import type { Block, DigestContext } from './context';
 import { relativeDayLabel } from './headings';
 import { calendarLinks, otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
+import { eventContacts, formatContact } from '../../contacts';
 
 const TILE_H = 15;
 
@@ -90,9 +91,9 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   const alsoTimeW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.time))) + 3.5;
   const alsoH = otherDates.length ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1 : 0;
 
-  const contact = ev.submitterName
-    ? txt(`${ev.submitterName}${ev.submitterEmail ? ` · ${ev.submitterEmail}` : ''}`)
-    : '';
+  // Contacts: one line each ("Sarah Murphy · sarah@…"), the emails linked
+  const contacts = eventContacts(ev).map((c) => txt(formatContact(c))).filter(Boolean);
+  const CONTACT_LH = 3.3;
 
   // When: "13:00 – 15:00", "All day" or "10:00 until Sun 18 Oct"
   const when = allDay ? 'All day'
@@ -108,7 +109,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   contentH += titleLines.length * TITLE_LH - 0.6;
   if (venueLines.length) contentH += 2.2 + venueLines.length * VENUE_LH;
   if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
-  if (contact) contentH += 2.4 + 3.3;
+  if (contacts.length) contentH += 2.4 + 3.3 + (contacts.length - 1) * CONTACT_LH;
   if (otherDates.length) contentH += 3 + alsoH;
 
   const BTN_H = 4.6;
@@ -205,15 +206,19 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
         cy += (descLines.length - 1) * DESC_LH;
       }
 
-      // Contact
-      if (contact) {
+      // Contacts
+      if (contacts.length) {
         cy += 2.4 + 3.3;
+        const label = contacts.length > 1 ? 'Contacts' : 'Contact';
         font('semibold', 7);
         color(MUTED);
-        doc.text('Contact', mainX, cy);
-        const lw = doc.getTextWidth('Contact') + 1.8;
+        doc.text(label, mainX, cy);
+        const lw = doc.getTextWidth(label) + 1.8;
         font('regular', 7);
-        drawLinkedLines([truncate(contact, mainW - lw)], contact, mainX + lw, cy, 0, BODY);
+        contacts.forEach((contact, i) => {
+          drawLinkedLines([truncate(contact, mainW - lw)], contact, mainX + lw, cy + i * CONTACT_LH, 0, BODY);
+        });
+        cy += (contacts.length - 1) * CONTACT_LH;
       }
 
       // Also on

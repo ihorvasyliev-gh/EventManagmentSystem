@@ -1,4 +1,5 @@
 import { type Event } from '../types';
+import { eventContacts } from './contacts';
 import { foldICSLine } from './icsFold.ts';
 
 interface LoadedPoster {
@@ -225,6 +226,7 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
       .map(a => `${a.name}: ${a.url}`)
       .join('\n');
 
+    const contacts = eventContacts(event);
     const row = worksheet.addRow({
       poster: '',
       title: event.title,
@@ -237,8 +239,9 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
       description: event.description || '',
       status: 'Published',
       recurrence: recurrenceLabel || 'None',
-      submitterName: event.submitterName || '',
-      submitterEmail: event.submitterEmail || '',
+      // One line per contact person, the emails on the matching lines
+      submitterName: contacts.map(c => c.name).join('\n'),
+      submitterEmail: contacts.map(c => c.email ?? '').join('\n'),
       attachments: attachmentsText
     });
 

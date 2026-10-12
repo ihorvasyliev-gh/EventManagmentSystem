@@ -8,6 +8,7 @@ import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import { detectOccurrenceConflicts, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { groupOverlaps, type OverlapEntry } from '../utils/duplicateDetection';
 import OverlapList from './OverlapList';
+import { eventContacts } from '../utils/contacts';
 import { readScheduleFromEvent, formatTimeRange, listSessions, buildOccurrences } from '../utils/multiDateUtils';
 
 interface SubmissionsModalProps {
@@ -244,6 +245,21 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         )}
                         {event.createdAt && <span>sent {submittedAgo(event.createdAt)}</span>}
                       </p>
+                      {eventContacts(event).length > 1 && (
+                        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          <span>Also contact:</span>
+                          {eventContacts(event).slice(1).map((contact, i) => (
+                            <span key={i} className="inline-flex flex-wrap items-center gap-x-1.5">
+                              {contact.name && <span className="font-medium text-slate-700 dark:text-slate-300">{contact.name}</span>}
+                              {contact.email && (
+                                <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1 hover:text-brand-600 dark:hover:text-brand-400 hover:underline">
+                                  <Mail className="w-3 h-3" /> {contact.email}
+                                </a>
+                              )}
+                            </span>
+                          ))}
+                        </p>
+                      )}
                     </div>
 
                     {imgUrl && (

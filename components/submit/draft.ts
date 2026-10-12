@@ -7,6 +7,7 @@ import {
   type TimeRange, type TimeSlot, type SessionPlaces as SessionPlacesMap, type ScheduleState, makeSlot
 } from '../../utils/multiDateUtils.ts';
 import { type EventCategoryName } from '../../constants/categories.ts';
+import type { EventContact } from '../../types.ts';
 
 const SUBMITTER_STORAGE_KEY = 'ccp_submitter_details';
 const DRAFT_STORAGE_KEY = 'ccp_submit_draft';
@@ -47,6 +48,8 @@ export interface SavedDraft {
   description: string;
   submitterName?: string;
   submitterEmail?: string;
+  /** Contact people after the submitter */
+  extraContacts?: EventContact[];
 }
 
 /** The unsent event, if one was saved with anything typed in it */

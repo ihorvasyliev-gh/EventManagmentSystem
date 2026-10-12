@@ -94,11 +94,18 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     creator_id: caller?.id ?? null,
     tags: [publish ? 'admin-created' : 'staff-submission']
   };
-  const res = await serviceRest(cfg, 'events?select=id', {
+  const insert = (body: object) => serviceRest(cfg, 'events?select=id', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(row)
+    body: JSON.stringify(body)
   });
+  let res = await insert(row);
+  // A database without migration 013 has no extra_contacts: save the event without them
+  if (res.status === 400 && (await res.clone().text()).includes('extra_contacts')) {
+    console.error('events.extra_contacts is missing: run supabase/migrations/013_extra_contacts.sql. Saving without the extra contacts.');
+    const { extra_contacts: _dropped, ...withoutContacts } = row;
+    res = await insert(withoutContacts);
+  }
   if (!res.ok) {
     console.error('Saving a submission failed:', res.status, await res.text());
     const key = poster && typeof poster !== 'string' ? fileKeyFromUrl(posterUrl) : null;

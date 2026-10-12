@@ -30,6 +30,7 @@ export const areEventsEqual = (a: Event[], b: Event[]): boolean => {
       ea.posterUrl !== eb.posterUrl ||
       ea.submitterName !== eb.submitterName ||
       ea.submitterEmail !== eb.submitterEmail ||
+      JSON.stringify(ea.extraContacts ?? []) !== JSON.stringify(eb.extraContacts ?? []) ||
       toTime(ea.updatedAt) !== toTime(eb.updatedAt) ||
       (ea.tags?.join(',') || '') !== (eb.tags?.join(',') || '')
     ) {

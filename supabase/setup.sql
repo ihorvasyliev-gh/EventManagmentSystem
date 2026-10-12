@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS public.events (
   recurrence_custom_locations TEXT[] DEFAULT NULL,
   submitter_name TEXT,
   submitter_email TEXT,
+  -- More contact people besides the submitter: [{"name": "...", "email": "..."}]
+  extra_contacts JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(extra_contacts) = 'array'),
   -- NULL for submissions sent without an account, or once the creator's account is deleted
   creator_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.events (
 COMMENT ON COLUMN public.events.recurrence_custom_dates IS 'Array of specific dates for custom recurrence (recurrence_type = custom). Each timestamp represents a manually picked event occurrence date.';
 COMMENT ON COLUMN public.events.recurrence_custom_end_dates IS 'End time of each date in recurrence_custom_dates (same order). NULL means every date uses the event''s own start/end time of day.';
 COMMENT ON COLUMN public.events.recurrence_custom_locations IS 'Address of each date in recurrence_custom_dates (same order). NULL means every date is at the event''s own location.';
+COMMENT ON COLUMN public.events.extra_contacts IS 'Contact people besides submitter_name / submitter_email, shown after them: [{"name": "...", "email": "..."}].';
 
 CREATE TABLE IF NOT EXISTS public.event_attachments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

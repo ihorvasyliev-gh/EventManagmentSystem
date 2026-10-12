@@ -20,7 +20,8 @@ import { SubmitTopBar, SubmitIntro, RestoredDraftNotice } from '../components/su
 import { Section, FieldError, inputClass } from '../components/submit/formParts';
 import CategoryPicker from '../components/submit/CategoryPicker';
 import PosterUpload from '../components/submit/PosterUpload';
-import ContactFields from '../components/submit/ContactFields';
+import ContactFields, { extraContactId, type ContactField } from '../components/submit/ContactFields';
+import { type ContactRow, newContactRow, toContactRows, fromContactRows } from '../utils/contacts';
 import SubmitButton, { SUBMIT_FORM_ID } from '../components/submit/SubmitButton';
 import {
   type SavedDraft, readSavedSubmitter, saveSubmitter, readDraft, clearDraft, scheduleFromDraft, useDraftAutosave
@@ -33,7 +34,11 @@ const DESCRIPTION_SOFT_LIMIT = 600;
 /** The server refuses longer descriptions (server/submission.ts) */
 const DESCRIPTION_MAX = 2000;
 
-type FieldName = 'title' | 'dates' | 'location' | 'description' | 'name' | 'email' | 'poster';
+/** Form fields that can show an error (`contact-0-name` is the second contact's name) */
+type FieldName = 'title' | 'dates' | 'location' | 'description' | 'name' | 'email' | 'poster' | `contact-${number}-${ContactField}`;
+
+const contactErrorKey = (index: number, field: ContactField): FieldName => `${extraContactId(index)}-${field}` as FieldName;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface SubmitEventPageProps {
   onBackToLogin?: () => void;
@@ -71,7 +76,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         location: template.location,
         description: template.description,
         submitterName: template.submitterName,
-        submitterEmail: template.submitterEmail
+        submitterEmail: template.submitterEmail,
+        extraContacts: template.extraContacts
       };
     }
     return initialDate ? null : readDraft();
@@ -88,6 +94,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
   const [submitterName, setSubmitterName] = useState(() => (template && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
   const [submitterEmail, setSubmitterEmail] = useState(() => (template && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
+  // More contact people (the person sending it in is the first)
+  const [extraContacts, setExtraContacts] = useState<ContactRow[]>(() => toContactRows(restoredDraft?.extraContacts));
   const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft && !template);
   const rememberedSubmitter = !currentUser && !!readSavedSubmitter().email;
 
@@ -161,7 +169,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     sharedTimes,
     sameTime: sameTimeForAll, perDateTimes,
     samePlace, places,
-    submitterName, submitterEmail
+    submitterName, submitterEmail,
+    extraContacts: fromContactRows(extraContacts)
   };
   useDraftAutosave(draftToSave, [title, location, description, ...placeValues].some((v) => v.trim()), !submitted);
 
@@ -170,6 +179,36 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [submitError]);
 
   const clearError = (field: FieldName) => setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+
+  // Contact people after the first: a new row's name field gets the focus
+  const focusContactRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusContactRef.current === null) return;
+    document.getElementById(`field-${extraContactId(focusContactRef.current)}-name`)?.focus();
+    focusContactRef.current = null;
+  }, [extraContacts.length]);
+  const addContact = () => {
+    focusContactRef.current = extraContacts.length;
+    setExtraContacts((rows) => [...rows, newContactRow()]);
+  };
+  const changeContact = (index: number, field: ContactField, value: string) => {
+    setExtraContacts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+    clearError(contactErrorKey(index, field));
+  };
+  const removeContact = (index: number) => {
+    setExtraContacts((rows) => rows.filter((_, i) => i !== index));
+    // The errors of the rows below move up with them
+    setErrors((prev) => {
+      const next: Partial<Record<FieldName, string>> = {};
+      (Object.entries(prev) as Array<[FieldName, string | undefined]>).forEach(([key, message]) => {
+        const match = /^contact-(\d+)-(name|email)$/.exec(key);
+        const row = match ? Number(match[1]) : -1;
+        if (!match || row < index) next[key] = message;
+        else if (row > index) next[contactErrorKey(row - 1, match[2] as ContactField)] = message;
+      });
+      return next;
+    });
+  };
 
   const sortedDates = useMemo(() => [...selectedDates].sort((a, b) => a.getTime() - b.getTime()), [selectedDates]);
 
@@ -190,7 +229,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
     else if (description.trim().length > DESCRIPTION_MAX) next.description = `Please shorten the description to ${DESCRIPTION_MAX} characters.`;
     if (!submitterName.trim()) next.name = 'Please enter your name.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
+    if (!EMAIL_RE.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
+    // A row left blank is dropped; a started one needs both
+    extraContacts.forEach((row, i) => {
+      if (!row.name.trim() && !row.email.trim()) return;
+      if (!row.name.trim()) next[contactErrorKey(i, 'name')] = 'Please enter their name.';
+      if (!EMAIL_RE.test(row.email.trim())) next[contactErrorKey(i, 'email')] = 'Please enter a valid email address.';
+    });
     if (poster.busy) next.poster = 'Your PDF is still being turned into an image — one moment, then send again.';
     else if (poster.choosing) next.poster = 'Pick the page of your PDF to use as the poster (or cancel).';
     return next;
@@ -202,7 +247,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
     const found = validate();
     setErrors(found);
-    const firstInvalid = (['title', 'dates', 'location', 'description', 'poster', 'name', 'email'] as FieldName[]).find((f) => found[f]);
+    const order: FieldName[] = [
+      'title', 'dates', 'location', 'description', 'poster', 'name', 'email',
+      ...extraContacts.flatMap((_, i) => [contactErrorKey(i, 'name'), contactErrorKey(i, 'email')])
+    ];
+    const firstInvalid = order.find((f) => found[f]);
     if (firstInvalid) {
       const el = document.getElementById(`field-${firstInvalid}`);
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -237,8 +286,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       location: samePlace ? location.trim() : '',
       description: description.trim(),
       posterUrl: posterPreview,
-      name: submitterName.trim(),
-      email: submitterEmail.trim()
+      contacts: [{ name: submitterName.trim(), email: submitterEmail.trim() }, ...fromContactRows(extraContacts)]
     };
   };
 
@@ -278,6 +326,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
         category,
         submitterName: submitterName.trim(),
         submitterEmail: submitterEmail.trim(),
+        extraContacts: fromContactRows(extraContacts),
         posterFile: posterFile || undefined,
         existingPosterUrl: !posterFile && posterPreview && posterPreview === templatePosterUrl ? templatePosterUrl : null,
         publish: isAdmin,
@@ -309,6 +358,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setTitle('');
     setDescription('');
     setCategory(CATEGORIES[0]);
+    setExtraContacts([]);
     poster.reset();
     scheduleControls.reset(scheduleFromDraft(null, defaultDate));
     setErrors({});
@@ -515,8 +565,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {/* 4. Who */}
               <Section
                 step={4}
-                title={isAdmin ? 'Contact person' : 'Your details'}
-                hint={isAdmin ? 'Shown as the contact in the digest.' : 'So Elizabeth can reach you with any questions.'}
+                title={isAdmin ? (extraContacts.length > 0 ? 'Contact people' : 'Contact person') : 'Your details'}
+                hint={isAdmin
+                  ? 'Shown as the contact in the digest. Add more people if there are several.'
+                  : 'So Elizabeth can reach you with any questions. Anyone else you add is shown as a contact in the digest too.'}
               >
                 {rememberedSubmitter && (
                   <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -530,6 +582,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   email={submitterEmail}
                   onEmailChange={(value) => { setSubmitterEmail(value); clearError('email'); }}
                   emailError={errors.email}
+                  extra={extraContacts}
+                  onExtraChange={changeContact}
+                  onAddContact={addContact}
+                  onRemoveContact={removeContact}
+                  extraError={(i, field) => errors[contactErrorKey(i, field)]}
                 />
               </Section>
 

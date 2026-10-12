@@ -63,6 +63,12 @@ export interface EventHistoryEntry {
   timestamp: Date;
 }
 
+/** Someone to contact about an event */
+export interface EventContact {
+  name: string;
+  email?: string;
+}
+
 export interface Event {
   id: string;
   /** Unique key for recurring instances in UI (id_timestamp). Use for React keys; always use `id` for API. */
@@ -77,8 +83,11 @@ export interface Event {
   category?: EventCategory;
   tags?: string[];
   status: EventStatus;
+  /** The first contact: the person who sent the event in */
   submitterName?: string;
   submitterEmail?: string;
+  /** More contact people, shown after the first one wherever contacts appear */
+  extraContacts?: EventContact[];
   recurrence?: RecurrenceRule;
   history?: EventHistoryEntry[];
   creatorId?: string;

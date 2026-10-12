@@ -8,6 +8,9 @@ import { useEventSchedule } from '../../hooks/useEventSchedule';
 import { isRecurringEvent } from '../../utils/recurrence';
 import { usePosterFile } from '../../hooks/usePosterFile';
 import { useToast } from '../../contexts/ToastContext';
+import { type ContactRow, newContactRow, toContactRows, fromContactRows } from '../../utils/contacts';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Parses a YYYY-MM-DD input value as a local date (new Date('YYYY-MM-DD') would be UTC midnight). */
 const parseLocalDateInput = (value: string): Date | undefined => {
@@ -21,7 +24,7 @@ export type EventInput = Omit<Event, 'id' | 'createdAt'>;
 /** What the form holds once it passes the checks (the poster and attachments are added on save) */
 export type EventFormValues = Pick<
   Event,
-  'title' | 'description' | 'location' | 'date' | 'endDate' | 'category' | 'status' | 'tags' | 'submitterName' | 'submitterEmail' | 'recurrence'
+  'title' | 'description' | 'location' | 'date' | 'endDate' | 'category' | 'status' | 'tags' | 'submitterName' | 'submitterEmail' | 'extraContacts' | 'recurrence'
 >;
 
 interface UseEventFormOptions {
@@ -72,6 +75,7 @@ export const useEventForm = ({
   const [tags, setTags] = useState<string>('');
   const [submitterName, setSubmitterName] = useState('');
   const [submitterEmail, setSubmitterEmail] = useState('');
+  const [extraContacts, setExtraContacts] = useState<ContactRow[]>([]);
   const poster = usePosterFile((message) => {
     if (message) showToast(message, 'warning');
   });
@@ -107,6 +111,7 @@ export const useEventForm = ({
     setTags(event.tags?.join(', ') || '');
     setSubmitterName(event.submitterName || '');
     setSubmitterEmail(event.submitterEmail || '');
+    setExtraContacts(toContactRows(event.extraContacts));
     poster.reset(event.posterUrl || null);
 
     // `event` may be one expanded occurrence of a series. The form edits the series,
@@ -147,6 +152,7 @@ export const useEventForm = ({
     setTags(draft.tags?.join(', ') || '');
     setSubmitterName(draft.submitterName || '');
     setSubmitterEmail(draft.submitterEmail || '');
+    setExtraContacts(toContactRows(draft.extraContacts));
     poster.reset(draft.posterUrl || null);
     schedule.reset(readScheduleFromEvent({ ...draft, location: draft.location || '' }));
     if (draft.recurrence && draft.recurrence.type !== 'custom') {
@@ -161,6 +167,7 @@ export const useEventForm = ({
   // Unsaved-changes tracking: snapshot of the form right after it was initialised
   const formSnapshot = JSON.stringify([
     title, description, category, status, tags, submitterName, submitterEmail,
+    extraContacts.map(({ name, email }) => [name, email]),
     schedule.snapshot,
     recurrenceType, recurrenceInterval, recurrenceEndDate, poster.preview, poster.file?.name ?? null
   ]);
@@ -215,6 +222,12 @@ export const useEventForm = ({
       return null;
     }
 
+    const contacts = fromContactRows(extraContacts);
+    if (contacts.some(c => c.email && !EMAIL_RE.test(c.email))) {
+      setFieldErrors(prev => ({ ...prev, contacts: 'Please check the email addresses of the contact people.' }));
+      return null;
+    }
+
     const tagsArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
     let recurrence: Event['recurrence'] = undefined;
@@ -239,6 +252,7 @@ export const useEventForm = ({
       tags: tagsArray.length > 0 ? tagsArray : undefined,
       submitterName: submitterName.trim() || undefined,
       submitterEmail: submitterEmail.trim() || undefined,
+      extraContacts: contacts.length > 0 ? contacts : undefined,
       recurrence
     };
 
@@ -274,6 +288,16 @@ export const useEventForm = ({
     status, setStatus,
     submitterName, setSubmitterName,
     submitterEmail, setSubmitterEmail,
+    extraContacts,
+    addContact: () => setExtraContacts(rows => [...rows, newContactRow()]),
+    changeContact: (index: number, field: 'name' | 'email', value: string) => {
+      setExtraContacts(rows => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+      clearFieldError('contacts');
+    },
+    removeContact: (index: number) => {
+      setExtraContacts(rows => rows.filter((_, i) => i !== index));
+      clearFieldError('contacts');
+    },
     recurrenceType, setRecurrenceType,
     recurrenceInterval, setRecurrenceInterval,
     recurrenceEndDate, setRecurrenceEndDate,

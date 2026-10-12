@@ -71,7 +71,7 @@ This includes:
 | **Venue / Location** | Be specific with the venue name, room number, or address. <br>*Example:* "Hollyhill Library, Meeting Room 2, Harbour View Rd, Knocknaheeny, Cork" *(This automatically links to Google Maps on the PDF!)* <br>If it moves between venues, untick **Same place for all dates** and enter the address for each date and time. |
 | **Short Description** | **A few lines explaining what the event is about** (up to 2,000 characters): <br>• Who is it for? <br>• What will happen? <br>• Do attendees need to book or register in advance? |
 | **Event Poster / Flyer** *(Optional)* | Upload a clear image of your event flyer or poster (PNG, JPG, or WEBP up to 10MB), or the flyer as a PDF (up to 25MB). A PDF is turned into a print-quality image of one page (300 DPI): if it has several pages, you tap the page to use as the poster. It will be embedded as a thumbnail directly into the Board's digest! |
-| **Your Name & Email** | Your contact details so Elizabeth can reach out if she needs to confirm any details before publishing. |
+| **Your Name & Email** | Your contact details so Elizabeth can reach out if she needs to confirm any details before publishing. <br>If people should also be able to contact a colleague or partner about the event, click **Add another contact person** (up to five people in all). Everyone listed is shown as a contact in the digest. |
 
 ---
 

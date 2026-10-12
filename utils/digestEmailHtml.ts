@@ -66,11 +66,11 @@ export const generateDigestEmailHtml = (
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 10px;">
   <tr>
     <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:4px;">
-      <a href="${pdfUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">&#11015;&nbsp; Download the digest (PDF)</a>
+      <a href="${pdfUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">Open the digest (PDF)</a>
     </td>
   </tr>
 </table>
-${p(`The link works for six months. In the PDF each event has its description, venue (with a map link), contacts and buttons to add it to your Outlook or Google calendar.`, `font-size:13px;line-height:19px;color:${MUTED};`)}` : '';
+${p(`The link works for six months, on your phone or computer, and has a download button. In the PDF each event has its description, venue (with a map link), contacts and buttons to add it to your Outlook or Google calendar.`, `font-size:13px;line-height:19px;color:${MUTED};`)}` : '';
 
   const rows = groups.slice(0, LIST_LIMIT).map((group) => {
     const ev = group.event;

@@ -7,8 +7,37 @@
 import type { Event } from '../types.ts';
 import { eventContacts } from './contacts.ts';
 import { formatLocalDate } from './date.ts';
+import { formatPeriodShort } from './digestText.ts';
 
-const STORAGE_KEY = 'ccp_shared_digests';
+// Remembered links are to the digest's page (earlier ones went straight to the file)
+const STORAGE_KEY = 'ccp_shared_digest_pages';
+const FILE_PREFIX = '/api/file/digests/';
+const PAGE_RE = /^\/digest\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9._-]+)\/?$/i;
+
+/**
+ * The page that shows a shared digest, /digest/<id>-<name>: it draws the PDF itself and offers
+ * the download, so it works in phone email apps' built-in browsers (a straight file download
+ * shows a black screen there) and isn't taken over by PDF browser extensions.
+ */
+export const digestPageUrl = (fileUrl: string, origin: string): string => {
+  const path = new URL(fileUrl, origin).pathname;
+  if (!path.startsWith(FILE_PREFIX)) return new URL(fileUrl, origin).toString();
+  return new URL(`/digest/${path.slice(FILE_PREFIX.length).replace(/\.pdf$/i, '')}`, origin).toString();
+};
+
+/** For a digest page's path: the PDF to show, its file name and the period it covers ("12 – 26 October 2026") */
+export const digestFromPagePath = (pathname: string): { fileUrl: string; fileName: string; period: string | null } | null => {
+  const match = PAGE_RE.exec(pathname);
+  if (!match) return null;
+  const name = match[1].replace(/\.pdf$/i, '');
+  const fileName = `${name.slice(37)}.pdf`;
+  const dates = /(\d{4})-(\d{2})-(\d{2})-to-(\d{4})-(\d{2})-(\d{2})/.exec(name);
+  const period = dates
+    ? formatPeriodShort(new Date(+dates[1], +dates[2] - 1, +dates[3]), new Date(+dates[4], +dates[5] - 1, +dates[6]))
+    : null;
+  return { fileUrl: `${FILE_PREFIX}${name}.pdf`, fileName, period };
+};
+
 const MAX_REMEMBERED = 10;
 
 interface Remembered {

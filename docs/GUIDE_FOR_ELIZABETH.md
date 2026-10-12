@@ -161,15 +161,15 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 * You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end a link to the digest PDF (so you don't need to send the file as well), the live calendar and the submission form.
 
 ### 6. Open the covering email
-* Click **"Email"**. The digest PDF is uploaded (a few seconds) and a **formatted email** is copied: the CCP logo and colours, a greeting, a **Download the digest (PDF)** button, every event with its date, time, category and venue (linked to Google Maps), where to send in an event, and *Kind regards,* with no name under it.
+* Click **"Email"**. The digest PDF is uploaded (a few seconds) and a **formatted email** is copied: the CCP logo and colours, a greeting, an **Open the digest (PDF)** button, every event with its date, time, category and venue (linked to Google Maps), where to send in an event, and *Kind regards,* with no name under it.
 * Your email app (e.g. Outlook) opens a new email with the subject filled in. **Click into the message and press `Ctrl + V`** (`⌘ V` on a Mac) to paste the formatted email. (A link from the browser can only fill in plain text, so the formatted version comes through the clipboard.)
-* Add the recipients and send. There is nothing to attach: the button downloads the PDF, without signing in, for **six months**; after that the link stops working.
+* Add the recipients and send. There is nothing to attach: the button opens the digest's page, without signing in, for **six months**; after that the link stops working.
 * If the browser doesn't allow copying, the email opens with a plain-text version (with the link) instead. If the upload fails (for example, no internet), the email has no link: attach the PDF from Step 4 by hand.
 
 ### 7. Just the link
 * **Link** copies the link to the PDF on its own, to paste into Teams, a calendar invite or anywhere else.
 
-> **Links download the PDF.** Clicking the link saves the file, which then opens in your usual PDF app. (Opened in a browser tab, PDF add-ons such as Adobe Acrobat's Chrome extension show it blurry and slow to load.)
+> **Links open the digest's page.** The page shows every page of the PDF, sharp and with working links (add to calendar, maps, emails), and has a **Download PDF** button. It works in phone email apps (Gmail and Outlook open links in their own built-in browser, which can't show a PDF file) and isn't taken over by PDF add-ons such as Adobe Acrobat's Chrome extension. Links sent before this page existed open it too.
 
 > **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
 

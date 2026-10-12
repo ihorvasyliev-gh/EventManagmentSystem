@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestPost, deleteOldDigests, DIGEST_KEEP_DAYS, type DigestBucket } from '../functions/api/digest.ts';
 import { mockFetch, authRoutes, env } from './support/mockFetch.ts';
-import { contentDisposition } from '../server/files.ts';
+import { contentDisposition, digestPageRedirect } from '../server/files.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -83,4 +83,16 @@ test('a shared digest downloads under its own name; posters still open in the br
   assert.equal(contentDisposition(`${id}-flyer.png`, true), 'inline; filename="flyer.png"');
   assert.equal(contentDisposition(`${id}-agenda.pdf`, true), 'inline; filename="agenda.pdf"');
   assert.equal(contentDisposition(`${id}-notes.docx`, false), 'attachment; filename="notes.docx"');
+});
+
+test('a digest link opened as a page goes to the digest page; the viewer and Download still get the file', () => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events-2026-10-12-to-2026-10-26';
+  const key = `digests/${id}.pdf`;
+  const req = (query: string, headers: Record<string, string>) => new Request(`https://ccp.test/api/file/${key}${query}`, { headers });
+  const page = `https://ccp.test/digest/${id}`;
+  assert.equal(digestPageRedirect(key, req('', { 'Sec-Fetch-Dest': 'document' })), page, 'a tapped link');
+  assert.equal(digestPageRedirect(key, req('', { Accept: 'text/html,application/xhtml+xml,*/*' })), page, 'older browsers, by Accept');
+  assert.equal(digestPageRedirect(key, req('', { 'Sec-Fetch-Dest': 'empty', Accept: '*/*' })), null, 'the viewer fetching the PDF');
+  assert.equal(digestPageRedirect(key, req('?download=1', { 'Sec-Fetch-Dest': 'document' })), null, 'the Download button');
+  assert.equal(digestPageRedirect('0f0f0f0f-0000-0000-0000-000000000000-flyer.png', req('', { 'Sec-Fetch-Dest': 'document' })), null, 'other files');
 });

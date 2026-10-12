@@ -176,8 +176,8 @@ const userError = (message: string, cause?: unknown): Error => {
   return new Error(message, { cause });
 };
 
-/** pdf.js is only downloaded when a PDF is picked */
-const loadPdfJs = async () => {
+/** pdf.js is only downloaded when it is needed (a PDF flyer picked, a shared digest opened) */
+export const loadPdfJs = async () => {
   const [pdfjs, { default: workerSrc }] = await Promise.all([
     // The legacy build also runs on older phone browsers (Safari < 17)
     import('pdfjs-dist/legacy/build/pdf.mjs'),

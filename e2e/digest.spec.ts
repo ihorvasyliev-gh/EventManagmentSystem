@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { mockSupabase, signIn, eventRow, daysFromNow } from './support';
+import { mockSupabase, signIn, eventRow, daysFromNow, expectAccessible } from './support';
 
 const LINK = '/api/file/digests/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events.pdf';
+// What is shared: the digest's page, which shows the PDF and downloads it
+const PAGE = '/digest/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events';
 
 test('an admin shares the digest as a link: copied, in the WhatsApp text and in the email, uploaded once', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -20,13 +22,13 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
 
   await dialog.getByRole('button', { name: 'Copy link' }).click();
   await expect(page.getByText('Link copied — anyone with it can open this PDF for six months')).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:4173${LINK}`);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:4173${PAGE}`);
   expect(uploads).toEqual([{ type: 'multipart/form-data', isPdf: true }]);
 
   await dialog.getByRole('button', { name: /WhatsApp/ }).click();
   await expect(page.getByText('WhatsApp summary copied — paste it into the group chat')).toBeVisible();
   const whatsapp = await page.evaluate(() => navigator.clipboard.readText());
-  expect(whatsapp).toContain(`📄 Digest PDF: http://localhost:4173${LINK}`);
+  expect(whatsapp).toContain(`📄 Digest PDF: http://localhost:4173${PAGE}`);
   expect(whatsapp).toContain('Coffee morning');
 
   // Email: the formatted email (with a clickable button to the PDF) is copied to be pasted in
@@ -36,10 +38,10 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
     const [item] = await navigator.clipboard.read();
     return { html: await (await item.getType('text/html')).text(), text: await (await item.getType('text/plain')).text() };
   });
-  expect(email.html).toContain(`href="http://localhost:4173${LINK}"`);
-  expect(email.html).toContain('Download the digest (PDF)');
+  expect(email.html).toContain(`href="http://localhost:4173${PAGE}"`);
+  expect(email.html).toContain('Open the digest (PDF)');
   expect(email.html).toContain('Coffee morning');
-  expect(email.text).toContain(`http://localhost:4173${LINK}`);
+  expect(email.text).toContain(`http://localhost:4173${PAGE}`);
   expect(uploads).toHaveLength(1);
 
   // Closing the dialog (or reloading) and sharing the same digest again reuses the link
@@ -91,7 +93,7 @@ test('when the upload fails, the email still opens and the WhatsApp text is copi
   await expect(page.getByText(/Email copied .*The PDF could not be uploaded: attach it by hand\./)).toBeVisible();
   const html = await page.evaluate(async () => (await (await navigator.clipboard.read())[0].getType('text/html')).text());
   expect(html).toContain('Please find attached');
-  expect(html).not.toContain('Download the digest');
+  expect(html).not.toContain('Open the digest');
 });
 
 test('staff preview and download the digest; sharing it is for admins', async ({ page }) => {
@@ -107,4 +109,52 @@ test('staff preview and download the digest; sharing it is for admins', async ({
   for (const name of [/WhatsApp/, /^Email$/, /Copy link/]) {
     await expect(dialog.getByRole('button', { name })).toHaveCount(0);
   }
+});
+
+/** A one-page PDF with a line of text and a link, made by hand (offsets counted for the xref) */
+const tinyPdf = (): Buffer => {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [6 0 R] >>',
+    null,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Annot /Subtype /Link /Rect [72 700 300 730] /Border [0 0 0] /A << /S /URI /URI (https://example.org/coffee) >> >>'
+  ];
+  const stream = 'BT /F1 24 Tf 72 710 Td (Coffee morning) Tj ET';
+  objects[3] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  let out = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+};
+
+test('anyone with the link sees the digest drawn on its page, links working, with a download button', async ({ page }) => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events-2026-10-12-to-2026-10-26';
+  await page.route(`**/api/file/digests/${id}.pdf*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/pdf', headers: { 'Content-Disposition': 'attachment' }, body: tinyPdf() }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/digest/${id}`);
+  await expect(page.getByRole('heading', { name: 'Upcoming Events Digest' })).toBeVisible();
+  await expect(page.locator('main').getByText('12 – 26 October 2026')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Page 1 of 1' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Page 1 of 1' }).locator('canvas')).toHaveCount(1);
+  await expect(page.locator('a[href="https://example.org/coffee"]')).toHaveCount(1);
+  const download = page.getByRole('link', { name: 'Download PDF' });
+  await expect(download).toHaveAttribute('href', `/api/file/digests/${id}.pdf?download=1`);
+  await expect(download).toHaveAttribute('download', 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf');
+  await expectAccessible(page);
+});
+
+test('an expired digest link says so', async ({ page }) => {
+  await page.route('**/api/file/digests/**', (route) => route.fulfill({ status: 404, body: 'File not found' }));
+  await page.goto('/digest/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events-2026-01-01-to-2026-01-14');
+  await expect(page.getByRole('heading', { name: 'This digest is no longer available' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toHaveCount(0);
 });

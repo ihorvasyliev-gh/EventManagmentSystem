@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks.ts';
+import { digestKeyOf, rememberedDigestLink, rememberDigestLink, digestPageUrl, digestFromPagePath } from '../utils/digestLinks.ts';
 import type { Event } from '../types.ts';
 
 const store = new Map<string, string>();
@@ -46,6 +46,20 @@ test('a shared link is remembered for its digest, newest first, and forgotten on
   for (let i = 0; i < 12; i++) rememberDigestLink(`n${i}`, { url: `https://x/n${i}.pdf`, expiresAt: later });
   assert.equal(rememberedDigestLink('n11'), 'https://x/n11.pdf');
   assert.equal(rememberedDigestLink('k1'), null, 'only the last ten are kept');
-  store.set('ccp_shared_digests', 'not json');
+  store.set('ccp_shared_digest_pages', 'not json');
   assert.equal(rememberedDigestLink('n11'), null);
+});
+
+test('a shared digest is linked to its page, which finds the file and the period again', () => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000';
+  const page = digestPageUrl(`/api/file/digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`, 'https://ccp.test');
+  assert.equal(page, `https://ccp.test/digest/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26`);
+  assert.deepEqual(digestFromPagePath(new URL(page).pathname), {
+    fileUrl: `/api/file/digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`,
+    fileName: 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf',
+    period: '12 – 26 October 2026'
+  });
+  assert.equal(digestFromPagePath(`/digest/${id}-notes`)?.period, null);
+  assert.equal(digestFromPagePath('/digest/../api/staff'), null);
+  assert.equal(digestFromPagePath('/digest/not-an-id-name'), null);
 });

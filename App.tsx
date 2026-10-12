@@ -32,6 +32,9 @@ const EventModal = lazy(() => import('./components/EventModal'));
 const ExportModal = lazy(() => import('./components/ExportModal'));
 const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
 const FortnightlyBulletinModal = lazy(() => import('./components/FortnightlyBulletinModal'));
+// A shared digest's page (/digest/…): anyone with the link, no account, no calendar
+const DigestViewPage = lazy(() => import('./pages/DigestViewPage'));
+const isDigestPage = () => window.location.pathname.startsWith('/digest/');
 const SubmitEventPage = lazy(() => import('./pages/SubmitEventPage'));
 const StaffModal = lazy(() => import('./components/StaffModal'));
 const PasswordModal = lazy(() => import('./components/PasswordModal'));
@@ -367,7 +370,13 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <AppContent />
+          {isDigestPage() ? (
+            <Suspense fallback={null}>
+              <DigestViewPage />
+            </Suspense>
+          ) : (
+            <AppContent />
+          )}
           <UpdateBanner />
         </ToastProvider>
       </ThemeProvider>

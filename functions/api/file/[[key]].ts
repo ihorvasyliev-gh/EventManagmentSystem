@@ -5,7 +5,7 @@
  */
 import { json, fail, bearerToken } from '../../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../../server/supabase.ts';
-import { type FileBucket, deleteUnreferencedFiles, contentDisposition } from '../../../server/files.ts';
+import { type FileBucket, deleteUnreferencedFiles, contentDisposition, digestPageRedirect } from '../../../server/files.ts';
 
 interface Env extends SupabaseEnv {
   BUCKET: R2Bucket;
@@ -20,8 +20,12 @@ const keyOf = (params: Record<string, string | string[]>): string => {
 };
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { params, env } = context;
+  const { params, env, request } = context;
   const key = keyOf(params);
+
+  // A digest link tapped in an email opens the digest's page (phone email apps can't show the file)
+  const page = digestPageRedirect(key, request);
+  if (page) return Response.redirect(page, 302);
 
   if (!env.BUCKET) {
     return new Response("R2 Bucket binding 'BUCKET' not found.", { status: 500 });
@@ -49,6 +53,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
     }
     headers.set('Content-Disposition', contentDisposition(key, INLINE_TYPES.has(contentType)));
+    // The same digest URL answers a page visit with a redirect: keep the two apart in caches
+    if (key.startsWith('digests/')) headers.set('Vary', 'Sec-Fetch-Dest, Accept');
 
     // Keys contain a random UUID, so the content behind a URL never changes
     headers.set('Cache-Control', 'public, max-age=31536000, immutable');

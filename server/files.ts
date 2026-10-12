@@ -54,6 +54,20 @@ export const contentDisposition = (key: string, canShowInline: boolean): string 
   return `${download ? 'attachment' : 'inline'}; filename="${name}"`;
 };
 
+/**
+ * A shared digest opened as a page (a link tapped in an email, rather than the viewer fetching it
+ * or its Download button): where to send the browser instead, the digest's own page, which
+ * shows the PDF in any browser. Links sent before that page existed go there too.
+ */
+export const digestPageRedirect = (key: string, request: Request): string | null => {
+  if (!key.startsWith('digests/')) return null;
+  const url = new URL(request.url);
+  if (url.searchParams.has('download')) return null;
+  const dest = request.headers.get('Sec-Fetch-Dest');
+  const asPage = dest ? dest === 'document' : (request.headers.get('Accept') || '').includes('text/html');
+  return asPage ? new URL(`/digest/${key.slice('digests/'.length).replace(/\.pdf$/i, '')}`, url).toString() : null;
+};
+
 /** The R2 key behind a stored file's URL (relative or absolute), or null for any other URL */
 export const fileKeyFromUrl = (url: string | null | undefined): string | null => {
   if (!url) return null;

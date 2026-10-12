@@ -4,7 +4,8 @@ import {
 } from 'lucide-react';
 import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
-import { generateDigestMailto } from '../utils/digestText';
+import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
+import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { shareDigestPdf } from '../services/digestService';
 import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
 import { calculatePresetDateRange, type DateRangePreset } from '../utils/date';
@@ -76,6 +77,8 @@ const copyText = async (text: Promise<string>): Promise<void> => {
     document.body.removeChild(input);
   }
 };
+
+const PASTE_KEYS = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V';
 
 const spinner = <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />;
 
@@ -273,23 +276,53 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     }
   };
 
-  // New email in the email app: subject and text filled in, no recipient, the text links to the PDF
+  /**
+   * New email in the email app, no recipient. A mailto: link only carries plain text, so the
+   * formatted email (logo, a button to the PDF, the events) goes to the clipboard and is pasted
+   * in, and the email opens with just the subject. Without the clipboard the plain text goes in.
+   */
   const handleEmail = async () => {
-    let pdfUrl: string | null = null;
-    if (shareable) {
-      setBusy('email');
+    setBusy('email');
+    const baseUrl = window.location.origin;
+    const link: Promise<string | null> = shareable
+      ? getShareLink().catch((err) => {
+          console.error('Sharing the digest PDF failed:', err);
+          return null;
+        })
+      : Promise.resolve(null);
+    let copied = false;
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
       try {
-        pdfUrl = await getShareLink();
+        // Handed over still inside the click, as promises: Safari allows nothing later
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': link.then((pdfUrl) =>
+            new Blob([generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl })], { type: 'text/html' })),
+          'text/plain': link.then((pdfUrl) =>
+            new Blob([generateDigestEmail(periodEvents, startDate, endDate, { baseUrl, pdfUrl }).body], { type: 'text/plain' }))
+        })]);
+        copied = true;
       } catch (err) {
-        console.error('Sharing the digest PDF failed:', err);
-      } finally {
-        setBusy(null);
+        console.warn('Copying the formatted email failed:', err);
       }
     }
-    window.location.href = generateDigestMailto(periodEvents, startDate, endDate, { baseUrl: window.location.origin, pdfUrl });
-    if (pdfUrl) showToast('Opening your email app — the text links to the digest PDF', 'info');
-    else if (shareable) showToast('The PDF could not be uploaded — attach it to the email by hand', 'warning');
-    else showToast('Opening your email app', 'info');
+    const pdfUrl = await link;
+    setBusy(null);
+    window.location.href = copied
+      ? generateDigestMailtoSubject(startDate, endDate)
+      : generateDigestMailto(periodEvents, startDate, endDate, { baseUrl, pdfUrl });
+    const failed = shareable && !pdfUrl;
+    if (copied) {
+      showToast(
+        `Email copied — click into the new message and press ${PASTE_KEYS} to paste it` +
+          (failed ? '. The PDF could not be uploaded: attach it by hand.' : ''),
+        failed ? 'warning' : 'success',
+        12000
+      );
+    } else if (failed) {
+      showToast('The PDF could not be uploaded — attach it to the email by hand', 'warning');
+    } else {
+      showToast('Opening your email app', 'info');
+    }
   };
 
   const handleCopyLink = async () => {
@@ -335,7 +368,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           type="button"
           onClick={handleEmail}
           disabled={disabled}
-          title="Opens a new email for the Board and staff with the subject and text filled in, and a link to the PDF. Add the recipients."
+          title="Copies a formatted email with a link to the PDF and opens a new email: paste it in and add the recipients"
           className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
         >
           {busy === 'email' ? spinner : <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />}

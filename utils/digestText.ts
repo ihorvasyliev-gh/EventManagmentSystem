@@ -83,6 +83,10 @@ const shorten = (text: string, max: number): string => {
   return `${(at > max / 2 ? cut.slice(0, at) : cut).replace(/[\s,.;:–-]+$/, '')}…`;
 };
 
+/** "Cork City Partnership: Upcoming Events Digest, 9 – 23 October 2026" */
+export const digestEmailSubject = (startDate: Date, endDate: Date): string =>
+  `Cork City Partnership: Upcoming Events Digest, ${formatPeriodShort(startDate, endDate)}`;
+
 export interface DigestEmail {
   subject: string;
   body: string;
@@ -105,7 +109,7 @@ export const generateDigestEmail = (
 ): DigestEmail => {
   const groups = digestGroupsFor(events, startDate, endDate);
   const period = formatPeriodShort(startDate, endDate);
-  const subject = `Cork City Partnership: Upcoming Events Digest, ${period}`;
+  const subject = digestEmailSubject(startDate, endDate);
   const listLimit = Math.max(1, options.listLimit ?? EMAIL_LIST_LIMIT);
 
   const lines: string[] = ['Dear Board Members and Colleagues,', ''];
@@ -185,3 +189,7 @@ export const generateDigestMailto = (
   }
   return link;
 };
+
+/** New email with only the subject filled in: the formatted text is pasted in from the clipboard */
+export const generateDigestMailtoSubject = (startDate: Date, endDate: Date): string =>
+  `mailto:?subject=${encodeURIComponent(digestEmailSubject(startDate, endDate))}`;

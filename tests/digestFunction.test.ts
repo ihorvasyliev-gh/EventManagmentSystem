@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestPost, deleteOldDigests, DIGEST_KEEP_DAYS, type DigestBucket } from '../functions/api/digest.ts';
 import { mockFetch, authRoutes, env } from './support/mockFetch.ts';
+import { contentDisposition } from '../server/files.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -74,4 +75,12 @@ test('digests older than six months are deleted; newer ones and other files stay
   assert.deepEqual((await deleteOldDigests(bucket, now)).sort(), ['digests/a-old.pdf', 'digests/b-old.pdf']);
   assert.deepEqual(deleted.sort(), ['digests/a-old.pdf', 'digests/b-old.pdf']);
   assert.deepEqual([...uploaded.keys()].sort(), ['0f0f0f0f-0000-0000-0000-000000000000-flyer.png', 'digests/c-recent.pdf', 'digests/d-new.pdf']);
+});
+
+test('a shared digest downloads under its own name; posters still open in the browser', () => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000';
+  assert.equal(contentDisposition(`digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`, true), 'attachment; filename="CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf"');
+  assert.equal(contentDisposition(`${id}-flyer.png`, true), 'inline; filename="flyer.png"');
+  assert.equal(contentDisposition(`${id}-agenda.pdf`, true), 'inline; filename="agenda.pdf"');
+  assert.equal(contentDisposition(`${id}-notes.docx`, false), 'attachment; filename="notes.docx"');
 });

@@ -29,8 +29,17 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
   expect(whatsapp).toContain(`📄 Digest PDF: http://localhost:4173${LINK}`);
   expect(whatsapp).toContain('Coffee morning');
 
+  // Email: the formatted email (with a clickable button to the PDF) is copied to be pasted in
   await dialog.getByRole('button', { name: 'Email' }).click();
-  await expect(page.getByText('Opening your email app — the text links to the digest PDF')).toBeVisible();
+  await expect(page.getByText('Email copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
+  const email = await page.evaluate(async () => {
+    const [item] = await navigator.clipboard.read();
+    return { html: await (await item.getType('text/html')).text(), text: await (await item.getType('text/plain')).text() };
+  });
+  expect(email.html).toContain(`href="http://localhost:4173${LINK}"`);
+  expect(email.html).toContain('Download the digest (PDF)');
+  expect(email.html).toContain('Coffee morning');
+  expect(email.text).toContain(`http://localhost:4173${LINK}`);
   expect(uploads).toHaveLength(1);
 
   // Closing the dialog (or reloading) and sharing the same digest again reuses the link
@@ -79,7 +88,10 @@ test('when the upload fails, the email still opens and the WhatsApp text is copi
   expect(whatsapp).not.toContain('Digest PDF');
 
   await dialog.getByRole('button', { name: 'Email' }).click();
-  await expect(page.getByText('The PDF could not be uploaded — attach it to the email by hand')).toBeVisible();
+  await expect(page.getByText(/Email copied .*The PDF could not be uploaded: attach it by hand\./)).toBeVisible();
+  const html = await page.evaluate(async () => (await (await navigator.clipboard.read())[0].getType('text/html')).text());
+  expect(html).toContain('Please find attached');
+  expect(html).not.toContain('Download the digest');
 });
 
 test('staff preview and download the digest; sharing it is for admins', async ({ page }) => {

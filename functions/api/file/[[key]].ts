@@ -5,7 +5,7 @@
  */
 import { json, fail, bearerToken } from '../../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../../server/supabase.ts';
-import { type FileBucket, deleteUnreferencedFiles } from '../../../server/files.ts';
+import { type FileBucket, deleteUnreferencedFiles, contentDisposition } from '../../../server/files.ts';
 
 interface Env extends SupabaseEnv {
   BUCKET: R2Bucket;
@@ -45,14 +45,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     // Older uploads were not type-checked: never let a stored file run as a page on this origin.
     const contentType = (headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     headers.set('X-Content-Type-Options', 'nosniff');
-    // Saved under its own name, without the random part of the key (or the digests/ folder)
-    const fileName = (key.split('/').pop() ?? key).replace(/^[0-9a-f-]{36}-/i, '').replace(/"/g, '');
     if (!INLINE_TYPES.has(contentType)) {
       headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
-      headers.set('Content-Disposition', `attachment; filename="${fileName}"`);
-    } else {
-      headers.set('Content-Disposition', `inline; filename="${fileName}"`);
     }
+    headers.set('Content-Disposition', contentDisposition(key, INLINE_TYPES.has(contentType)));
 
     // Keys contain a random UUID, so the content behind a URL never changes
     headers.set('Cache-Control', 'public, max-age=31536000, immutable');

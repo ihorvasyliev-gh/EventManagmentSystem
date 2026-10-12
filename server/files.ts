@@ -43,6 +43,17 @@ export const storeFile = async (bucket: FileBucket, file: File, contentType: str
   return { key, url: `${FILE_PATH}${key}`, name: file.name, type: contentType, size: file.size };
 };
 
+/**
+ * How /api/file hands a stored file over, under its own name (without the random part of the key
+ * or the digests/ folder). A shared digest downloads: opened in a tab, PDF extensions (Adobe
+ * Acrobat's) take it over and render it badly; saved, it opens in the person's own PDF app.
+ */
+export const contentDisposition = (key: string, canShowInline: boolean): string => {
+  const name = (key.split('/').pop() ?? key).replace(/^[0-9a-f-]{36}-/i, '').replace(/"/g, '');
+  const download = !canShowInline || key.startsWith('digests/');
+  return `${download ? 'attachment' : 'inline'}; filename="${name}"`;
+};
+
 /** The R2 key behind a stored file's URL (relative or absolute), or null for any other URL */
 export const fileKeyFromUrl = (url: string | null | undefined): string | null => {
   if (!url) return null;

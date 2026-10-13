@@ -44,8 +44,8 @@ test('email lists published events in date order with time, venue and repeat dat
   assert.ok(!body.includes('Not approved yet'));
   assert.ok(!body.includes('Outside the period'));
   assert.ok(body.includes(`${BASE}/submit (no login needed)`));
-  // No name under the sign-off
-  assert.ok(body.endsWith('\n\nKind regards,'));
+  // No sign-off: the sender's email signature follows
+  assert.ok(body.endsWith('and it will be in the next update.'));
 });
 
 test('email says how long a multi-day event runs and leaves the time off all-day events', () => {
@@ -105,7 +105,7 @@ test('mailto link names fewer events when the full list would be too long to ope
   assert.ok(named >= 1 && named < 20, `named ${named} events`);
   assert.equal(items[items.length - 1], `• …and ${23 - named} more events in the attached PDF`);
   assert.match(body!, /There are 23 events:/);
-  assert.ok(body!.endsWith('\r\n\r\nKind regards,'));
+  assert.ok(body!.endsWith('and it will be in the next update.'));
 });
 
 test('mailto link keeps the whole list when it fits', () => {

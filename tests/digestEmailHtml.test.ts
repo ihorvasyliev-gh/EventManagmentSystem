@@ -24,7 +24,12 @@ test('the formatted email has a clickable button to the PDF and lists each event
 
   assert.ok(html.includes(`<a href="${PDF}"`), 'the PDF link is a real link');
   assert.match(html, /Click here for details/);
-  assert.equal(html.split('Monday 12 October – Monday 26 October 2026').length, 2, 'the period is shown once, under the heading');
+  assert.equal(html.split('12 – 26 October 2026').length, 2, 'the period is shown once, beside the logo');
+  assert.ok(html.includes('<span style="white-space:nowrap;">12 – 26 October 2026</span>'), 'one month stays on one line');
+  const twoMonths = generateDigestEmailHtml([], new Date(2026, 9, 23), new Date(2026, 10, 6), { baseUrl: BASE });
+  assert.ok(twoMonths.includes('<span style="white-space:nowrap;">23 October –</span> <span style="white-space:nowrap;">6 November 2026</span>'), 'two months may wrap after the dash');
+  assert.match(html, /UPCOMING EVENTS/);
+  assert.doesNotMatch(html, /Kind regards/, "the sender's email signature follows");
   assert.match(html, /Here are our 2 upcoming events\./);
   assert.doesNotMatch(html.replace(/<[^>]*>/g, ''), /digest|PDF|download/i, 'plain words for every reader');
   assert.ok(html.indexOf('Togher Men&#39;s Lunch Club') < html.indexOf('Sunday Tea Dance'));

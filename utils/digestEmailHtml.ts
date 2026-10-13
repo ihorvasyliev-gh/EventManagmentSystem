@@ -9,7 +9,7 @@ import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
 import { formatAlsoOnDates, monthShort } from './digestGrouping.ts';
 import {
-  digestGroupsFor, formatLongRange, toAbsoluteHttpUrl, toDate, clock, isAllDay, WEEKDAYS_LONG
+  digestGroupsFor, formatPeriodShort, toAbsoluteHttpUrl, toDate, clock, isAllDay, WEEKDAYS_LONG
 } from './digestText.ts';
 import { getCategoryRgb } from '../constants/categoryColors.ts';
 
@@ -27,6 +27,8 @@ const LIST_LIMIT = 40;
 
 const esc = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+const nowrap = (html: string): string => `<span style="white-space:nowrap;">${html}</span>`;
 
 const hex = ([r, g, b]: [number, number, number]) => `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
 
@@ -50,25 +52,30 @@ export const generateDigestEmailHtml = (
   options: { baseUrl?: string; pdfUrl?: string | null } = {}
 ): string => {
   const groups = digestGroupsFor(events, startDate, endDate);
-  const range = esc(formatLongRange(startDate, endDate));
+  // On a phone the period wraps only after the dash between two months ("23 October –" / "6 November
+  // 2026"), never as "13 –" or with the year on its own line
+  const [from, to] = esc(formatPeriodShort(startDate, endDate)).split(' – ');
+  const period = !to ? nowrap(from) : from.includes(' ') ? `${nowrap(`${from} –`)} ${nowrap(to)}` : nowrap(`${from} – ${to}`);
   const logo = toAbsoluteHttpUrl('/assets/ccp-logo-v2.png', options.baseUrl);
   const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
   const pdfUrl = options.pdfUrl ? esc(options.pdfUrl) : null;
   const upcoming = groups.length === 1 ? 'one upcoming event' : `${groups.length} upcoming events`;
 
-  // The period is already under the heading, so the intro doesn't repeat it
+  // The period is already beside the logo, so the intro doesn't repeat it
   const intro = groups.length === 0
     ? p('There are no events scheduled for this period yet.')
     : pdfUrl
       ? p(`Here ${groups.length === 1 ? 'is' : 'are'} our ${upcoming}.`)
       : p(`Please find attached our ${upcoming}.`);
 
-  // Bulletproof button: the cell's bgcolor shows in Outlook, which ignores most link styling
+  // Bulletproof button: Outlook ignores padding and most styling on a link (pasted in, it showed
+  // a tight box in one Outlook and a stretched, underlined one in another), so the cell carries
+  // the colour and padding, and the inner span keeps the text white and not underlined
   const button = groups.length > 0 && pdfUrl ? `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 10px;">
   <tr>
-    <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:4px;">
-      <a href="${pdfUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">Click here for details</a>
+    <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:4px;padding:12px 24px;">
+      <a href="${pdfUrl}" target="_blank" style="font-family:${FONT};font-size:16px;line-height:20px;font-weight:bold;color:#ffffff;text-decoration:none;"><span style="color:#ffffff;text-decoration:none;">Click here for details</span></a>
     </td>
   </tr>
 </table>
@@ -124,14 +131,12 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
   <tr>
     <td style="padding:26px 32px 8px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td valign="middle">${logo ? `<img src="${esc(logo)}" width="190" height="45" alt="Cork City Partnership" style="display:block;border:0;width:190px;height:45px;">` : ''}</td>
+        <td valign="middle">${logo ? `<img src="${esc(logo)}" width="190" height="45" alt="Cork City Partnership" style="display:block;border:0;width:190px;max-width:100%;height:auto;">` : ''}</td>
+        <td valign="middle" align="right" style="padding-left:12px;font-family:${FONT};text-align:right;">
+          <div style="font-size:11px;line-height:16px;font-weight:bold;letter-spacing:1px;color:${BRAND};">UPCOMING EVENTS</div>
+          <div style="font-size:14px;line-height:20px;color:${INK};">${period}</div>
+        </td>
       </tr></table>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:18px 32px 6px;">
-      <h1 style="margin:0;font-family:${FONT};font-size:30px;line-height:36px;font-weight:normal;color:${INK};">Upcoming Events</h1>
-      <p style="margin:4px 0 0;font-family:${FONT};font-size:15px;line-height:22px;color:${MUTED};">${range}</p>
     </td>
   </tr>
   <tr>
@@ -144,8 +149,7 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
   </tr>
   <tr>
     <td style="padding:10px 32px 26px;">
-      ${submitUrl ? p(`Running an event? <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next update.`) : ''}
-      ${p('Kind regards,', 'margin:0;')}
+      ${submitUrl ? p(`Running an event? <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next update.`, 'margin:0;') : ''}
     </td>
   </tr>
   <tr>

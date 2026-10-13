@@ -97,8 +97,8 @@ const EMAIL_LIST_LIMIT = 20;
 
 /**
  * Covering email for the PDF (the routine sends it to the Board and staff every fortnight):
- * subject, greeting, one line per event, how to send in an event, and "Kind regards," with no
- * name under it. `listLimit` caps how many events are named. With `pdfUrl` the email links to
+ * subject, greeting, one line per event and how to send in an event. No sign-off: the sender's
+ * own email signature follows. `listLimit` caps how many events are named. With `pdfUrl` the email links to
  * the PDF instead of saying it is attached.
  */
 export const generateDigestEmail = (
@@ -151,7 +151,6 @@ export const generateDigestEmail = (
   if (submitUrl) {
     lines.push('', `Running an event? Send it in at ${submitUrl} (no login needed) and it will be in the next update.`);
   }
-  lines.push('', 'Kind regards,');
 
   return { subject, body: lines.join('\n') };
 };

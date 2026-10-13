@@ -23,9 +23,10 @@ test('the formatted email has a clickable button to the PDF and lists each event
   ], start, end, { baseUrl: BASE, pdfUrl: PDF });
 
   assert.ok(html.includes(`<a href="${PDF}"`), 'the PDF link is a real link');
-  assert.match(html, /Open the digest \(PDF\)/);
-  assert.match(html, /Monday 12 October – Monday 26 October 2026/);
-  assert.match(html, /It has 2 events\./);
+  assert.match(html, /Click here for details/);
+  assert.equal(html.split('Monday 12 October – Monday 26 October 2026').length, 2, 'the period is shown once, under the heading');
+  assert.match(html, /Here are our 2 upcoming events\./);
+  assert.doesNotMatch(html.replace(/<[^>]*>/g, ''), /digest|PDF|download/i, 'plain words for every reader');
   assert.ok(html.indexOf('Togher Men&#39;s Lunch Club') < html.indexOf('Sunday Tea Dance'));
   assert.equal(html.split('Togher Men&#39;s Lunch Club').length, 2, 'a repeating event is listed once');
   assert.match(html, /Also on Tue 20 Oct/);
@@ -42,12 +43,12 @@ test('text from events is escaped, and without a link the email says the PDF is 
   assert.ok(!html.includes('<script>'));
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Co&quot;'));
   assert.ok(!html.includes('<b>place</b>'));
-  assert.match(html, /Please find attached our Upcoming Events Digest/);
-  assert.doesNotMatch(html, /Open the digest/);
+  assert.match(html, /Please find attached our one upcoming event\./);
+  assert.doesNotMatch(html, /Click here for details/);
 
   const empty = generateDigestEmailHtml([], start, end, { baseUrl: BASE, pdfUrl: PDF });
   assert.match(empty, /There are no events scheduled/);
-  assert.doesNotMatch(empty, /Open the digest/);
+  assert.doesNotMatch(empty, /Click here for details/);
 });
 
 test('the new email opens with only the subject, for the formatted text to be pasted in', () => {

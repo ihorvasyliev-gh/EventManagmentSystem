@@ -1,8 +1,9 @@
 /**
  * The covering email for the Events Digest as formatted HTML: the site's colours and logo, a
- * button to download the PDF and the events as date-tile rows, like the PDF. A mailto: link can
- * only carry plain text, so the app copies this to the clipboard and it is pasted into the new
- * email. Built from tables with inline styles, which Outlook, Gmail and Apple Mail all keep.
+ * "Click here for details" button to the PDF and the events as date-tile rows, like the PDF. A
+ * mailto: link can only carry plain text, so the app copies this to the clipboard and it is pasted
+ * into the new email. Built from tables with inline styles, which Outlook, Gmail and Apple Mail all keep.
+ * Plain words for every reader: no "digest", "PDF" or "download" when there is a link.
  */
 import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
@@ -53,24 +54,25 @@ export const generateDigestEmailHtml = (
   const logo = toAbsoluteHttpUrl('/assets/ccp-logo-v2.png', options.baseUrl);
   const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
   const pdfUrl = options.pdfUrl ? esc(options.pdfUrl) : null;
-  const count = groups.length === 1 ? 'It has one event.' : `It has ${groups.length} events.`;
+  const upcoming = groups.length === 1 ? 'one upcoming event' : `${groups.length} upcoming events`;
 
+  // The period is already under the heading, so the intro doesn't repeat it
   const intro = groups.length === 0
-    ? p(`There are no events scheduled for ${range} yet, so there is no digest this time.`)
+    ? p('There are no events scheduled for this period yet.')
     : pdfUrl
-      ? p(`Here is our Upcoming Events Digest for <strong style="color:${INK};">${range}</strong>. ${count}`)
-      : p(`Please find attached our Upcoming Events Digest for <strong style="color:${INK};">${range}</strong>. ${count}`);
+      ? p(`Here ${groups.length === 1 ? 'is' : 'are'} our ${upcoming}.`)
+      : p(`Please find attached our ${upcoming}.`);
 
   // Bulletproof button: the cell's bgcolor shows in Outlook, which ignores most link styling
   const button = groups.length > 0 && pdfUrl ? `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 10px;">
   <tr>
     <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:4px;">
-      <a href="${pdfUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">Open the digest (PDF)</a>
+      <a href="${pdfUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">Click here for details</a>
     </td>
   </tr>
 </table>
-${p(`The link works for six months, on your phone or computer, and has a download button. In the PDF each event has its description, venue (with a map link), contacts and buttons to add it to your Outlook or Google calendar.`, `font-size:13px;line-height:19px;color:${MUTED};`)}` : '';
+${p(`Opens on your phone or computer. For each event you'll see the description, the venue with a map, contacts, and buttons to add it to your Outlook or Google calendar.`, `font-size:13px;line-height:19px;color:${MUTED};`)}` : '';
 
   const rows = groups.slice(0, LIST_LIMIT).map((group) => {
     const ev = group.event;
@@ -104,9 +106,9 @@ ${p(`The link works for six months, on your phone or computer, and has a downloa
   }).join('');
   const more = groups.length - LIST_LIMIT;
   const list = groups.length === 0 ? '' : `
-<p style="margin:22px 0 4px;font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:2px;color:${BRAND};">IN THIS DIGEST</p>
+<p style="margin:22px 0 4px;font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:2px;color:${BRAND};">COMING UP</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
-${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-family:${FONT};font-size:13px;color:${MUTED};">…and ${more} more ${more === 1 ? 'event' : 'events'} in the PDF</td></tr>` : ''}
+${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-family:${FONT};font-size:13px;color:${MUTED};">…and ${more} more ${more === 1 ? 'event' : 'events'}${pdfUrl ? ': click the button above for details' : ' in the attached PDF'}</td></tr>` : ''}
 </table>`;
 
   return `<div style="margin:0;padding:0;">
@@ -123,7 +125,6 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
     <td style="padding:26px 32px 8px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
         <td valign="middle">${logo ? `<img src="${esc(logo)}" width="190" height="45" alt="Cork City Partnership" style="display:block;border:0;width:190px;height:45px;">` : ''}</td>
-        <td valign="middle" align="right" style="font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:2px;color:${BRAND};">EVENTS DIGEST</td>
       </tr></table>
     </td>
   </tr>
@@ -143,7 +144,7 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
   </tr>
   <tr>
     <td style="padding:10px 32px 26px;">
-      ${submitUrl ? p(`Running an event? <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next digest.`) : ''}
+      ${submitUrl ? p(`Running an event? <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next update.`) : ''}
       ${p('Kind regards,', 'margin:0;')}
     </td>
   </tr>

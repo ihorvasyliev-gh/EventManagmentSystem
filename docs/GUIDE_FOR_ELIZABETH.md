@@ -161,7 +161,7 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 * You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end a link to the digest PDF (so you don't need to send the file as well), the live calendar and the submission form.
 
 ### 6. Open the covering email
-* Click **"Email"**. The digest PDF is uploaded (a few seconds) and a **formatted email** is copied: the CCP logo and colours, a greeting, an **Open the digest (PDF)** button, every event with its date, time, category and venue (linked to Google Maps), where to send in an event, and *Kind regards,* with no name under it.
+* Click **"Email"**. The digest PDF is uploaded (a few seconds) and a **formatted email** is copied: the CCP logo and colours, a greeting, a **Click here for details** button, every event with its date, time, category and venue (linked to Google Maps), where to send in an event, and *Kind regards,* with no name under it.
 * Your email app (e.g. Outlook) opens a new email with the subject filled in. **Click into the message and press `Ctrl + V`** (`⌘ V` on a Mac) to paste the formatted email. (A link from the browser can only fill in plain text, so the formatted version comes through the clipboard.)
 * Add the recipients and send. There is nothing to attach: the button opens the digest's page, without signing in, for **six months**; after that the link stops working.
 * If the browser doesn't allow copying, the email opens with a plain-text version (with the link) instead. If the upload fails (for example, no internet), the email has no link: attach the PDF from Step 4 by hand.

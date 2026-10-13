@@ -114,19 +114,19 @@ export const generateDigestEmail = (
 
   const lines: string[] = ['Dear Board Members and Colleagues,', ''];
   if (groups.length === 0) {
-    lines.push(`There are no events scheduled for ${period} yet, so there is no digest this time.`);
+    lines.push(`There are no events scheduled for ${period} yet.`);
   } else {
-    const count = groups.length === 1 ? 'It has one event:' : `It has ${groups.length} events:`;
+    const count = groups.length === 1 ? 'There is one event:' : `There are ${groups.length} events:`;
     if (options.pdfUrl) {
       lines.push(
-        `Here is our Upcoming Events Digest for ${formatLongRange(startDate, endDate)} (PDF, the link works for six months):`,
+        `Here are our upcoming events for ${formatLongRange(startDate, endDate)}. For details, click this link:`,
         options.pdfUrl,
         '',
         count,
         ''
       );
     } else {
-      lines.push(`Please find attached our Upcoming Events Digest for ${formatLongRange(startDate, endDate)}. ${count}`, '');
+      lines.push(`Please find attached our upcoming events for ${formatLongRange(startDate, endDate)}. ${count}`, '');
     }
     groups.slice(0, listLimit).forEach((group) => {
       const ev = group.event;
@@ -140,16 +140,16 @@ export const generateDigestEmail = (
     });
     if (groups.length > listLimit) {
       const more = groups.length - listLimit;
-      lines.push(`• …and ${more} more ${more === 1 ? 'event' : 'events'} in the ${options.pdfUrl ? '' : 'attached '}PDF`);
+      lines.push(`• …and ${more} more ${more === 1 ? 'event' : 'events'} ${options.pdfUrl ? 'at the link above' : 'in the attached PDF'}`);
     }
     lines.push(
       '',
-      'Each event in the PDF has its venue (with a map link), a contact, and buttons to add it to your Outlook or Google calendar.'
+      `${options.pdfUrl ? 'Click the link above for' : 'The attached PDF has'} each event's description, venue with a map, contacts, and buttons to add it to your Outlook or Google calendar.`
     );
   }
   const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
   if (submitUrl) {
-    lines.push('', `Running an event? Send it in at ${submitUrl} (no login needed) and it will be in the next digest.`);
+    lines.push('', `Running an event? Send it in at ${submitUrl} (no login needed) and it will be in the next update.`);
   }
   lines.push('', 'Kind regards,');
 

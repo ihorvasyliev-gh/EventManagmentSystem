@@ -39,7 +39,7 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
     return { html: await (await item.getType('text/html')).text(), text: await (await item.getType('text/plain')).text() };
   });
   expect(email.html).toContain(`href="http://localhost:4173${PAGE}"`);
-  expect(email.html).toContain('Open the digest (PDF)');
+  expect(email.html).toContain('Click here for details');
   expect(email.html).toContain('Coffee morning');
   expect(email.text).toContain(`http://localhost:4173${PAGE}`);
   expect(uploads).toHaveLength(1);
@@ -93,7 +93,7 @@ test('when the upload fails, the email still opens and the WhatsApp text is copi
   await expect(page.getByText(/Email copied .*The PDF could not be uploaded: attach it by hand\./)).toBeVisible();
   const html = await page.evaluate(async () => (await (await navigator.clipboard.read())[0].getType('text/html')).text());
   expect(html).toContain('Please find attached');
-  expect(html).not.toContain('Open the digest');
+  expect(html).not.toContain('Click here for details');
 });
 
 test('staff preview and download the digest; sharing it is for admins', async ({ page }) => {

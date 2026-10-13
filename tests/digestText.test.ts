@@ -35,7 +35,7 @@ test('email lists published events in date order with time, venue and repeat dat
   );
 
   assert.equal(subject, 'Cork City Partnership: Upcoming Events Digest, 9 – 23 October 2026');
-  assert.match(body, /Upcoming Events Digest for Friday 9 October – Friday 23 October 2026\. It has 2 events:/);
+  assert.match(body, /upcoming events for Friday 9 October – Friday 23 October 2026\. There are 2 events:/);
   const items = body.split('\n').filter((l) => l.startsWith('• '));
   assert.deepEqual(items, [
     "• Tue 13 Oct, 13:00 – Togher Men's Lunch Club, Cork City Partnership Training room, O'Connell Court… (also Tue 20 Oct)",
@@ -104,7 +104,7 @@ test('mailto link names fewer events when the full list would be too long to ope
   const named = items.length - 1;
   assert.ok(named >= 1 && named < 20, `named ${named} events`);
   assert.equal(items[items.length - 1], `• …and ${23 - named} more events in the attached PDF`);
-  assert.match(body!, /It has 23 events:/);
+  assert.match(body!, /There are 23 events:/);
   assert.ok(body!.endsWith('\r\n\r\nKind regards,'));
 });
 
@@ -138,9 +138,10 @@ test('with a link to the uploaded PDF, the email links to it instead of saying i
   const pdfUrl = `${BASE}/api/file/digests/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events.pdf`;
   const events = [makeEvent('a', new Date(2026, 9, 13, 13, 0), { title: 'Coffee morning' })];
   const { body } = generateDigestEmail(events, start, end, { baseUrl: BASE, pdfUrl });
-  assert.match(body, /Here is our Upcoming Events Digest for Friday 9 October – Friday 23 October 2026 \(PDF, the link works for six months\):\n/);
+  assert.match(body, /Here are our upcoming events for Friday 9 October – Friday 23 October 2026\. For details, click this link:\n/);
   assert.ok(body.split('\n').includes(pdfUrl));
-  assert.match(body, /It has one event:/);
+  assert.match(body, /There is one event:/);
+  assert.doesNotMatch(body.replace(pdfUrl, ''), /digest|PDF|download/i, 'plain words for every reader');
   assert.doesNotMatch(body, /attached/);
   const mailto = decodeURIComponent(generateDigestMailto(events, start, end, { baseUrl: BASE, pdfUrl }));
   assert.ok(mailto.includes(pdfUrl));
@@ -151,5 +152,5 @@ test('with a link to the uploaded PDF, the email links to it instead of saying i
   const link = generateDigestMailto(many, start, end, { baseUrl: BASE, pdfUrl });
   assert.ok(link.length <= MAILTO_MAX_LENGTH);
   assert.ok(decodeURIComponent(link).includes(pdfUrl));
-  assert.match(decodeURIComponent(link), /more events in the PDF/);
+  assert.match(decodeURIComponent(link), /more events at the link above/);
 });

@@ -1,13 +1,5 @@
 import { callApi } from './apiClient';
 
-/** Uploads a poster image to R2 (admins) and returns its /api/file URL */
-export const uploadPoster = async (file: File): Promise<string> => {
-  const form = new FormData();
-  form.append('file', file);
-  const { url } = await callApi<{ url: string }>('/api/upload', { method: 'PUT', form });
-  return url;
-};
-
 /**
  * Removes files of a deleted event from R2. The server keeps any file another event still uses,
  * and a failure only leaves a file behind, so errors are ignored.

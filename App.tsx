@@ -28,7 +28,6 @@ import { useDeepLinks, eventShareLink } from './hooks/useDeepLinks';
 import { useAppShortcuts } from './hooks/useAppShortcuts';
 import { useChangeLogBadge } from './hooks/useChangeLogBadge';
 import { loadOrReload } from './utils/staleChunk';
-import { cacheExceptions } from './utils/eventsCache';
 
 // Windows and pages load when first opened; after a deploy an old tab reloads instead of crashing
 const lazyWithReload = <T extends React.ComponentType<any>>(load: () => Promise<{ default: T }>) =>
@@ -94,8 +93,8 @@ const AppContent: React.FC = () => {
 
   const { pendingSubmissions, handleApproveSubmission, handleRejectSubmission, handleApproveAllSubmissions } =
     useSubmissionActions({ isAdmin, events, setEvents, syncAfterChange, showToast });
-  const { handleUpdateEvent, handleDeleteInstance, handleDeleteEvent } = useEventActions({
-    user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, syncAfterChange, showToast, modal
+  const { handleDeleteInstance, handleDeleteEvent, forgetExceptions } = useEventActions({
+    user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, showToast, modal
   });
 
   const { open: openEvent, close: closeEventModal } = modal;
@@ -110,28 +109,24 @@ const AppContent: React.FC = () => {
     openSubmitPageWith(null, seriesOf(event));
   }, [seriesOf, closeEventModal, openSubmitPageWith]);
 
-  // Staff change their own events in the full-screen form
-  const handleEditOwnEvent = useCallback((event: Event) => {
+  // Every change to an event is made in the event form (admins any event, staff their own)
+  const handleEditEvent = useCallback((event: Event) => {
     closeEventModal();
     openSubmitPageToEdit(seriesOf(event));
   }, [seriesOf, closeEventModal, openSubmitPageToEdit]);
-  const handleOwnEventSaved = useCallback(({ event, changed, exceptionsCleared }: { event: Event; changed: boolean; exceptionsCleared: boolean }) => {
+  // From the inbox, saving publishes the submission (unless the admin sets it back to Draft)
+  const handleEditSubmission = useCallback((event: Event) => openSubmitPageToEdit(seriesOf(event), true), [seriesOf, openSubmitPageToEdit]);
+  const handleEventSaved = useCallback(({ event, changed, exceptionsCleared }: { event: Event; changed: boolean; exceptionsCleared: boolean }) => {
+    const before = events.find((e) => e.id === event.id);
     setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
     // Days deleted earlier were left out of the saved dates
-    if (exceptionsCleared) {
-      setRecurrenceExceptions((prev) => {
-        if (!prev.has(event.id)) return prev;
-        const next = new Map(prev);
-        next.delete(event.id);
-        cacheExceptions(next);
-        return next;
-      });
-    }
+    if (exceptionsCleared && recurrenceExceptions.has(event.id)) forgetExceptions(event.id);
     closeSubmitPage();
     if (!changed) showToast('Nothing was changed', 'info');
+    else if (isAdmin) showToast(before?.status === 'draft' && event.status === 'published' ? `"${event.title}" is saved and published` : 'Event updated', 'success');
     else if (event.status === 'published') showToast('Your changes are saved and on the calendar', 'success');
     else showToast('Your changes are saved. The event is still waiting for review', 'success');
-  }, [setEvents, setRecurrenceExceptions, closeSubmitPage, showToast]);
+  }, [events, setEvents, recurrenceExceptions, forgetExceptions, closeSubmitPage, isAdmin, showToast]);
 
   useAppShortcuts(user, submitPage.open);
   useDeepLinks({ user, loadingEvents, events, recurrenceExceptions, onOpenEvent: openEvent, onOpenInbox: openInbox, showToast });
@@ -195,7 +190,8 @@ const AppContent: React.FC = () => {
           template={submitPage.template}
           editing={submitPage.editing}
           editingExceptions={submitPage.editing ? recurrenceExceptions.get(submitPage.editing.id) : undefined}
-          onSaved={handleOwnEventSaved}
+          publishOnSave={submitPage.publishOnSave}
+          onSaved={handleEventSaved}
           onBackToLogin={submitPage.close}
         />
       </Suspense>
@@ -311,15 +307,11 @@ const AppContent: React.FC = () => {
             role={user.role}
             currentUserId={user.id}
             currentUserEmail={user.email}
-            onUpdate={handleUpdateEvent}
             onDelete={handleDeleteEvent}
             onDeleteInstance={handleDeleteInstance}
             onDuplicate={isAdmin ? handleDuplicateEvent : undefined}
-            onEditOwn={isAdmin ? undefined : handleEditOwnEvent}
+            onEdit={handleEditEvent}
             recurrenceExceptions={recurrenceExceptions}
-            initialMode={modal.initialMode}
-            autoApproveOnSave={modal.autoApprove}
-            draft={modal.draft}
             getShareLink={eventShareLink}
           />
         </Suspense>
@@ -401,7 +393,7 @@ const AppContent: React.FC = () => {
             submissions={pendingSubmissions}
             events={events}
             onApprove={handleApproveSubmission}
-            onEdit={(ev) => modal.openToEdit(ev, { autoApprove: true })}
+            onEdit={handleEditSubmission}
             onReject={handleRejectSubmission}
             onApproveAll={handleApproveAllSubmissions}
             onOpenEvent={openEvent}

@@ -24,8 +24,8 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp, email & a link** | Admins copy an emoji-friendly WhatsApp version of the digest, or open a ready-to-send covering email for the Board that lists every event. Both carry a link to the digest PDF (uploaded once, open to anyone with the link for six months), so nothing needs attaching. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
-| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. The `/submit` form offers *every week*, *every 2 weeks* and *every month* under the date picker, with an optional last date. You can delete a single occurrence. |
-| ✏️ **Staff edit their own events** | Signed-in staff change the events they sent in (signed in, or naming their email as the contact) in the same form. Published events stay published, pending ones stay pending; every change is logged field by field, and admins see staff changes in the **Change log**, with a count of new ones. |
+| 🔁 **Recurring & multi-date events** | Hand-picked dates, each with its own time if needed, or a repeat: under the date picker the event form offers *every week*, *every 2 weeks* and *every month*, with an optional last date (older daily and yearly series still work). You can delete a single occurrence. |
+| ✏️ **One event form** | Events are created and edited in the same full-screen form, by everyone: admins edit any event (and set it to *Published* or *Draft*), signed-in staff the ones they sent in (signed in, or naming their email as the contact) without changing whether it's published. Every change is saved through `/api/edit-event` and logged field by field; admins see staff changes in the **Change log**, with a count of new ones. |
 | 👥 **Staff accounts** | Admins add staff and reset forgotten passwords: the person gets a temporary password and chooses their own at the next sign-in. Everyone can change their password from the account menu. |
 | 📊 **Statistics** | Events, dates and venues per period, by category and month, ready to paste into a Board report. |
 | 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
@@ -111,12 +111,11 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Change their own password | ✅ | ✅ |
 | Create, edit, duplicate and delete events and occurrences | | ✅ |
 | Review submissions and see everyone's drafts | | ✅ |
-| Manage categories | | ✅ |
 | Add staff accounts, reset passwords, see statistics and the change log | | ✅ |
 | Preview and download the Events Digest | ✅ | ✅ |
 | Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 
-Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to their own events through `/api/edit-event`, which checks the event is theirs and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
+Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to events (staff's own, or any for admins) through `/api/edit-event`, which checks who may change the event and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
 
 **Forgotten password:** the person emails the contact on the login page (*Forgot your password?* fills in the email). An admin opens **account menu → Staff accounts → Reset password** and passes on the temporary password shown; at their next sign-in they choose a new one.
 
@@ -140,7 +139,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | Endpoint | Method | Who | Purpose |
 |---|---|---|---|
 | `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish). Up to 30 per network in 15 minutes (admins unlimited) |
-| `/api/edit-event` | `POST` | staff (own events), admins | Saves changes to an event (and a new flyer) in one request, checked like `/api/submit`; status stays as it was. Refuses if someone saved the event meanwhile, and logs what changed |
+| `/api/edit-event` | `POST` | admins, staff (own events) | Saves changes to an event (and a new flyer) in one request, checked like `/api/submit`; only admins change the status. Refuses if someone saved the event meanwhile, and logs what changed |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
 | `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
 | `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
@@ -165,7 +164,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 ├── pages/                   Login and the /submit form
 ├── components/
 │   ├── calendar/            Month grid, agenda, day popover, header (CalendarView puts them together)
-│   ├── event-modal/         Event details, the edit form and its sections, delete / category dialogs
+│   ├── event-modal/         Event details, their buttons and the delete dialog (events are edited in the event form)
 │   ├── submit/              /submit form sections, review and thank-you screens, saved draft
 │   └── …                    Week view, digest, export, inbox, staff, statistics, navigation
 ├── services/                Supabase and /api access: events, submissions, files, staff, auth

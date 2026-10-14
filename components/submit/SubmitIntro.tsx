@@ -25,25 +25,30 @@ export const SubmitTopBar: React.FC<{ onBack?: () => void; backLabel: string }> 
   </header>
 );
 
-/** Staff changing an event of their own: what saving does */
-const EditIntro: React.FC<{ published: boolean }> = ({ published }) => (
+/** Changing an event: what saving does (admins change any event, staff their own) */
+const EditIntro: React.FC<{ published: boolean; isAdmin: boolean }> = ({ published, isAdmin }) => (
   <div className="mb-5 sm:mb-6">
     <p className="eyebrow max-w-md">
-      <span>{published ? 'Your event · on the calendar' : 'Your event · waiting for review'}</span>
+      <span>
+        {isAdmin ? 'Admin · ' : 'Your event · '}
+        {published ? 'on the calendar' : 'waiting for review'}
+      </span>
     </p>
     <h1 className="mt-2 text-2xl sm:text-[2.375rem] sm:leading-tight font-medium text-slate-900 dark:text-white">
-      Edit your event
+      {isAdmin ? 'Edit event' : 'Edit your event'}
     </h1>
     <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl">
-      {published
-        ? 'Your changes go on the calendar as soon as you save them. The admins can see what you changed.'
-        : 'It’s still waiting for review: Elizabeth will see your changes when she checks it.'}
+      {isAdmin
+        ? 'Your changes go live when you save, and the event’s history records what changed.'
+        : published
+          ? 'Your changes go on the calendar as soon as you save them. The admins can see what you changed.'
+          : 'It’s still waiting for review: Elizabeth will see your changes when she checks it.'}
     </p>
   </div>
 );
 
 /** What the form is for; staff also get the CEO's guidelines on what to send in */
-export const SubmitIntro: React.FC<{ isAdmin: boolean; editing?: { published: boolean } | null }> = ({ isAdmin, editing }) => editing ? <EditIntro published={editing.published} /> : (
+export const SubmitIntro: React.FC<{ isAdmin: boolean; editing?: { published: boolean } | null }> = ({ isAdmin, editing }) => editing ? <EditIntro published={editing.published} isAdmin={isAdmin} /> : (
   <div className="mb-5 sm:mb-6">
     <p className="eyebrow max-w-md">
       <span>{isAdmin ? 'Admin · publishes immediately' : 'Staff event form · no login needed'}</span>

@@ -141,9 +141,16 @@ test('an event that names their email as the contact is theirs too; anyone elseâ
   assert.equal(writes.patched.length, 0);
   assert.equal(writes.history.length, 0);
 
-  // Admins may change any event
-  const asAdmin = await onRequestPost({ request: send(form(someoneElse, { title: 'Fixed' }), { auth: 'admin-token' }), env });
+  // Admins may change any event, and publish or unpublish it
+  const admin = backend(someoneElse);
+  const asAdmin = await onRequestPost({ request: send(form(someoneElse, { title: 'Fixed', status: 'draft' }), { auth: 'admin-token' }), env });
   assert.equal(asAdmin.status, 200);
+  assert.equal(admin.writes.patched[0].status, 'draft');
+  assert.deepEqual(admin.writes.history[0].changes, {
+    title: { old: 'Coffee morning', new: 'Fixed' },
+    status: { old: 'Published', new: 'Pending review' }
+  });
+  assert.equal(admin.writes.history[0].user_name, 'Ada Admin');
 });
 
 test('without a session nothing is read or written', async () => {
@@ -221,6 +228,21 @@ test('a series that keeps repeating the same way keeps its deleted days; picked 
   const body = await res.json();
   assert.equal(cleared.writes.clearedExceptions, 1);
   assert.equal(body.exceptionsCleared, true);
+});
+
+test('an event saved without a contact can be changed without adding one', async () => {
+  const noContact = storedEvent({ submitter_name: null, submitter_email: null });
+  const { writes } = backend(noContact);
+  const res = await onRequestPost({ request: send(form(noContact, { title: 'Renamed', submitter_name: '', submitter_email: '' }), { auth: 'admin-token' }), env });
+  assert.equal(res.status, 200);
+  assert.equal(writes.patched[0].submitter_name, null);
+  assert.deepEqual(writes.history[0].changes, { title: { old: 'Coffee morning', new: 'Renamed' } });
+
+  // One that has a contact keeps needing one
+  const withContact = storedEvent();
+  backend(withContact);
+  const refused = await onRequestPost({ request: send(form(withContact, { submitter_name: '', submitter_email: '' }), { auth: 'admin-token' }), env });
+  assert.equal(refused.status, 400);
 });
 
 test('the formâ€™s fields are checked like a new submission', async () => {

@@ -154,3 +154,38 @@ export const expectAccessible = async (page: Page, exclude: string[] = []) => {
     .map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')})`);
   expect(serious, 'accessibility problems').toEqual([]);
 };
+
+/** The edit form's request to /api/edit-event: the event's fields, as JSON */
+export const editedEvent = (body: string): Record<string, unknown> =>
+  JSON.parse(body.match(/name="event"\r\n\r\n(.*?)\r\n--/s)?.[1] ?? '{}');
+
+/**
+ * Answers /api/edit-event like the server: refuses a save made to an older version than the one
+ * stored (409, with the stored one), otherwise applies the change to the mocked events.
+ * `failFirst`: the first save fails as if the server were down.
+ */
+export const mockEditEvent = async (
+  page: Page,
+  backend: Awaited<ReturnType<typeof mockSupabase>>,
+  { failFirst = false }: { failFirst?: boolean } = {}
+) => {
+  const saves: Array<Record<string, unknown>> = [];
+  let failed = !failFirst;
+  await page.route('**/api/edit-event', async (route) => {
+    if (!failed) {
+      failed = true;
+      return route.fulfill({ status: 502, json: { error: 'The changes could not be saved. Please try again.' } });
+    }
+    const sent = editedEvent(route.request().postDataBuffer()?.toString('utf8') ?? '');
+    const stored = backend.events.find((e) => e.id === sent.id)!;
+    const savedAt = stored.updated_at ? new Date(String(stored.updated_at)).getTime() : NaN;
+    if (sent.base_updated_at && !isNaN(savedAt) && new Date(String(sent.base_updated_at)).getTime() !== savedAt) {
+      return route.fulfill({ status: 409, json: { error: 'Someone else changed this event while you were editing it, so your changes were not saved yet.', event: stored } });
+    }
+    saves.push(sent);
+    const { id: _id, base_updated_at: _base, keep_poster: _keep, ...fields } = sent;
+    Object.assign(stored, fields, { updated_at: new Date().toISOString() });
+    return route.fulfill({ json: { event: stored, changed: true, exceptionsCleared: false } });
+  });
+  return saves;
+};

@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { mockSupabase, signIn, watchCsp, expectAccessible, eventRow, daysFromNow, SUPABASE } from './support';
+import { mockSupabase, mockEditEvent, signIn, watchCsp, expectAccessible, eventRow, daysFromNow } from './support';
 
 const ID = '10000000-0000-0000-0000-000000000001';
 
-test('an admin opens an event, adds it to a calendar, edits it and deletes it', async ({ page }) => {
+test('an admin opens an event, adds it to a calendar, edits it in the event form and deletes it', async ({ page }) => {
   const assertNoCsp = await watchCsp(page);
   const backend = await mockSupabase(page, {
     events: [eventRow({ id: ID, title: 'Enterprise breakfast', date: daysFromNow(1), end_date: daysFromNow(1, 11), location: 'Heron House', description: 'Meet employers. Details at https://example.ie' })]
   });
+  const saves = await mockEditEvent(page, backend);
   await signIn(page);
   await page.getByText('Enterprise breakfast').first().click();
 
@@ -21,13 +22,15 @@ test('an admin opens an event, adds it to a calendar, edits it and deletes it', 
   await expect(dialog.getByRole('link', { name: 'Office 365' })).toHaveAttribute('href', /outlook\.office\.com/);
   await page.keyboard.press('Escape');
 
+  // The same form staff use, with the status
   await dialog.getByRole('button', { name: /Edit event/ }).click();
-  const form = page.getByRole('dialog', { name: 'Edit Event' });
-  const title = form.getByPlaceholder(/Enterprise Network Breakfast/);
-  await title.fill('Enterprise breakfast (moved)');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(page.getByText('Event updated successfully')).toBeVisible();
-  expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({ title: 'Enterprise breakfast (moved)', location: 'Heron House' });
+  await expect(page.getByRole('heading', { name: 'Edit event' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Published' })).toBeChecked();
+  await expectAccessible(page);
+  await page.getByLabel('Event name').fill('Enterprise breakfast (moved)');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.getByText('Event updated')).toBeVisible();
+  expect(saves[0]).toMatchObject({ id: ID, title: 'Enterprise breakfast (moved)', location: 'Heron House', status: 'published' });
 
   await page.getByText('Enterprise breakfast (moved)').first().click();
   await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: 'Delete' }).click();
@@ -39,59 +42,60 @@ test('an admin opens an event, adds it to a calendar, edits it and deletes it', 
   await assertNoCsp();
 });
 
-test('the edit form checks fields, asks before dropping changes and saves repeats and contacts', async ({ page }) => {
+test('the event form checks fields, asks before dropping changes and saves status, repeats and contacts', async ({ page }) => {
   const backend = await mockSupabase(page, {
-    events: [eventRow({ id: ID, title: 'Coding club', date: daysFromNow(2, 16), end_date: daysFromNow(2, 17), location: 'Heron House', description: 'Learn to code', category: 'Education & Training' })]
+    events: [eventRow({
+      id: ID, title: 'Coding club', date: daysFromNow(2, 16), end_date: daysFromNow(2, 17), location: 'Heron House', description: 'Learn to code',
+      category: 'Education & Training', submitter_name: 'Sam Staff', submitter_email: 'sam@partnershipcork.ie'
+    })]
   });
+  const saves = await mockEditEvent(page, backend);
   await signIn(page);
   await page.getByText('Coding club').first().click();
-  const details = page.getByRole('dialog', { name: 'Event Details' });
-  await expect(details.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Event Details' }).getByRole('heading', { name: 'Coding club' })).toBeVisible();
 
   // "E" opens the form from the details
   await page.keyboard.press('e');
-  const form = page.getByRole('dialog', { name: 'Edit Event' });
-  const title = form.getByPlaceholder(/Enterprise Network Breakfast/);
+  const title = page.getByLabel('Event name');
   await expect(title).toHaveValue('Coding club');
-  await expect(form.getByPlaceholder(/Heron House, Room 4/)).toHaveValue('Heron House');
+  await expect(page.locator('#field-location')).toHaveValue('Heron House');
+  await expect(page.getByRole('radio', { name: 'Education & Training' })).toBeChecked();
 
-  // Cancel with unsaved changes asks first: "no" keeps them, "yes" goes back to the saved details
+  // Leaving with unsaved changes asks first: "no" keeps them, "yes" goes back to the calendar
   await title.fill('Coding club!');
   page.once('dialog', (d) => void d.dismiss());
-  await form.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Back to calendar' }).click();
   await expect(title).toHaveValue('Coding club!');
   page.once('dialog', (d) => void d.accept());
-  await form.getByRole('button', { name: 'Cancel' }).click();
-  await expect(details.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to calendar' }).click();
+  await expect(page.getByRole('heading', { name: 'Edit event' })).toHaveCount(0);
 
   // A blank description is caught before anything is sent
-  await details.getByRole('button', { name: /Edit event/ }).click();
+  await page.getByText('Coding club').first().click();
+  await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: /Edit event/ }).click();
   await expect(title).toHaveValue('Coding club');
-  const description = form.getByPlaceholder(/A few lines explaining/);
+  const description = page.getByLabel('Short description');
   await description.fill('   ');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(form.getByText('Please provide a description.')).toBeVisible();
-  await expect(form.getByText('Please fix the errors below.')).toBeVisible();
-  expect(backend.writes).toHaveLength(0);
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.locator('#err-description')).toHaveText('Add a sentence or two about the event.');
+  expect(saves).toHaveLength(0);
   await description.fill('Learn to code with us');
-  await expect(form.getByText('Please provide a description.')).toBeHidden();
+  await expect(page.locator('#err-description')).toHaveCount(0);
 
-  // Weekly, every second week, with contact details
-  await form.locator('select:has(option[value="weekly"])').selectOption('weekly');
-  await form.locator('input[type="number"]').fill('2');
-  await form.getByPlaceholder('e.g. Sarah Murphy').fill('Sam Staff');
-  await form.getByPlaceholder('e.g. sarah@corkcitypartnership.ie').fill('sam@partnershipcork.ie');
-  await form.getByRole('button', { name: 'Add contact person' }).click();
-  await form.getByLabel('Contact 2 Name').fill('Ann Partner');
-  await form.getByLabel('Contact 2 Email').fill('ann@partnershipcork.ie');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(page.getByText('Event updated successfully')).toBeVisible();
-  expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({
+  // Back to draft, every second week, and a second contact
+  await page.getByText('Draft', { exact: true }).click();
+  await page.getByText('Every 2 weeks', { exact: true }).click();
+  await page.getByRole('button', { name: 'Add another contact person' }).click();
+  await page.locator('#field-contact-0-name').fill('Ann Partner');
+  await page.locator('#field-contact-0-email').fill('ann@partnershipcork.ie');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.getByText('Event updated')).toBeVisible();
+  expect(saves[0]).toMatchObject({
     title: 'Coding club',
     description: 'Learn to code with us',
     location: 'Heron House',
     category: 'Education & Training',
-    status: 'published',
+    status: 'draft',
     recurrence_type: 'weekly',
     recurrence_interval: 2,
     submitter_name: 'Sam Staff',
@@ -100,57 +104,73 @@ test('the edit form checks fields, asks before dropping changes and saves repeat
   });
 });
 
-test('a save that fails reopens the form with the changes kept', async ({ page }) => {
+test('a save that fails keeps the changes in the form', async ({ page }) => {
   const backend = await mockSupabase(page, {
-    events: [eventRow({ id: ID, title: 'Job fair', date: daysFromNow(3), end_date: daysFromNow(3, 12), location: 'City Hall', description: 'Meet employers' })]
+    events: [eventRow({ id: ID, title: 'Job fair', date: daysFromNow(3), end_date: daysFromNow(3, 12), location: 'City Hall', description: 'Meet employers', submitter_name: 'Sam', submitter_email: 'sam@partnershipcork.ie' })]
   });
-  // The first save is refused by the server
-  let refused = false;
-  await page.route(`${SUPABASE}/rest/v1/events**`, (route) => {
-    if (route.request().method() === 'PATCH' && !refused) {
-      refused = true;
-      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"boom"}' });
-    }
-    return route.fallback();
-  });
+  const saves = await mockEditEvent(page, backend, { failFirst: true });
   await signIn(page);
   await page.getByText('Job fair').first().click();
   await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: /Edit event/ }).click();
-  const form = page.getByRole('dialog', { name: 'Edit Event' });
-  await form.getByPlaceholder(/Enterprise Network Breakfast/).fill('Spring job fair');
-  await form.getByPlaceholder(/A few lines explaining/).fill('Meet twenty employers');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
+  await page.getByLabel('Event name').fill('Spring job fair');
+  await page.getByLabel('Short description').fill('Meet twenty employers');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
 
-  await expect(page.getByText(/Failed to update event/)).toBeVisible();
-  await expect(form.getByPlaceholder(/Enterprise Network Breakfast/)).toHaveValue('Spring job fair');
-  await expect(form.getByPlaceholder(/A few lines explaining/)).toHaveValue('Meet twenty employers');
-  expect(backend.writes).toHaveLength(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'Your changes could not be saved' })).toBeVisible();
+  await expect(page.getByLabel('Event name')).toHaveValue('Spring job fair');
+  await expect(page.getByLabel('Short description')).toHaveValue('Meet twenty employers');
+  expect(saves).toHaveLength(0);
 
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(page.getByText('Event updated successfully')).toBeVisible();
-  expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({ title: 'Spring job fair', description: 'Meet twenty employers' });
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.getByText('Event updated')).toBeVisible();
+  expect(saves[0]).toMatchObject({ title: 'Spring job fair', description: 'Meet twenty employers' });
 });
 
-test('saving after someone else changed the event says so instead of overwriting them', async ({ page }) => {
+test('saving after someone else changed the event says so; saving again replaces their version', async ({ page }) => {
   const backend = await mockSupabase(page, {
-    events: [eventRow({ id: ID, title: 'Job fair', date: daysFromNow(3), end_date: daysFromNow(3, 12), location: 'City Hall', description: 'Meet employers', updated_at: '2026-10-01T08:00:00.000001+00:00' })]
+    events: [eventRow({
+      id: ID, title: 'Job fair', date: daysFromNow(3), end_date: daysFromNow(3, 12), location: 'City Hall', description: 'Meet employers',
+      submitter_name: 'Sam', submitter_email: 'sam@partnershipcork.ie', updated_at: '2026-10-01T08:00:00.000001+00:00'
+    })]
   });
+  const saves = await mockEditEvent(page, backend);
   await signIn(page);
   await page.getByText('Job fair').first().click();
   await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: /Edit event/ }).click();
-  const form = page.getByRole('dialog', { name: 'Edit Event' });
 
   // Meanwhile another admin moves it
   Object.assign(backend.events[0], { location: 'Heron House', updated_at: '2026-10-01T09:30:00.000001+00:00' });
-  await form.getByPlaceholder(/Enterprise Network Breakfast/).fill('Spring job fair');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
+  await page.getByLabel('Event name').fill('Spring job fair');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
 
-  await expect(page.getByText(/Someone else changed this event while you were editing it/)).toBeVisible();
-  expect(backend.writes).toHaveLength(0);
-  await expect(form.getByPlaceholder(/Enterprise Network Breakfast/)).toHaveValue('Spring job fair');
+  await expect(page.getByRole('alert').filter({ hasText: /Someone else changed this event.*Save again to replace their version/ })).toBeVisible();
+  expect(saves).toHaveLength(0);
+  await expect(page.getByLabel('Event name')).toHaveValue('Spring job fair');
 
-  // Saving again replaces their version, knowingly
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(page.getByText('Event updated successfully')).toBeVisible();
-  expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({ title: 'Spring job fair', location: 'City Hall' });
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.getByText('Event updated')).toBeVisible();
+  expect(saves[0]).toMatchObject({ title: 'Spring job fair', location: 'City Hall', base_updated_at: '2026-10-01T09:30:00.000Z' });
+});
+
+test('editing a submission from the inbox opens the event form set to publish it', async ({ page }) => {
+  const backend = await mockSupabase(page, {
+    events: [eventRow({
+      id: ID, title: 'Coffee morning', date: daysFromNow(2), status: 'draft', creator_id: null,
+      submitter_name: 'Yvonne', submitter_email: 'yvonne@partnershipcork.ie', tags: ['staff-submission']
+    })]
+  });
+  const saves = await mockEditEvent(page, backend);
+  await signIn(page);
+  await page.getByText('1 submission is waiting for review').click();
+  await page.getByRole('dialog', { name: 'Submissions inbox' }).getByRole('button', { name: 'Edit' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Edit event' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Published' })).toBeChecked();
+  await expect(page.getByText('Saving publishes this submission')).toBeVisible();
+  // The contact stays the person who sent it in (not the admin)
+  await expect(page.getByLabel('Full name')).toHaveValue('Yvonne');
+  await page.getByLabel('Event name').fill('Coffee morning for parents');
+  await page.getByRole('button', { name: 'Save & publish' }).last().click();
+  await expect(page.getByText('"Coffee morning for parents" is saved and published')).toBeVisible();
+  expect(saves[0]).toMatchObject({ title: 'Coffee morning for parents', status: 'published', submitter_email: 'yvonne@partnershipcork.ie' });
 });

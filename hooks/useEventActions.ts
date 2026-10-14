@@ -1,13 +1,13 @@
 import { useCallback } from 'react';
 import type React from 'react';
 import { type Event, type User } from '../types';
-import { updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, EditConflictError } from '../services/eventService';
+import { deleteEvent, deleteRecurrenceInstance, saveCustomSchedule } from '../services/eventService';
 import { cacheExceptions } from '../utils/eventsCache';
 import { isSameDay } from '../utils/date';
 import { isRecurringEvent } from '../utils/recurrence';
 import { materializeCustomSchedule } from '../utils/multiDateUtils';
 import type { ToastType } from '../contexts/ToastContext';
-import type { EventInput, EventModalControls } from './useEventModal';
+import type { EventModalControls } from './useEventModal';
 
 export type ShowToast = (message: string, type?: ToastType, duration?: number) => void;
 
@@ -17,21 +17,13 @@ interface EventActionsOptions {
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   recurrenceExceptions: Map<string, Date[]>;
   setRecurrenceExceptions: React.Dispatch<React.SetStateAction<Map<string, Date[]>>>;
-  syncAfterChange: () => void;
   showToast: ShowToast;
   modal: EventModalControls;
 }
 
-/** Flags an error as already reported to the user (EventModal won't show it again) */
-const markHandled = (e: unknown): Error => {
-  const err = e instanceof Error ? e : new Error(String(e));
-  (err as Error & { handled?: boolean }).handled = true;
-  return err;
-};
-
 /**
- * Saving and deleting events from the event window. Each change shows at once and is undone
- * if the server refuses it; a failed save reopens the form with the changes kept.
+ * Deleting events and single dates from the event window (changes are saved from the event
+ * form). Each deletion shows at once and is undone if the server refuses it.
  */
 export const useEventActions = ({
   user,
@@ -39,11 +31,10 @@ export const useEventActions = ({
   setEvents,
   recurrenceExceptions,
   setRecurrenceExceptions,
-  syncAfterChange,
   showToast,
   modal
 }: EventActionsOptions) => {
-  const { event: selectedEvent, autoApprove: modalAutoApprove, close: closeModal, openToEdit, replaceEvent } = modal;
+  const { event: selectedEvent, close: closeModal } = modal;
 
   /** Forgets the deleted days of an event (it was deleted, or its dates were saved in full) */
   const forgetExceptions = useCallback((id: string) => {
@@ -54,67 +45,6 @@ export const useEventActions = ({
       return next;
     });
   }, [setRecurrenceExceptions]);
-
-  const handleUpdateEvent = useCallback(async (id: string, eventData: EventInput) => {
-    if (!user) return;
-
-    const originalEvent = events.find(e => e.id === id) || (selectedEvent?.id === id ? selectedEvent : null);
-    if (!originalEvent) {
-      throw new Error('Event not found');
-    }
-
-    const isDraftBeingPublished = (originalEvent.status === 'draft' || modalAutoApprove) && eventData.status === 'published';
-    // The version the form was opened with (the list may already hold a newer one from realtime)
-    const baseUpdatedAt = (selectedEvent?.id === id ? selectedEvent.updatedAt : undefined) ?? originalEvent.updatedAt;
-
-    // Optimistic update: update event immediately
-    const optimisticEvent: Event = {
-      ...originalEvent,
-      ...eventData,
-      id: id,
-      creatorId: originalEvent.creatorId,
-      createdAt: originalEvent.createdAt
-    };
-    setEvents((prev) => (prev.some(e => e.id === id) ? prev.map((e) => (e.id === id ? optimisticEvent : e)) : [...prev, optimisticEvent]));
-    replaceEvent(id, optimisticEvent);
-
-    // Close modal immediately for better UX
-    closeModal();
-
-    // Sync with server in background
-    try {
-      const serverEvent = await updateEvent(id, eventData, user.id, user.fullName, baseUpdatedAt);
-      // Hand-picked dates: the form already left out deleted days, so the saved list is complete
-      if (originalEvent.recurrence?.type === 'custom' && recurrenceExceptions.get(id)?.length) {
-        await clearRecurrenceExceptions(id);
-        forgetExceptions(id);
-      }
-      setEvents((prev) => (prev.some(e => e.id === id) ? prev.map((e) => (e.id === id ? serverEvent : e)) : [...prev, serverEvent]));
-      syncAfterChange();
-
-      if (isDraftBeingPublished) {
-        showToast(`Event "${serverEvent.title}" updated and approved!`, 'success');
-      } else {
-        showToast('Event updated successfully', 'success');
-      }
-    } catch (e) {
-      if (e instanceof EditConflictError) {
-        // Their version goes on the calendar; the form reopens on it with these changes, so saving
-        // again replaces theirs knowingly and closing keeps theirs
-        setEvents((prev) => prev.map((ev) => (ev.id === id ? e.current : ev)));
-        showToast('Someone else changed this event while you were editing it. Your changes are still in the form: save again to replace their version, or close the form to keep theirs.', 'warning', 12000);
-        openToEdit(e.current, { autoApprove: modalAutoApprove, draft: eventData });
-        throw markHandled(e);
-      }
-      console.error("Error updating event", e);
-      // Rollback optimistic update on error
-      setEvents((prev) => prev.map((ev) => (ev.id === id ? originalEvent : ev)));
-      showToast('Failed to update event — your changes have been kept, please try again', 'error');
-      // Reopen the form with the unsaved changes
-      openToEdit(originalEvent, { autoApprove: modalAutoApprove, draft: eventData });
-      throw markHandled(e);
-    }
-  }, [user, showToast, events, setEvents, selectedEvent, modalAutoApprove, closeModal, openToEdit, replaceEvent, syncAfterChange, recurrenceExceptions, forgetExceptions]);
 
   const handleDeleteInstance = useCallback(async (eventId: string, instanceDate: Date) => {
     if (!user) return;
@@ -213,5 +143,5 @@ export const useEventActions = ({
     }
   }, [user, events, setEvents, selectedEvent, closeModal, forgetExceptions, showToast]);
 
-  return { handleUpdateEvent, handleDeleteInstance, handleDeleteEvent };
+  return { handleDeleteInstance, handleDeleteEvent, forgetExceptions };
 };

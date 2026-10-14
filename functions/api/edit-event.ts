@@ -1,18 +1,19 @@
 /**
- * Cloudflare Pages Function — staff change an event of their own
+ * Cloudflare Pages Function — saving changes to an event (the event form's edit mode)
  * URL: POST /api/edit-event   multipart: event (JSON), poster (image, optional)
  *
  * `event` holds the /submit form's fields (checked the same way, server/submission.ts) plus:
  *   id               the event
  *   base_updated_at  when the version the form was opened with was saved
  *   keep_poster      true: keep the stored flyer (when no new one is sent); false removes it
+ *   status           admins only: 'draft' or 'published'
  *
- * Signed-in staff may change their own events (utils/eventOwnership.ts): the ones they sent in
- * while signed in, or that name their email as the first contact. Admins may too. Status,
- * creator, tags and attachments stay as they are, so a pending event stays pending and a
- * published one stays published. What changed is written to the event's history under the
- * editor's name: admins see it in the change log. If someone saved the event after the form was
- * opened, nothing is written (409) and their version is returned.
+ * Admins may change any event. Signed-in staff may change their own (utils/eventOwnership.ts):
+ * the ones they sent in while signed in, or that name their email as the first contact; for
+ * them the status stays as it is, so a pending event stays pending and a published one stays
+ * published. Creator, tags and attachments are never changed here. What changed is written to
+ * the event's history under the editor's name: admins see it in the change log. If someone saved
+ * the event after the form was opened, nothing is written (409) and their version is returned.
  *
  * Needs SUPABASE_SERVICE_ROLE_KEY, and the R2 binding BUCKET for a new flyer.
  */
@@ -42,7 +43,7 @@ type StoredEvent = ChangeSource & {
   updated_at: string | null;
 };
 
-const CONFLICT = 'Someone else changed this event while you were editing it. Your changes were not saved: go back to the calendar and open the event again to see the latest version.';
+const CONFLICT = 'Someone else changed this event while you were editing it, so your changes were not saved yet.';
 
 // Typed by hand (not PagesFunction) so the app's type check and tests can import it
 export const onRequestPost = async (context: Context): Promise<Response> => {
@@ -57,7 +58,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (!caller) return fail('Your session has expired. Please sign in again.', 401);
 
   let form: FormData;
-  let input: SubmissionInput & { id?: unknown; base_updated_at?: unknown; keep_poster?: unknown };
+  let input: SubmissionInput & { id?: unknown; base_updated_at?: unknown; keep_poster?: unknown; status?: unknown };
   try {
     form = await request.formData();
     input = JSON.parse(String(form.get('event') ?? ''));
@@ -78,7 +79,8 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     return fail('You can only change events you sent in. Please email the calendar’s admins about this one.', 403);
   }
 
-  const checked = checkSubmission(input);
+  // An event saved without a contact (older ones admins made) may stay without one
+  const checked = checkSubmission(input, { contactOptional: !stored.submitter_name?.trim() && !stored.submitter_email?.trim() });
   if ('error' in checked) return fail(checked.error, 400);
 
   // Saved since the form was opened (by an admin, or in another tab)
@@ -99,7 +101,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     if (key && env.BUCKET) await env.BUCKET.delete(key).catch(() => undefined);
   };
 
-  const update = { ...checked.row, poster_url: posterUrl };
+  // Only admins publish or unpublish
+  const status = caller.role === 'admin' && (input.status === 'draft' || input.status === 'published') ? { status: input.status } : {};
+  const update = { ...checked.row, ...status, poster_url: posterUrl };
   const changes = describeChanges(stored, { ...stored, ...update });
   if (Object.keys(changes).length === 0) return json({ event: stored, changed: false, exceptionsCleared: false });
 

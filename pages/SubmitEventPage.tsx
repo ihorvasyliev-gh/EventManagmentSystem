@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { MapPin, AlertCircle } from 'lucide-react';
-import { submitEvent, saveOwnEvent, getPublishedEventsForSubmitters, type SubmissionData } from '../services/submissionService';
-import { type User as AuthUser, UserRole, type Event } from '../types';
+import { MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { submitEvent, saveEventChanges, getPublishedEventsForSubmitters, type SubmissionData } from '../services/submissionService';
+import { type User as AuthUser, UserRole, type Event, type EventStatus } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import SessionPlaces from '../components/SessionPlaces';
 import {
@@ -21,6 +21,7 @@ import SubmitPreview from '../components/submit/SubmitPreview';
 import { SubmitTopBar, SubmitIntro, RestoredDraftNotice } from '../components/submit/SubmitIntro';
 import { Section, FieldError, inputClass } from '../components/submit/formParts';
 import CategoryPicker from '../components/submit/CategoryPicker';
+import StatusPicker from '../components/submit/StatusPicker';
 import RepeatPicker from '../components/submit/RepeatPicker';
 import { type RepeatSetting, NO_REPEAT, describeSeries, repeatFromRule, ruleFromRepeat, untilDate } from '../utils/repeat';
 import { ApiError } from '../services/apiClient';
@@ -54,12 +55,15 @@ interface SubmitEventPageProps {
   /** Admins: an event to copy ("Duplicate"): its details are filled in, the dates are left to pick */
   template?: Event | null;
   /**
-   * Staff changing an event of their own (the series as stored): the form opens with all its
-   * details and saves through /api/edit-event, which logs what changed
+   * An event being changed (the series as stored), by an admin or by the staff member it belongs
+   * to: the form opens with all its details and saves through /api/edit-event, which logs what
+   * changed. Admins also set its status.
    */
   editing?: Event | null;
   /** Days deleted from that series earlier ("Delete only this occurrence"): left out of the dates */
   editingExceptions?: Date[];
+  /** Admins editing a submission from the inbox: the status starts at Published */
+  publishOnSave?: boolean;
   /** After the changes to `editing` are saved */
   onSaved?: (result: { event: Event; changed: boolean; exceptionsCleared: boolean }) => void;
 }
@@ -75,7 +79,7 @@ const fmtChipDate = (d: Date) => formatOccurrenceLabel(d);
 
 /** The event form for staff (sent for review) and admins (published straight away) */
 const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
-  onBackToLogin, currentUser, events = [], initialDate, template, editing, editingExceptions, onSaved
+  onBackToLogin, currentUser, events = [], initialDate, template, editing, editingExceptions, publishOnSave, onSaved
 }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
@@ -123,8 +127,17 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   const { dates: selectedDates, shared: sharedTimes, sameTime: sameTimeForAll, perDate: perDateTimes, samePlace, location, places } = schedule;
   const setLocation = (value: string) => updateSchedule({ location: value });
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
-  const [submitterName, setSubmitterName] = useState(() => (source && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
-  const [submitterEmail, setSubmitterEmail] = useState(() => (source && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
+  // An event being changed keeps its own contact (an admin isn't filled in instead)
+  const [submitterName, setSubmitterName] = useState(() =>
+    editing ? editing.submitterName ?? '' : (source && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
+  const [submitterEmail, setSubmitterEmail] = useState(() =>
+    editing ? editing.submitterEmail ?? '' : (source && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
+  // Admins editing: published or a draft (staff can't change it)
+  const [status, setStatus] = useState<EventStatus>(() => (publishOnSave ? 'published' : editing?.status ?? 'published'));
+  const setsStatus = isAdmin && !!editing;
+  const publishesDraft = setsStatus && editing?.status === 'draft' && status === 'published';
+  // The saved version the changes are made to; after a clash, the other person's (saving again replaces it)
+  const [baseUpdatedAt, setBaseUpdatedAt] = useState(editing?.updatedAt);
   // More contact people (the person sending it in is the first)
   const [extraContacts, setExtraContacts] = useState<ContactRow[]>(() => toContactRows(restoredDraft?.extraContacts));
   const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft && !source);
@@ -218,7 +231,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   // Changing an event: leaving with unsaved changes asks first (the poster is compared on its own:
   // it is filled in just after the first render)
   const formSnapshot = JSON.stringify([
-    title, category, description, scheduleControls.snapshot, activeRepeat, submitterName, submitterEmail, fromContactRows(extraContacts)
+    title, category, status, description, scheduleControls.snapshot, activeRepeat, submitterName, submitterEmail, fromContactRows(extraContacts)
   ]);
   const [baseline] = useState(formSnapshot);
   const hasChanges = () => formSnapshot !== baseline || !!posterFile || (posterPreview ?? null) !== templatePosterUrl;
@@ -283,8 +296,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     }
     if (!description.trim()) next.description = 'Add a sentence or two about the event.';
     else if (description.trim().length > DESCRIPTION_MAX) next.description = `Please shorten the description to ${DESCRIPTION_MAX} characters.`;
-    if (!submitterName.trim()) next.name = 'Please enter your name.';
-    if (!EMAIL_RE.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
+    // An event saved without a contact (older ones admins made) may stay without one
+    const keepsNoContact = !!editing && !editing.submitterName?.trim() && !editing.submitterEmail?.trim() &&
+      !submitterName.trim() && !submitterEmail.trim();
+    if (!keepsNoContact) {
+      if (!submitterName.trim()) next.name = editing ? 'Please enter the contact’s name.' : 'Please enter your name.';
+      if (!EMAIL_RE.test(submitterEmail.trim())) next.email = 'Please enter a valid email address.';
+    }
     // A row left blank is dropped; a started one needs both
     extraContacts.forEach((row, i) => {
       if (!row.name.trim() && !row.email.trim()) return;
@@ -314,7 +332,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       return;
     }
 
-    // Admins publish and staff save changes to their event without the review screen
+    // Admins publish, and changes to an event are saved, without the review screen
     if (isAdmin || editing) {
       void sendEvent();
       return;
@@ -389,9 +407,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     setIsSubmitting(true);
     try {
       if (editing) {
-        const result = await saveOwnEvent(editing.id, data, {
-          baseUpdatedAt: editing.updatedAt,
-          keepPoster: !!posterPreview && posterPreview === templatePosterUrl
+        const result = await saveEventChanges(editing.id, data, {
+          baseUpdatedAt,
+          keepPoster: !!posterPreview && posterPreview === templatePosterUrl,
+          status: setsStatus ? status : undefined
         });
         onSaved?.(result);
         return;
@@ -415,10 +434,14 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       if (needsHumanCheck) turnstileRef.current?.reset();
       const message = err instanceof Error && err.message ? err.message : '';
       if (editing) {
-        // Saved by someone else meanwhile: the server's message says what to do
-        setSubmitError(err instanceof ApiError && err.status === 409
-          ? message
-          : `Your changes could not be saved${message ? ` (${message})` : ''}. They are still in the form — please try again.`);
+        // Saved by someone else meanwhile: saving again knowingly replaces their version
+        const theirs = err instanceof ApiError && err.status === 409 ? (err.data.event as { updated_at?: string } | null) : null;
+        if (theirs?.updated_at) {
+          setBaseUpdatedAt(new Date(theirs.updated_at));
+          setSubmitError(`${message} Save again to replace their version with yours, or go back to the calendar to keep theirs.`);
+        } else {
+          setSubmitError(`Your changes could not be saved${message ? ` (${message})` : ''}. They are still in the form — please try again.`);
+        }
       } else {
         setSubmitError(
           message
@@ -514,6 +537,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
           <div className="min-w-0">
             <SubmitIntro isAdmin={isAdmin} editing={editing ? { published: editing.status === 'published' } : null} />
 
+            {publishesDraft && (
+              <div className="mb-5 flex items-center gap-3 p-3 sm:p-4 rounded-2xl bg-ccp-green-50 dark:bg-ccp-green-950/30 border border-ccp-green-200 dark:border-ccp-green-800/60 text-sm text-ccp-green-800 dark:text-ccp-green-200" role="status">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-ccp-green-600 dark:text-ccp-green-400" />
+                <span>Saving publishes this submission: it goes on the calendar and into the next digest.</span>
+              </div>
+            )}
+
             {showDraftNotice && (
               <RestoredDraftNotice onStartFresh={handleDiscardDraft} onDismiss={() => setShowDraftNotice(false)} />
             )}
@@ -540,6 +570,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
                 </div>
 
                 <CategoryPicker value={category} onChange={setCategory} extra={editing?.category} />
+
+                {setsStatus && <StatusPicker value={status} onChange={setStatus} />}
               </Section>
 
               {/* 2. When */}
@@ -705,10 +737,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
               <div className="hidden sm:flex items-center justify-between gap-4 pt-1">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   {editing
-                    ? (editing.status === 'published' ? 'Your changes go on the calendar straight away.' : 'It stays in the review queue, with your changes.')
+                    ? ((setsStatus ? status : editing.status) === 'published'
+                      ? 'Your changes go on the calendar straight away.'
+                      : 'It stays in the review queue, with your changes.')
                     : isAdmin ? 'Published to the calendar immediately.' : 'Sent to Elizabeth for review before it’s published.'}
                 </p>
-                <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={!!editing} />
+                <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} />
               </div>
             </form>
           </div>
@@ -730,7 +764,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
 
       {/* Phone: submit bar always within thumb reach */}
       <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={!!editing} full />
+        <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} full />
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockSupabase, signIn, eventRow, daysFromNow, expectAccessible } from './support';
+import { mockSupabase, mockEditEvent, signIn, eventRow, daysFromNow, expectAccessible } from './support';
 
 const LINK = '/api/file/digests/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events.pdf';
 // What is shared: the digest's page, which shows the PDF and downloads it
@@ -7,9 +7,10 @@ const PAGE = '/digest/0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events';
 
 test('an admin shares the digest as a link: copied, in the WhatsApp text and in the email, uploaded once', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await mockSupabase(page, {
+  const backend = await mockSupabase(page, {
     events: [eventRow({ id: '10000000-0000-0000-0000-000000000001', title: 'Coffee morning', date: daysFromNow(2), end_date: daysFromNow(2, 12) })]
   });
+  await mockEditEvent(page, backend);
   const uploads: Array<{ type: string | undefined; isPdf: boolean }> = [];
   await page.route('**/api/digest', async (route) => {
     const body = route.request().postDataBuffer()?.toString('latin1') ?? '';
@@ -56,10 +57,9 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
   // An event in the period changed: a new PDF, so a new link
   await page.getByText('Coffee morning').first().click();
   await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: /Edit event/ }).click();
-  const form = page.getByRole('dialog', { name: 'Edit Event' });
-  await form.getByPlaceholder(/Enterprise Network Breakfast/).fill('Coffee morning & chat');
-  await form.getByRole('button', { name: 'Save Changes' }).click();
-  await expect(page.getByText('Event updated successfully')).toBeVisible();
+  await page.getByLabel('Event name').fill('Coffee morning & chat');
+  await page.getByRole('button', { name: 'Save changes' }).last().click();
+  await expect(page.getByText('Event updated')).toBeVisible();
   await page.getByTitle('Generate the Upcoming Events Digest (PDF & WhatsApp)').first().click();
   await dialog.getByRole('button', { name: 'Copy link' }).click();
   await expect.poll(() => uploads.length).toBe(2);

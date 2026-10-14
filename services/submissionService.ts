@@ -68,22 +68,24 @@ export const submitEvent = async (data: SubmissionData): Promise<{ id: string; s
 };
 
 /**
- * Saves staff's changes to an event of their own (/api/edit-event, which logs what changed).
- * `baseUpdatedAt` is when the version the form opened was saved: if anyone saved it since,
- * nothing is written and an ApiError with status 409 says so. Without a new `posterFile`,
- * `keepPoster` keeps the stored flyer, or removes it when false.
+ * Saves changes to an event (/api/edit-event, which logs what changed): admins any event, staff
+ * their own. `baseUpdatedAt` is when the version the form opened was saved: if anyone saved it
+ * since, nothing is written and an ApiError with status 409 says so (its `data.event` is their
+ * version). Without a new `posterFile`, `keepPoster` keeps the stored flyer, or removes it when
+ * false. `status` is for admins (staff can't change it).
  */
-export const saveOwnEvent = async (
+export const saveEventChanges = async (
   id: string,
   data: SubmissionData,
-  options: { baseUpdatedAt?: Date; keepPoster: boolean }
+  options: { baseUpdatedAt?: Date; keepPoster: boolean; status?: Event['status'] }
 ): Promise<{ event: Event; changed: boolean; exceptionsCleared: boolean }> => {
   const form = new FormData();
   form.append('event', JSON.stringify({
     ...eventFields(data),
     id,
     base_updated_at: options.baseUpdatedAt ? options.baseUpdatedAt.toISOString() : null,
-    keep_poster: !data.posterFile && options.keepPoster
+    keep_poster: !data.posterFile && options.keepPoster,
+    ...(options.status ? { status: options.status } : {})
   }));
   if (data.posterFile) form.append('poster', data.posterFile, data.posterFile.name);
   const result = await callApi<{ event: EventRow; changed: boolean; exceptionsCleared: boolean }>('/api/edit-event', { method: 'POST', form });

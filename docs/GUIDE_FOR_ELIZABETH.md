@@ -124,7 +124,7 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 
 5. **Take Action:**
    * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest.
-   * **Edit (Pencil Icon):** Need to fix a typo, clarify the venue, or refine the time? Click **Edit** to modify the event details, then save.
+   * **Edit (Pencil Icon):** Need to fix a typo, clarify the venue, or refine the time? Click **Edit**: the submission opens in the event form (the same one staff use), with **Status** already set to **Published**. Make the changes and click **Save & publish**, or set **Status** back to **Draft** to save it without publishing.
    * **Decline (Trash Icon):** If a submission is a duplicate, spam or not suitable, click **Decline**, then **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
    * **Approve All:** If you have verified all entries at once, click **"Approve all"** in the top right of the modal.
 
@@ -220,12 +220,13 @@ You can simply approve the submission in the **Submissions Inbox**, then click *
 ### What if an event date or venue changes after publication?
 1. Open the main calendar view.
 2. Click on the event card.
-3. Click the **Edit (Pencil)** icon.
-4. Update the date, time, or location, and click **Save**.
-5. The live calendar and any newly generated digest will reflect the update instantly.
+3. Click **Edit event** (or press **E**). The event opens in the event form — the same form staff use, with one more field for you: **Status** (**Published** or **Draft**).
+4. Update the date, time, venue or anything else, and click **Save changes**. **Back to calendar** leaves without saving (it asks first if you changed something).
+5. The live calendar and any newly generated digest will reflect the update instantly. What you changed is listed in the event's **History** and in the **Change log**.
+6. If someone else saved the same event while you were editing it, the form says so and nothing is saved: click **Save changes** again to replace their version with yours, or go back to the calendar to keep theirs.
 
 ### An event has more than one contact person
-In the form, under **Contact person**, click **Add another contact person** and enter their name and email (up to five people in all). When editing an event, use **Add contact person** under **Contact Details**. Everyone listed appears as a contact on the event, in the digest PDF and in the WhatsApp text.
+In the form, under **Contact person**, click **Add another contact person** and enter their name and email (up to five people in all). The same button is there when you edit an event. Everyone listed appears as a contact on the event, in the digest PDF and in the WhatsApp text.
 
 ### A staff member changed their event — how do I see what changed?
 Staff who sign in can change the events they sent in (the ones they sent while signed in, or that list their email as the first contact). A published event stays published, so their changes are on the calendar straight away; a pending one stays in your inbox with the changes.
@@ -236,7 +237,7 @@ Every change is recorded. **Account menu** (your name, top right) → **Change l
 No. The **Submissions** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff only see published events on the public calendar.
 
 ### A staff member's event happens every week
-In the form, under the date picker, **Does it repeat?** offers **Every week**, **Every 2 weeks** and **Every month**, from the date they picked, with an optional **Last date** (empty: it carries on). The inbox shows it as, for example, *Every week on Thursday from Thu 15 Oct 2026, with no end date*. Approving it puts every date on the calendar and in each digest. To repeat in another way (every day, every 3 weeks, a set number of times), edit it and use **Recurrence** in the edit form.
+In the form, under the date picker, **Does it repeat?** offers **Every week**, **Every 2 weeks** and **Every month**, from the date they picked, with an optional **Last date** (empty: it carries on). The inbox shows it as, for example, *Every week on Thursday from Thu 15 Oct 2026, with no end date*. Approving it puts every date on the calendar and in each digest. An event that was set up earlier to repeat in another way (e.g. every day, or a set number of times) keeps that repeat when you edit it: it shows as its own choice beside the others.
 
 ### An event repeats with small changes — do I have to type it all again?
 No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact people and flyer. Pick the new date, change anything else that is different and click **Publish event**.

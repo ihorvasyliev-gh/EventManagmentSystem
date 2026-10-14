@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyEventChanges, touchesSeries, type EventChange } from '../utils/realtimeEvents.ts';
 import { computePeriodStats, statsSummaryText } from '../utils/eventStats.ts';
 import { fetchAllPages } from '../services/paging.ts';
-import { mapEventRow, eventToRow, type EventRow } from '../services/eventMapper.ts';
+import { mapEventRow, type EventRow } from '../services/eventMapper.ts';
 import type { Event } from '../types.ts';
 
 const row = (over: Partial<EventRow> = {}): EventRow => ({
@@ -17,13 +17,11 @@ test('older submissions with the submitter only in tags still show who sent them
   assert.equal(mapEventRow(row({ submitter_email: 'b@x.ie', tags: ['email:old@x.ie'] })).submitterEmail, 'b@x.ie');
 });
 
-test('more contact people are read from extra_contacts and saved back without blank entries', () => {
+test('more contact people are read from extra_contacts, without blank entries', () => {
   const ev = mapEventRow(row({ submitter_name: 'Ann', submitter_email: 'ann@x.ie', extra_contacts: [{ name: 'Bob', email: 'bob@x.ie' }, { name: ' ', email: '' }, 'junk'] }));
   assert.deepEqual(ev.extraContacts, [{ name: 'Bob', email: 'bob@x.ie' }]);
   assert.equal(mapEventRow(row({ extra_contacts: [] })).extraContacts, undefined);
   assert.equal(mapEventRow(row()).extraContacts, undefined);
-  assert.deepEqual(eventToRow({ ...ev, extraContacts: [{ name: ' Cat ', email: '' }, { name: '' }] }).extra_contacts, [{ name: 'Cat' }]);
-  assert.deepEqual(eventToRow({ ...ev, extraContacts: undefined }).extra_contacts, []);
 });
 
 test('realtime changes are applied in place: insert, update (keeping loaded files), delete', () => {

@@ -46,8 +46,9 @@ export interface SubmissionRow {
   recurrence_custom_dates: string[] | null;
   recurrence_custom_end_dates: string[] | null;
   recurrence_custom_locations: (string | null)[] | null;
-  submitter_name: string;
-  submitter_email: string;
+  /** Null only for an event saved without a contact that is still without one (see checkSubmission) */
+  submitter_name: string | null;
+  submitter_email: string | null;
   /** More contact people besides the submitter */
   extra_contacts: SubmissionContact[];
 }
@@ -115,7 +116,11 @@ const contactList = (value: unknown): SubmissionContact[] | string => {
 
 export type SubmissionCheck = { ok: true; row: SubmissionRow } | { ok: false; error: string };
 
-export const checkSubmission = (input: SubmissionInput): SubmissionCheck => {
+/**
+ * `contactOptional`: changes to an event saved without a contact (older events admins made) may
+ * leave it without one; a new event, or one that has a contact, always needs a name and email.
+ */
+export const checkSubmission = (input: SubmissionInput, { contactOptional = false } = {}): SubmissionCheck => {
   const title = text(input.title, LIMITS.title);
   if (!title) return { ok: false, error: `Please give the event a name (up to ${LIMITS.title} characters).` };
   const description = text(input.description, LIMITS.description);
@@ -132,9 +137,11 @@ export const checkSubmission = (input: SubmissionInput): SubmissionCheck => {
     : text(input.category, LIMITS.category);
   if (category === null && input.category) return { ok: false, error: 'The category is not valid.' };
   const name = text(input.submitter_name, LIMITS.name);
-  if (!name) return { ok: false, error: 'Please enter your name.' };
   const email = text(input.submitter_email, LIMITS.email)?.toLowerCase() ?? null;
-  if (!email || !EMAIL_RE.test(email)) return { ok: false, error: 'Please enter a valid email address.' };
+  const blank = (value: unknown) => typeof value !== 'string' || !value.trim();
+  const noContact = contactOptional && blank(input.submitter_name) && blank(input.submitter_email);
+  if (!name && !noContact) return { ok: false, error: 'Please enter your name.' };
+  if ((!email || !EMAIL_RE.test(email)) && !noContact) return { ok: false, error: 'Please enter a valid email address.' };
   const extraContacts = contactList(input.extra_contacts);
   if (typeof extraContacts === 'string') return { ok: false, error: extraContacts };
 

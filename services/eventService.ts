@@ -1,11 +1,8 @@
 import { type Event, type Attachment, type EventHistoryEntry, type RecurrenceRule } from '../types';
 import { supabase } from '../lib/supabase';
 import { fetchAllPages } from './paging';
-import { EVENT_COLUMNS, type EventRow, type AttachmentRow, type HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, eventToRow, toIsoList } from './eventMapper';
+import { EVENT_COLUMNS, type EventRow, type AttachmentRow, type HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, toIsoList } from './eventMapper';
 import { deleteStoredFiles } from './fileService';
-import { describeChanges } from '../utils/eventChanges';
-
-export { uploadPoster as uploadPosterToR2 } from './fileService';
 
 /** Every event the signed-in user may see (row-level security decides which), oldest first */
 export const getEvents = async (): Promise<Event[]> => {
@@ -55,92 +52,6 @@ export const getEventsWithRelated = async (events: Event[]): Promise<Event[]> =>
       posterUrl: event.posterUrl || attachments.find(att => att.type === 'image')?.url || undefined
     };
   });
-};
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Someone else saved the event after the form was opened; `current` is what is saved now */
-export class EditConflictError extends Error {
-  current: Event;
-  constructor(current: Event) {
-    super('Someone else changed this event while you were editing it.');
-    this.name = 'EditConflictError';
-    this.current = current;
-  }
-}
-
-/**
- * Saves an edited event. `baseUpdatedAt` is when the version the form was opened with was saved:
- * if the event has been saved since (another admin, another tab), nothing is written and
- * EditConflictError says so, instead of silently overwriting their changes.
- */
-export const updateEvent = async (
-  id: string,
-  eventData: Omit<Event, 'id' | 'createdAt'>,
-  userId: string,
-  userName: string,
-  baseUpdatedAt?: Date
-): Promise<Event> => {
-  if (!id || typeof id !== 'string' || !UUID_REGEX.test(id)) {
-    console.error('updateEvent: invalid or non-UUID id', { id });
-    throw new Error('Invalid event ID. Please close and reopen the event.');
-  }
-
-  // The saved event, to record what changed
-  const { data: oldEventData, error: fetchError } = await supabase
-    .from('events')
-    .select(EVENT_COLUMNS)
-    .eq('id', id)
-    .single<EventRow>();
-
-  if (fetchError || !oldEventData) {
-    throw new Error('Event not found');
-  }
-  const savedAt = oldEventData.updated_at ? new Date(oldEventData.updated_at).getTime() : null;
-  if (baseUpdatedAt && savedAt !== null && savedAt !== baseUpdatedAt.getTime()) {
-    throw new EditConflictError(mapEventRow(oldEventData));
-  }
-
-  const row = eventToRow(eventData);
-  const changes = describeChanges(oldEventData, row);
-
-  let update = supabase.from('events').update(row).eq('id', id);
-  // Only if nobody saved it between the check above and this write
-  if (oldEventData.updated_at) update = update.eq('updated_at', oldEventData.updated_at);
-  const { data: updatedEventData, error: updateError } = await update
-    .select(EVENT_COLUMNS)
-    .single<EventRow>();
-
-  // No row matched: it was saved in the meantime
-  if (updateError?.code === 'PGRST116' && oldEventData.updated_at) {
-    const { data: current } = await supabase.from('events').select(EVENT_COLUMNS).eq('id', id).single<EventRow>();
-    if (current) throw new EditConflictError(mapEventRow(current));
-  }
-  if (updateError || !updatedEventData) {
-    console.error('Error updating event:', updateError);
-    throw new Error(updateError?.message || 'Failed to update event');
-  }
-
-  const { error: historyError } = await supabase
-    .from('event_history')
-    .insert({
-      event_id: id,
-      user_id: userId,
-      user_name: userName,
-      action: 'updated',
-      changes: Object.keys(changes).length > 0 ? changes : null
-    });
-  if (historyError) {
-    // The event is saved; only its history line is missing
-    console.error('Error creating history entry:', historyError);
-  }
-
-  // A replaced or removed poster is no longer needed (kept if another event still uses it)
-  if (oldEventData.poster_url && oldEventData.poster_url !== updatedEventData.poster_url) {
-    void deleteStoredFiles([oldEventData.poster_url]);
-  }
-
-  return mapEventRow(updatedEventData);
 };
 
 /**

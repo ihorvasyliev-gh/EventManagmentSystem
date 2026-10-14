@@ -63,6 +63,17 @@ test('an event can repeat every week, 2 weeks or month from its date, until a la
   assert.equal(single.row.recurrence_end_date, null);
 });
 
+test('an event saved without a contact may be changed and stay without one; otherwise the contact is needed', () => {
+  const noContact = { ...valid, submitter_name: '', submitter_email: ' ' };
+  assert.equal(checkSubmission(noContact).ok, false);
+  const kept = checkSubmission(noContact, { contactOptional: true });
+  assert.ok(kept.ok);
+  assert.equal(kept.row.submitter_name, null);
+  assert.equal(kept.row.submitter_email, null);
+  // Half a contact is still checked
+  assert.equal(checkSubmission({ ...noContact, submitter_name: 'Ann' }, { contactOptional: true }).ok, false);
+});
+
 test('more contact people are checked like the submitter: a name and a valid email each, up to five in all', () => {
   const ok = checkSubmission({ ...valid, extra_contacts: [{ name: ' Ann ', email: 'Ann@X.ie' }] });
   assert.ok(ok.ok);

@@ -124,27 +124,3 @@ export const mapEventRow = (row: EventRow, attachments?: Attachment[]): Event =>
     updatedAt: row.updated_at ? new Date(row.updated_at) : undefined
   };
 };
-
-/** The editable columns of an event, for an update */
-export const eventToRow = (event: Omit<Event, 'id' | 'createdAt'>) => ({
-  title: event.title,
-  description: event.description || null,
-  date: event.date.toISOString(),
-  end_date: event.endDate ? event.endDate.toISOString() : null,
-  location: event.location || null,
-  poster_url: event.posterUrl || null,
-  status: event.status,
-  category: event.category || null,
-  tags: event.tags || [],
-  recurrence_type: event.recurrence?.type || 'none',
-  recurrence_interval: event.recurrence?.interval || null,
-  recurrence_end_date: event.recurrence?.endDate ? event.recurrence.endDate.toISOString() : null,
-  recurrence_occurrences: event.recurrence?.occurrences || null,
-  recurrence_days_of_week: event.recurrence?.daysOfWeek || null,
-  recurrence_custom_dates: toIsoList(event.recurrence?.customDates),
-  recurrence_custom_end_dates: toIsoList(event.recurrence?.customEndDates),
-  recurrence_custom_locations: event.recurrence?.customLocations ?? null,
-  submitter_name: event.submitterName || null,
-  submitter_email: event.submitterEmail || null,
-  extra_contacts: readContacts(event.extraContacts)
-});

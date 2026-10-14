@@ -1,12 +1,14 @@
 import { supabase } from '../lib/supabase';
 
-/** An error from one of the app's /api functions, with its HTTP status */
+/** An error from one of the app's /api functions, with its HTTP status and the rest of its answer */
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  data: Record<string, unknown>;
+  constructor(message: string, status: number, data: Record<string, unknown> = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -37,6 +39,6 @@ export const callApi = async <T>(path: string, { method = 'GET', body, form, aut
     throw new ApiError('Could not reach the server. Please check your connection and try again.', 0);
   }
   const payload = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new ApiError(payload.error || `The server could not do that (error ${res.status}).`, res.status);
+  if (!res.ok) throw new ApiError(payload.error || `The server could not do that (error ${res.status}).`, res.status, payload as Record<string, unknown>);
   return payload;
 };

@@ -122,7 +122,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (!publish) {
     const notify = adminEmails(env, cfg).then((to) => {
       const email = newSubmissionEmail(checked.row, appUrl(env, request));
-      return sendEmail(env, { to, ...email, replyTo: checked.row.submitter_email });
+      return sendEmail(env, { to, ...email, replyTo: checked.row.submitter_email ?? undefined });
     });
     // Called on the context (not destructured): the runtime needs it bound
     if (context.waitUntil) context.waitUntil(notify);

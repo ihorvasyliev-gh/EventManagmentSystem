@@ -32,8 +32,10 @@ export const setNewPassword = async (newPassword: string): Promise<void> => {
   }
   const { data, error } = await supabase.auth.updateUser({ password: newPassword });
   if (error || !data.user) throw new Error(passwordErrorMessage(error?.message));
+  // The database clears the flag itself when the password changes (migration 014), and since then
+  // refuses this update (42501): it is only for a database that hasn't run 014 yet
   const { error: flagError } = await supabase.from('users').update({ must_change_password: false }).eq('id', data.user.id);
-  if (flagError) console.error('Could not clear must_change_password:', flagError);
+  if (flagError && flagError.code !== '42501') console.error('Could not clear must_change_password:', flagError);
 };
 
 /** Changes the password after checking the current one (so an unattended open session can't) */

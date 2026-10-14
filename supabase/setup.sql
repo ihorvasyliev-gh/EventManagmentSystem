@@ -10,6 +10,8 @@
 --   * Nobody without an account can read or write anything. The public /submit form and the
 --     calendar feed go through the Cloudflare functions, which use the service-role key.
 --   * Staff (every new account) see published events and can submit drafts.
+--   * Nobody changes their row in users from the browser: accounts are managed by the
+--     Cloudflare functions (service role) and here in SQL.
 --   * Admins see everything, publish, edit and delete. A role is changed only here, in SQL:
 --       UPDATE public.users SET role = 'admin' WHERE email = 'name@partnershipcork.ie';
 -- ============================================
@@ -121,6 +123,15 @@ CREATE TABLE IF NOT EXISTS public.client_errors (
   UNIQUE (fingerprint, day)
 );
 
+-- Requests counted per network and time window (/api/submit's limit, via hit_rate_limit).
+-- Networks are stored only as a hash, and only for a day.
+CREATE TABLE IF NOT EXISTS public.rate_limits (
+  bucket TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket, window_start)
+);
+
 -- ============================================
 -- 2. Indexes
 -- ============================================
@@ -139,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_created_at ON public.event_categories(
 CREATE INDEX IF NOT EXISTS idx_recurrence_exceptions_event_id ON public.recurrence_exceptions(event_id);
 CREATE INDEX IF NOT EXISTS idx_recurrence_exceptions_date ON public.recurrence_exceptions(exception_date);
 CREATE INDEX IF NOT EXISTS idx_client_errors_day ON public.client_errors(day);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON public.rate_limits(window_start);
 
 -- ============================================
 -- 3. Functions and triggers
@@ -218,6 +230,24 @@ CREATE TRIGGER on_user_role_change
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.prevent_role_escalation();
 
+-- The forced password change (must_change_password) clears itself once the password really
+-- changes. An admin's reset changes it too: /api/staff-password sets the flag again after it.
+CREATE OR REPLACE FUNCTION public.clear_must_change_password()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE public.users SET must_change_password = false WHERE id = NEW.id AND must_change_password;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_password_changed ON auth.users;
+CREATE TRIGGER on_auth_password_changed
+  AFTER UPDATE OF encrypted_password ON auth.users
+  FOR EACH ROW
+  WHEN (NEW.encrypted_password IS DISTINCT FROM OLD.encrypted_password)
+  EXECUTE FUNCTION public.clear_must_change_password();
+
 -- Admin check used by the policies (reads users as the owner, so no policy recursion)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
@@ -253,6 +283,30 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.log_client_error(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.log_client_error(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
 
+-- Counts one request in the current window; true while the bucket is within p_max.
+-- Windows older than a day are dropped as it goes.
+CREATE OR REPLACE FUNCTION public.hit_rate_limit(p_bucket TEXT, p_window_seconds INTEGER, p_max INTEGER)
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_window TIMESTAMPTZ;
+  v_hits INTEGER;
+BEGIN
+  IF p_window_seconds IS NULL OR p_window_seconds < 1 OR p_window_seconds > 86400 OR p_max IS NULL THEN
+    RAISE EXCEPTION 'hit_rate_limit: the window must be 1 second to 1 day, with a limit';
+  END IF;
+  v_window := to_timestamp(floor(extract(epoch FROM now()) / p_window_seconds) * p_window_seconds);
+  DELETE FROM public.rate_limits WHERE window_start < now() - interval '1 day';
+  INSERT INTO public.rate_limits AS r (bucket, window_start, hits)
+  VALUES (left(p_bucket, 200), v_window, 1)
+  ON CONFLICT (bucket, window_start) DO UPDATE SET hits = r.hits + 1
+  RETURNING hits INTO v_hits;
+  RETURN v_hits <= p_max;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.hit_rate_limit(TEXT, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.hit_rate_limit(TEXT, INTEGER, INTEGER) TO service_role;
+
 -- ============================================
 -- 4. Row-level security
 -- ============================================
@@ -265,17 +319,17 @@ ALTER TABLE public.event_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.recurrence_exceptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.client_errors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
 
--- users: profiles are readable by signed-in users; each person updates their own row
--- (prevent_role_escalation keeps roles admin-only). Accounts are created by Supabase Auth.
+-- users: profiles are readable by signed-in users and changed only by the server: anyone
+-- editing their own row could clear must_change_password or take someone else's email.
+-- Accounts are created by Supabase Auth (handle_new_user).
 DROP POLICY IF EXISTS "Users are viewable by authenticated users" ON public.users;
 CREATE POLICY "Users are viewable by authenticated users"
   ON public.users FOR SELECT TO authenticated
   USING (true);
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
-CREATE POLICY "Users can update own profile"
-  ON public.users FOR UPDATE TO authenticated
-  USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+REVOKE INSERT, UPDATE, DELETE ON public.users FROM anon, authenticated;
 
 -- events: staff see published events and their own drafts and can only create drafts
 DROP POLICY IF EXISTS "Signed-in users see published events, admins see all" ON public.events;
@@ -344,6 +398,8 @@ DROP POLICY IF EXISTS "Admins delete categories" ON public.event_categories;
 CREATE POLICY "Admins delete categories"
   ON public.event_categories FOR DELETE TO authenticated
   USING (public.is_admin());
+
+REVOKE ALL ON public.rate_limits FROM anon, authenticated;
 
 REVOKE ALL ON public.client_errors FROM anon, authenticated;
 GRANT SELECT ON public.client_errors TO authenticated;

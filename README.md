@@ -18,7 +18,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 
 | | |
 |---|---|
-| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). An optional Cloudflare Turnstile check keeps bots out. |
+| 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). Each network can send up to 30 events in 15 minutes, and an optional Cloudflare Turnstile check keeps bots out. |
 | 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. A declined submission can carry a reason. Updates arrive in real time. |
 | ✉️ **Emails (optional)** | Admins hear about new submissions; submitters hear when their event is approved or declined (with the reason). |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
@@ -70,7 +70,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `013_extra_contacts.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `014_locked_profiles_and_submit_limit.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -137,7 +137,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 
 | Endpoint | Method | Who | Purpose |
 |---|---|---|---|
-| `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish) |
+| `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish). Up to 30 per network in 15 minutes (admins unlimited) |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
 | `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
 | `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
@@ -172,7 +172,8 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 │   ├── recurrence.ts        Expands recurring events
 │   └── export.ts            ICS and Excel export
 ├── functions/api/           Cloudflare Pages Functions (see API above)
-├── server/                  What the functions share: Supabase access, emails, files, feed, checks
+├── server/                  What the functions share: Supabase access, emails, files, feed, checks,
+│                            the /api/submit limit
 ├── supabase/                setup.sql (new projects) and migrations/ (existing ones)
 ├── public/                  Icons, Lato fonts, PWA manifest, service worker, _headers
 ├── tests/                   Unit tests (node --test)

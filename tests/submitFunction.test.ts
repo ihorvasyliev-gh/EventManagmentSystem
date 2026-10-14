@@ -14,7 +14,7 @@ const event = {
   submitter_email: 'sam@x.ie'
 };
 
-const send = (fields: { event?: unknown; poster?: File; token?: string; auth?: string }) => {
+const send = (fields: { event?: unknown; poster?: File; token?: string; auth?: string; ip?: string }) => {
   const form = new FormData();
   if (fields.event !== undefined) form.append('event', JSON.stringify(fields.event));
   if (fields.poster) form.append('poster', fields.poster);
@@ -22,12 +22,22 @@ const send = (fields: { event?: unknown; poster?: File; token?: string; auth?: s
   return new Request('https://app.test/api/submit', {
     method: 'POST',
     body: form,
-    headers: fields.auth ? { Authorization: `Bearer ${fields.auth}` } : {}
+    headers: {
+      ...(fields.auth ? { Authorization: `Bearer ${fields.auth}` } : {}),
+      ...(fields.ip ? { 'CF-Connecting-IP': fields.ip } : {})
+    }
   });
 };
 
+type Route = Parameters<typeof mockFetch>[0][number];
+
+/** hit_rate_limit answering whether the network is still within the limit */
+const limitRoute = (within: boolean): Route => ({ url, method }) =>
+  method === 'POST' && url.endsWith('/rest/v1/rpc/hit_rate_limit') ? json(within) : undefined;
+
 const dbRoutes = (inserted: unknown[]) => [
   ...authRoutes,
+  limitRoute(true),
   ({ url, method, body }: { url: string; method: string; body: string | null }) => {
     if (method === 'POST' && url.includes('/rest/v1/events')) {
       inserted.push(JSON.parse(body!));
@@ -102,6 +112,7 @@ test('an invalid submission is refused with the reason', async () => {
 test('when the event cannot be saved, the uploaded flyer is removed again', async () => {
   mockFetch([
     ...authRoutes,
+    limitRoute(true),
     ({ url, method }) => (method === 'POST' && url.includes('/rest/v1/events') ? json({ message: 'boom' }, 500) : undefined)
   ]);
   const bucket = fakeBucket();
@@ -136,4 +147,49 @@ test('more contact people are saved with the event; a database without them yet 
   assert.equal(old.status, 201);
   assert.equal(retried.length, 2);
   assert.ok(!('extra_contacts' in retried[1]));
+});
+
+test('a network that has sent too many events in a short time is asked to wait; nothing is read or saved', async () => {
+  const inserted: unknown[] = [];
+  const calls = mockFetch([limitRoute(false), ...dbRoutes(inserted)]);
+  const bucket = fakeBucket();
+  const poster = new File([new Uint8Array([1, 2, 3])], 'flyer.png', { type: 'image/png' });
+  const res = await onRequestPost({ request: send({ event, poster, ip: '203.0.113.7' }), env: { ...env, BUCKET: bucket } });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('Retry-After'), '900');
+  assert.match((await res.json()).error, /wait 15 minutes/);
+  assert.equal(inserted.length, 0);
+  assert.equal(bucket.stored.size, 0);
+
+  // Counted per network, and the address itself is never sent to the database
+  const hit = calls.find((c) => c.url.endsWith('/rpc/hit_rate_limit'));
+  const body = JSON.parse(hit!.body!);
+  assert.match(body.p_bucket, /^submit:[0-9a-f]{32}$/);
+  assert.ok(!hit!.body!.includes('203.0.113.7'));
+  assert.deepEqual([body.p_max, body.p_window_seconds], [30, 900]);
+});
+
+test('staff signed in are limited like everyone else; admins are not', async () => {
+  const staff = mockFetch([limitRoute(false), ...dbRoutes([])]);
+  const refused = await onRequestPost({ request: send({ event, auth: 'staff-token' }), env });
+  assert.equal(refused.status, 429);
+  assert.ok(staff.some((c) => c.url.endsWith('/rpc/hit_rate_limit')));
+
+  const inserted: unknown[] = [];
+  const admin = mockFetch([limitRoute(false), ...dbRoutes(inserted)]);
+  const res = await onRequestPost({ request: send({ event: { ...event, publish: true }, auth: 'admin-token' }), env });
+  assert.equal(res.status, 201);
+  assert.equal(inserted.length, 1);
+  assert.ok(!admin.some((c) => c.url.endsWith('/rpc/hit_rate_limit')));
+});
+
+test('a database without the limit yet (migration 014) still takes submissions', async () => {
+  const inserted: unknown[] = [];
+  mockFetch([
+    ({ url }) => (url.endsWith('/rpc/hit_rate_limit') ? json({ code: 'PGRST202', message: 'Could not find the function public.hit_rate_limit' }, 404) : undefined),
+    ...dbRoutes(inserted)
+  ]);
+  const res = await onRequestPost({ request: send({ event }), env });
+  assert.equal(res.status, 201);
+  assert.equal(inserted.length, 1);
 });

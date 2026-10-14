@@ -2,7 +2,6 @@ import React from 'react';
 import { Loader2, X } from 'lucide-react';
 
 interface AddCategoryDialogProps {
-  isDark: boolean;
   name: string;
   onNameChange: (name: string) => void;
   isCreating: boolean;
@@ -11,11 +10,11 @@ interface AddCategoryDialogProps {
 }
 
 /** Admins add a category that isn't in the standard list */
-const AddCategoryDialog: React.FC<AddCategoryDialogProps> = ({ isDark, name, onNameChange, isCreating, onAdd, onCancel }) => (
+const AddCategoryDialog: React.FC<AddCategoryDialogProps> = ({ name, onNameChange, isCreating, onAdd, onCancel }) => (
   <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={onCancel}>
-    <div role="dialog" aria-modal="true" aria-labelledby="add-category-title" className={`relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 ${isDark ? 'glass-panel-dark' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
+    <div role="dialog" aria-modal="true" aria-labelledby="add-category-title" className="relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 bg-white dark-glass" onClick={(e) => e.stopPropagation()}>
       <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-        <h3 id="add-category-title" className={`text-lg font-semibold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+        <h3 id="add-category-title" className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
           Add New Category
         </h3>
         <button onClick={onCancel} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">

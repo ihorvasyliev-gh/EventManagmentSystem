@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
-import { useTheme } from './ThemeContext';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 
 // Error toasts carry a contact line, so they stay up long enough to read it
@@ -62,9 +61,6 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void }> = ({ toasts, onRemove }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
   const getIcon = (type: ToastType) => {
     switch (type) {
       case 'success':
@@ -79,27 +75,15 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
   };
 
   const getStyles = (type: ToastType) => {
-    if (isDark) {
-      switch (type) {
-        case 'success':
-          return 'bg-ccp-green-900/90 border-ccp-green-700 text-ccp-green-100';
-        case 'error':
-          return 'bg-red-900/90 border-red-700 text-red-100';
-        case 'warning':
-          return 'bg-amber-900/90 border-amber-700 text-amber-100';
-        default:
-          return 'bg-blue-900/90 border-blue-700 text-blue-100';
-      }
-    }
     switch (type) {
       case 'success':
-        return 'bg-ccp-green-50 border-ccp-green-200 text-ccp-green-800';
+        return 'bg-ccp-green-50 border-ccp-green-200 text-ccp-green-800 dark:bg-ccp-green-900/90 dark:border-ccp-green-700 dark:text-ccp-green-100';
       case 'error':
-        return 'bg-red-50 border-red-200 text-red-800';
+        return 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/90 dark:border-red-700 dark:text-red-100';
       case 'warning':
-        return 'bg-amber-50 border-amber-200 text-amber-800';
+        return 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/90 dark:border-amber-700 dark:text-amber-100';
       default:
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+        return 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/90 dark:border-blue-700 dark:text-blue-100';
     }
   };
 

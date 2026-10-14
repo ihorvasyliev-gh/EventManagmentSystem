@@ -4,7 +4,6 @@ import type { Event } from '../../types';
 
 interface DeleteEventDialogProps {
   event: Event;
-  isDark: boolean;
   isDeleting: boolean;
   /** true: the whole event (series); false: only this occurrence */
   onConfirm: (deleteAll: boolean) => void;
@@ -12,11 +11,11 @@ interface DeleteEventDialogProps {
 }
 
 /** Asks before deleting; a repeating event offers "only this occurrence" or the whole series */
-const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDark, isDeleting, onConfirm, onCancel }) => (
+const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting, onConfirm, onCancel }) => (
   <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={() => !isDeleting && onCancel()}>
-    <div role="alertdialog" aria-modal="true" aria-labelledby="delete-event-title" className={`relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 ${isDark ? 'glass-panel-dark' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
+    <div role="alertdialog" aria-modal="true" aria-labelledby="delete-event-title" className="relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 bg-white dark-glass" onClick={(e) => e.stopPropagation()}>
       <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
-        <h3 id="delete-event-title" className={`text-lg font-semibold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+        <h3 id="delete-event-title" className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
           Delete Event
         </h3>
         <button onClick={() => !isDeleting && onCancel()} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none" disabled={isDeleting}>
@@ -26,7 +25,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDark, is
       <div className="px-6 py-6">
         {event.recurrence && event.recurrence.type !== 'none' ? (
           <div className="space-y-4">
-            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               This is a recurring event. What would you like to delete?
             </p>
             <div className="space-y-3">
@@ -54,7 +53,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDark, is
           </div>
         ) : (
           <div className="space-y-4">
-            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               Are you sure you want to delete "{event.title}"? This action cannot be undone.
             </p>
             <div className="flex gap-3">

@@ -1,6 +1,5 @@
 import React from 'react';
 import { CalendarDays, Plus, Inbox, FileText, Download, Search } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
 
 interface BottomNavigationProps {
     onHomeClick: () => void;
@@ -29,7 +28,6 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
     onDigestClick,
     onExportClick
 }) => {
-    const { theme } = useTheme();
 
     const create = (
         <button
@@ -48,7 +46,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
     return (
         <nav
             aria-label="Quick actions"
-            className={`fixed bottom-0 inset-x-0 z-40 md:hidden border-t ${theme === 'dark' ? 'glass-panel-dark border-slate-800' : 'glass-panel border-slate-200'} pb-safe`}
+            className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t glass-panel dark-glass pb-safe"
         >
             <div className="flex items-stretch h-16 max-w-md mx-auto px-1">
                 <button type="button" onClick={onHomeClick} className={`${tab} !text-brand-600 dark:!text-brand-400`} aria-current="page">

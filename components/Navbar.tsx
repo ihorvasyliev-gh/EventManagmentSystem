@@ -99,7 +99,7 @@ const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <nav className={`sticky top-0 z-50 w-full pt-[env(safe-area-inset-top)] ${theme === 'dark' ? 'glass-panel-dark text-white' : 'glass-panel text-slate-800'}`}>
+      <nav className="sticky top-0 z-50 w-full pt-[env(safe-area-inset-top)] glass-panel dark-glass text-slate-800 dark:text-white">
         <div className="max-w-7xl 2xl:max-w-[96rem] mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 sm:h-16 items-center gap-2">
             {/* Brand */}
@@ -206,7 +206,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
                 {isAccountOpen && (
-                  <div id="account-menu" role="menu" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 animate-scale-in origin-top-right ${theme === 'dark' ? 'bg-slate-900' : 'bg-white'}`}>
+                  <div id="account-menu" role="menu" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 animate-scale-in origin-top-right bg-white dark:bg-slate-900`}>
                     <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
@@ -260,7 +260,7 @@ const Navbar: React.FC<NavbarProps> = ({
           />
           <div
             id="app-menu"
-            className={`fixed top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 ${theme === 'dark' ? 'bg-slate-900' : 'bg-white'} border-b sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden max-h-[calc(100dvh-4rem)] overflow-y-auto`}
+            className={`fixed top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 bg-white dark:bg-slate-900 border-b sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden max-h-[calc(100dvh-4rem)] overflow-y-auto`}
           >
             <div className="p-3">
               <div className="flex items-center gap-3 px-3 py-3 mb-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">

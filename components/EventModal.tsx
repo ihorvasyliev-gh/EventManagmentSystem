@@ -9,7 +9,6 @@ import EventModalFooter from './event-modal/EventModalFooter';
 import DeleteEventDialog from './event-modal/DeleteEventDialog';
 import AddCategoryDialog from './event-modal/AddCategoryDialog';
 import { type EventInput, useEventForm } from './event-modal/useEventForm';
-import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import PosterLightbox from './PosterLightbox';
 import { expandRecurringEvents, isRecurringEvent } from '../utils/recurrence';
@@ -59,7 +58,6 @@ const EventModal: React.FC<EventModalProps> = ({
   getShareLink,
   recurrenceExceptions
 }) => {
-  const { theme } = useTheme();
   const { showToast } = useToast();
   // Latest events without making the form re-initialise on every background refresh
   const eventsRef = useRef(events);
@@ -328,11 +326,11 @@ const EventModal: React.FC<EventModalProps> = ({
 
         {/* Modal Panel - Full Screen on Mobile. Centred from sm up, never taller than the window
             (a phone held sideways is sm wide but only ~375px tall) */}
-        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[min(90vh,calc(100dvh-2rem))] border-t sm:border border-white/20 animate-scale-in ${theme === 'dark' ? 'panel-dark' : 'bg-white'}`}>
+        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[min(90vh,calc(100dvh-2rem))] border-t sm:border border-white/20 animate-scale-in bg-white dark-panel`}>
 
           {/* Header */}
           <div className="px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">
-            <h3 className={`text-lg sm:text-xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`} id="modal-title">
+            <h3 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-white" id="modal-title">
               {isEditing ? 'Edit Event' : 'Event Details'}
             </h3>
             <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none">
@@ -372,7 +370,6 @@ const EventModal: React.FC<EventModalProps> = ({
           {showDeleteDialog && event && (
             <DeleteEventDialog
               event={event}
-              isDark={theme === 'dark'}
               isDeleting={isDeleting}
               onConfirm={(deleteAll) => void handleDeleteConfirm(deleteAll)}
               onCancel={() => setShowDeleteDialog(false)}
@@ -381,7 +378,6 @@ const EventModal: React.FC<EventModalProps> = ({
 
           {showAddCategoryModal && (
             <AddCategoryDialog
-              isDark={theme === 'dark'}
               name={newCategoryName}
               onNameChange={setNewCategoryName}
               isCreating={isCreatingCategory}

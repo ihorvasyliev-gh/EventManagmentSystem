@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { type Event, UserRole, type EventCategory } from '../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
 import { shortCategoryLabel } from '../constants/categories';
 import { PendingBadge } from './calendar/shared';
 
@@ -115,7 +114,6 @@ const WeekView: React.FC<WeekViewProps> = ({
   onAddEventForDate,
   userRole
 }) => {
-  const { theme } = useTheme();
   const today = useMemo(() => new Date(), []);
 
   // Compute Monday to Sunday
@@ -185,7 +183,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   const activeMobileGroup = eventsByDay[selectedMobileDayIndex] || eventsByDay[0];
 
   return (
-    <div className={`p-2 sm:p-4 lg:p-6 transition-colors ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>
+    <div className="p-2 sm:p-4 lg:p-6 transition-colors text-slate-900 dark:text-slate-100">
       {/* Mobile: 7-day pill strip / tabs */}
       <div className="block lg:hidden mb-4">
         <div className="grid grid-cols-7 gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">

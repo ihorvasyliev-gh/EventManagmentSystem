@@ -71,14 +71,32 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* Checkboxes, radios and sliders in the site's raspberry */
+/* Checkboxes, radios and sliders in the site's raspberry. color-scheme makes the browser's own
+   parts (scrollbars, date pickers, dropdown lists, autofill) follow the app's theme too. */
 html {
     accent-color: #B90B4F;
+    color-scheme: light;
 }
 
 .dark {
     accent-color: #DD7AA3;
+    color-scheme: dark;
     --text-muted: 163 163 163;
+}
+
+/* Switching theme (ThemeContext): every colour changes in the same frame, then the page
+   crossfades from the old picture to the new one where the browser can */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+    transition: none !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 0.3s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* The theme class lives on <html> (ThemeContext), so target body through it */
@@ -88,6 +106,9 @@ html {
 }
 
 /* --- Minimalist Glass Utilities --- */
+/* The dark looks are classes that only apply under <html class="dark">, so switching theme
+   needs no re-render: "glass-panel dark-glass" is glass in both themes, "bg-white dark-panel"
+   a white panel that turns dark. :where() keeps them as easy to override as one class. */
 
 .glass-panel {
     background: rgba(255, 255, 255, 0.85);
@@ -99,7 +120,7 @@ html {
         0 2px 4px -1px rgba(0, 0, 0, 0.02);
 }
 
-.glass-panel-dark {
+:where(.dark) .dark-glass {
     background: rgba(34, 34, 34, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -109,9 +130,9 @@ html {
         0 2px 4px -1px rgba(0, 0, 0, 0.2);
 }
 
-/* Large dark surfaces (calendar, event dialog): the same look as glass-panel-dark without the
+/* Large dark surfaces (calendar, event dialog): the same look as dark-glass without the
    backdrop blur, which is invisible at 95% opacity but re-renders on every scroll */
-.panel-dark {
+:where(.dark) .dark-panel {
     background: #222222;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow:
@@ -399,7 +420,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
-    *::after {
+    *::after,
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;

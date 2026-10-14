@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { type Event, type ViewMode, UserRole } from '../types';
 import { addMonths, isMultiDayEvent, APP_LOCALE } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { useTheme } from '../contexts/ThemeContext';
 import { useMedia } from '../hooks/useMedia';
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe';
 import { isAnyModalOpen } from '../hooks/useModalFocusTrap';
@@ -81,7 +80,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
-  const { theme } = useTheme();
   const isMobile = useMedia('(max-width: 640px)');
   const canAdd = !!onAddEventForDate && userRole === UserRole.ADMIN;
 
@@ -289,7 +287,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // container, and the agenda's day headers would no longer stick under the navbar
   return (
     <div
-      className={`rounded-leaf-sm sm:rounded-leaf overflow-hidden supports-[overflow:clip]:overflow-clip animate-fade-in border border-slate-200 dark:border-slate-800 ${theme === 'dark' ? 'panel-dark' : 'bg-white shadow-sm'}`}
+      className={`rounded-leaf-sm sm:rounded-leaf overflow-hidden supports-[overflow:clip]:overflow-clip animate-fade-in border border-slate-200 dark:border-slate-800 bg-white shadow-sm dark-panel`}
       {...swipe.handlers}
     >
       <CalendarHeader

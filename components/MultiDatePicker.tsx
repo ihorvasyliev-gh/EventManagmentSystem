@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock, Plus } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
 import { TimePickerInput } from './TimePickerInput';
 import {
   WEEKDAY_LABELS,
@@ -125,8 +124,6 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
   error,
   className = '',
 }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
   // Initialize view month & year based on first selected date or today
   const initialDate = selectedDates.length > 0 ? new Date(selectedDates[0]) : new Date();
@@ -257,9 +254,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
       className={`rounded-2xl border transition-colors ${
         error
           ? 'border-rose-400 dark:border-rose-600 bg-rose-50/20 dark:bg-rose-950/10'
-          : isDark
-          ? 'border-slate-700 bg-slate-800/80 shadow-xs'
-          : 'border-slate-200 bg-white shadow-xs'
+          : 'border-slate-200 bg-white shadow-xs dark:border-slate-700 dark:bg-slate-800/80'
       } p-3.5 sm:p-5 space-y-4 w-full ${className}`}
     >
       {/* Mini-Calendar Header */}

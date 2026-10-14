@@ -3,7 +3,7 @@ import { History, Loader2 } from 'lucide-react';
 import ModalShell from './ModalShell';
 import { ChangeList, historyIcon } from './EventHistory';
 import { type Event } from '../types';
-import { type ChangeLogEntry, CHANGE_LOG_PAGE, getChangeLog } from '../services/historyService';
+import { type ChangeLogEntry, type ChangeLogView, CHANGE_LOG_PAGE, getChangeLog } from '../services/historyService';
 import { APP_LOCALE } from '../utils/date';
 
 interface ChangeLogModalProps {
@@ -16,12 +16,23 @@ interface ChangeLogModalProps {
   newSince: Date | null;
 }
 
-type View = 'staff' | 'all';
-
 const whatTheyDid = (entry: ChangeLogEntry): string => {
   if (entry.action === 'created') return entry.authorRole ? 'created' : 'sent in';
+  if (entry.action === 'deleted') return entry.changes && 'declined' in entry.changes ? 'declined' : 'deleted';
   if (entry.changes && 'deleted_instance' in entry.changes) return 'removed a date from';
   return entry.action === 'updated' ? 'changed' : entry.action.replace(/_/g, ' ');
+};
+
+const EMPTY: Record<ChangeLogView, { title: string; text: string }> = {
+  staff: {
+    title: 'No changes by staff yet',
+    text: 'Staff can change the events they sent in. When they do, what they changed shows here.'
+  },
+  deleted: {
+    title: 'No deleted events',
+    text: 'When an event is deleted or a submission declined, it shows here: who did it, and what the event was.'
+  },
+  all: { title: 'Nothing here yet', text: 'Changes to events show here as they are made.' }
 };
 
 const formatWhen = (date: Date) =>
@@ -29,20 +40,21 @@ const formatWhen = (date: Date) =>
 
 /**
  * Admins: what changed on the calendar, newest first. "Staff edits" lists the changes staff made
- * to their own events (they go live without review), with each field's old and new value.
+ * to their own events (they go live without review), with each field's old and new value;
+ * "Deleted", who deleted which event (or declined which submission) and what it was.
  */
 const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events, onOpenEvent, newSince }) => {
-  const [view, setView] = useState<View>('staff');
+  const [view, setView] = useState<ChangeLogView>('staff');
   const [entries, setEntries] = useState<ChangeLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async (which: View, before?: Date) => {
+  const load = useCallback(async (which: ChangeLogView, before?: Date) => {
     setLoading(true);
     setError(null);
     try {
-      const page = await getChangeLog({ staffEdits: which === 'staff', before });
+      const page = await getChangeLog({ view: which, before });
       setEntries((prev) => (before ? [...prev, ...page] : page));
       setHasMore(page.length === CHANGE_LOG_PAGE);
     } catch (err) {
@@ -65,7 +77,7 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
     onOpenEvent(event);
   };
 
-  const tab = (value: View, label: string) => (
+  const tab = (value: ChangeLogView, label: string) => (
     <button
       type="button"
       role="tab"
@@ -92,6 +104,7 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
     >
       <div role="tablist" aria-label="Show" className="flex gap-1 p-1 mb-4 rounded-xl bg-slate-100 dark:bg-slate-900/60 w-full sm:w-fit">
         {tab('staff', 'Staff edits')}
+        {tab('deleted', 'Deleted')}
         {tab('all', 'All activity')}
       </div>
 
@@ -104,12 +117,10 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
       {!loading && !error && entries.length === 0 && (
         <div className="py-10 text-center">
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-            {view === 'staff' ? 'No changes by staff yet' : 'Nothing here yet'}
+            {EMPTY[view].title}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-            {view === 'staff'
-              ? 'Staff can change the events they sent in. When they do, what they changed shows here.'
-              : 'Changes to events show here as they are made.'}
+            {EMPTY[view].text}
           </p>
         </div>
       )}

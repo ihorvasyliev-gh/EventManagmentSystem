@@ -49,7 +49,11 @@ test('declining emails the reason, deletes the draft and its flyer', async () =>
   const res = await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID], reason: 'Not a CCP event' }), env: { ...mailEnv, BUCKET: bucket } });
   assert.equal(res.status, 200);
   assert.deepEqual((await res.json()).declined, [ID]);
-  assert.ok(calls.some((c) => c.method === 'DELETE' && c.url.includes('status=eq.draft')), 'only drafts are deleted');
+  const del = calls.find((c) => c.method === 'DELETE' && c.url.includes('/rest/v1/events?'));
+  assert.ok(del?.url.includes('status=eq.draft'), 'only drafts are deleted');
+  // The database logs the deletion as declined by this admin
+  assert.equal(del.headers['X-Acting-User'], '00000000-0000-0000-0000-00000000000a');
+  assert.equal(del.headers['X-Delete-Reason'], 'declined');
   assert.deepEqual(bucket.deleted, [KEY]);
   const [mail] = mails(calls);
   assert.match(mail.text, /Reason:\nNot a CCP event/);

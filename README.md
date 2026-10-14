@@ -71,7 +71,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `017_staff_own_events.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `018_deleted_events_in_change_log.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -115,7 +115,7 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Preview and download the Events Digest | ✅ | ✅ |
 | Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 
-Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to events (staff's own, or any for admins) through `/api/edit-event`, which checks who may change the event and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
+Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to events (staff's own, or any for admins) through `/api/edit-event`, which checks who may change the event and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions. The database itself logs every deleted event (who deleted it, and what it was) in the change log, whichever way it was deleted, and nobody can change or remove history from the app.
 
 **Forgotten password:** the person emails the contact on the login page (*Forgot your password?* fills in the email). An admin opens **account menu → Staff accounts → Reset password** and passes on the temporary password shown; at their next sign-in they choose a new one.
 

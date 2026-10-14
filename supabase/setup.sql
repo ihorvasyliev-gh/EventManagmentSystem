@@ -16,6 +16,8 @@
 --     Cloudflare functions (service role) and here in SQL.
 --   * Admins see everything, publish, edit and delete. A role is changed only here, in SQL:
 --       UPDATE public.users SET role = 'admin' WHERE email = 'name@partnershipcork.ie';
+--   * History is written, never changed: the database itself logs every new and deleted event
+--     (with who deleted it), and an event's history stays after the event is gone.
 -- ============================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -83,9 +85,12 @@ CREATE TABLE IF NOT EXISTS public.event_attachments (
   uploaded_by UUID REFERENCES public.users(id) ON DELETE SET NULL
 );
 
+-- No foreign key to events: the history of a deleted event stays (who deleted it, too)
 CREATE TABLE IF NOT EXISTS public.event_history (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+  event_id UUID NOT NULL,
+  -- The event's name when the entry was written (the event may be gone since)
+  event_title TEXT,
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
   user_name TEXT NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('created', 'updated', 'deleted', 'status_changed')),
@@ -202,6 +207,103 @@ DROP TRIGGER IF EXISTS on_event_created ON public.events;
 CREATE TRIGGER on_event_created
   AFTER INSERT ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.create_event_history_entry();
+
+-- Each entry names its event and its author as the database knows them, not as sent
+CREATE OR REPLACE FUNCTION public.fill_event_history_entry()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_title TEXT;
+  v_name TEXT;
+BEGIN
+  -- (a deleted event is gone already: its entry brings the name with it)
+  SELECT title INTO v_title FROM public.events WHERE id = NEW.event_id;
+  NEW.event_title := COALESCE(v_title, NEW.event_title);
+  IF NEW.user_id IS NOT NULL THEN
+    SELECT full_name INTO v_name FROM public.users WHERE id = NEW.user_id;
+    NEW.user_name := COALESCE(v_name, NEW.user_name);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_event_history_insert ON public.event_history;
+CREATE TRIGGER on_event_history_insert
+  BEFORE INSERT ON public.event_history
+  FOR EACH ROW EXECUTE FUNCTION public.fill_event_history_entry();
+
+-- Deleting an event logs who did it and what the event was (written here, so every way of
+-- deleting is logged)
+CREATE OR REPLACE FUNCTION public.log_event_deleted()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_claims JSONB := NULLIF(current_setting('request.jwt.claims', true), '')::jsonb;
+  v_headers JSONB := NULLIF(current_setting('request.headers', true), '')::jsonb;
+  v_user_id UUID := auth.uid();
+  v_user_name TEXT;
+  v_declined BOOLEAN := false;
+  v_tz TEXT := 'Europe/Dublin';
+  v_unit TEXT;
+  v_when TEXT;
+  v_repeat TEXT;
+  v_changes JSONB;
+BEGIN
+  -- The Cloudflare functions delete with the service role key, naming the admin they act for
+  -- (only that key can, so nobody else can put a name here)
+  IF v_claims ->> 'role' = 'service_role' THEN
+    IF v_user_id IS NULL AND v_headers ->> 'x-acting-user' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_user_id := (v_headers ->> 'x-acting-user')::uuid;
+    END IF;
+    v_declined := COALESCE(v_headers ->> 'x-delete-reason' = 'declined', false);
+  END IF;
+  IF v_user_id IS NOT NULL THEN
+    -- (no such account: nobody is named)
+    SELECT id, full_name INTO v_user_id, v_user_name FROM public.users WHERE id = v_user_id;
+  END IF;
+
+  v_when := to_char(OLD.date AT TIME ZONE v_tz, 'Dy FMDD Mon YYYY, HH24:MI')
+    || CASE
+         WHEN OLD.end_date IS NULL OR OLD.end_date <= OLD.date THEN ''
+         WHEN (OLD.end_date AT TIME ZONE v_tz)::date = (OLD.date AT TIME ZONE v_tz)::date
+           THEN '–' || to_char(OLD.end_date AT TIME ZONE v_tz, 'HH24:MI')
+         ELSE ' – ' || to_char(OLD.end_date AT TIME ZONE v_tz, 'Dy FMDD Mon YYYY, HH24:MI')
+       END;
+  v_unit := CASE OLD.recurrence_type WHEN 'daily' THEN 'day' WHEN 'weekly' THEN 'week' WHEN 'monthly' THEN 'month' WHEN 'yearly' THEN 'year' END;
+  v_repeat := CASE
+    WHEN OLD.recurrence_type = 'custom' THEN
+      'On ' || COALESCE(cardinality(OLD.recurrence_custom_dates), 0) || ' picked date'
+        || CASE WHEN COALESCE(cardinality(OLD.recurrence_custom_dates), 0) = 1 THEN '' ELSE 's' END
+    WHEN v_unit IS NULL THEN NULL
+    WHEN COALESCE(OLD.recurrence_interval, 1) > 1 THEN 'Every ' || OLD.recurrence_interval || ' ' || v_unit || 's'
+    ELSE 'Every ' || v_unit
+  END;
+
+  -- What the event was (besides its name, the entry's event_title), as the change log shows a
+  -- change: each value struck out ({"old": …})
+  SELECT jsonb_object_agg(key, jsonb_build_object('old', value)) INTO v_changes
+  FROM jsonb_each(jsonb_strip_nulls(jsonb_build_object(
+    'category', NULLIF(OLD.category, ''),
+    'status', CASE OLD.status WHEN 'draft' THEN 'Pending review' WHEN 'published' THEN 'Published' ELSE OLD.status END,
+    'when', v_when,
+    'repeat', v_repeat,
+    'location', NULLIF(trim(OLD.location), ''),
+    'contacts', NULLIF(concat_ws(' ', NULLIF(trim(OLD.submitter_name), ''), '(' || NULLIF(lower(trim(OLD.submitter_email)), '') || ')'), '')
+  )));
+  IF v_declined THEN
+    v_changes := v_changes || '{"declined": true}'::jsonb;
+  END IF;
+
+  INSERT INTO public.event_history (event_id, event_title, user_id, user_name, action, changes)
+  VALUES (OLD.id, OLD.title, v_user_id, COALESCE(v_user_name, 'Supabase (not an app account)'), 'deleted', v_changes);
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_event_deleted ON public.events;
+CREATE TRIGGER on_event_deleted
+  AFTER DELETE ON public.events
+  FOR EACH ROW EXECUTE FUNCTION public.log_event_deleted();
 
 -- A deleted or restored date of a repeating event counts as a change to the event: only the
 -- events table sends live updates, so this is what tells the other open calendars
@@ -404,15 +506,19 @@ CREATE POLICY "Admins delete attachments"
   ON public.event_attachments FOR DELETE TO authenticated
   USING ((SELECT public.is_admin()));
 
+-- Admins also see the history of deleted events
 DROP POLICY IF EXISTS "History follows its event" ON public.event_history;
-CREATE POLICY "History follows its event"
+DROP POLICY IF EXISTS "History follows its event, admins see all" ON public.event_history;
+CREATE POLICY "History follows its event, admins see all"
   ON public.event_history FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.events e WHERE e.id = event_id));
--- (The "created" entry is written by a trigger, which these policies don't limit)
+  USING ((SELECT public.is_admin()) OR EXISTS (SELECT 1 FROM public.events e WHERE e.id = event_id));
+-- (The "created" and "deleted" entries are written by triggers, which these policies don't
+-- limit; nobody writes a "deleted" one by hand, and nobody changes or deletes history)
 DROP POLICY IF EXISTS "Admins write history" ON public.event_history;
 CREATE POLICY "Admins write history"
   ON public.event_history FOR INSERT TO authenticated
-  WITH CHECK ((SELECT public.is_admin()) AND user_id = (SELECT auth.uid()));
+  WITH CHECK ((SELECT public.is_admin()) AND user_id = (SELECT auth.uid()) AND action <> 'deleted');
+REVOKE UPDATE, DELETE, TRUNCATE ON public.event_history FROM anon, authenticated;
 
 DROP POLICY IF EXISTS "Deleted dates follow their event" ON public.recurrence_exceptions;
 CREATE POLICY "Deleted dates follow their event"

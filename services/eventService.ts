@@ -242,7 +242,8 @@ export const deleteEvent = async (id: string): Promise<void> => {
   }
   const { data: attachments } = await supabase.from('event_attachments').select('url').eq('event_id', id);
 
-  // History, attachments and deleted dates go with it (on delete cascade)
+  // Attachments and deleted dates go with it (on delete cascade); its history stays, and the
+  // database adds who deleted it
   const { error: deleteError } = await supabase
     .from('events')
     .delete()

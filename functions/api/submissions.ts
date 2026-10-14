@@ -5,7 +5,7 @@
  * approve: publishes the events and emails each submitter that their event is on the calendar
  *          (also used after "Save & approve", when the event is already published).
  * decline: emails each submitter (with the reason, if given), deletes the submissions and
- *          their flyers from R2.
+ *          their flyers from R2. The database logs each one as declined by the caller.
  * Emails are optional (see server/email.ts); the action works without them.
  */
 import { json, fail, bearerToken, readJson } from '../../server/http.ts';
@@ -82,7 +82,11 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     const attachments = await serviceRest(cfg, `event_attachments?event_id=in.(${rows.map((r) => r.id).join(',')})&select=url`);
     const attachmentUrls = attachments.ok ? ((await attachments.json()) as Array<{ url: string }>).map((a) => a.url) : [];
 
-    const del = await serviceRest(cfg, `events?id=in.(${rows.map((r) => r.id).join(',')})&status=eq.draft`, { method: 'DELETE' });
+    // The database logs every deleted event; these say which admin it was, and why
+    const del = await serviceRest(cfg, `events?id=in.(${rows.map((r) => r.id).join(',')})&status=eq.draft`, {
+      method: 'DELETE',
+      headers: { 'X-Acting-User': caller.id, 'X-Delete-Reason': 'declined' }
+    });
     if (!del.ok) {
       console.error('Declining failed:', del.status, await del.text());
       return fail('The submissions could not be declined. Please try again.', 502);

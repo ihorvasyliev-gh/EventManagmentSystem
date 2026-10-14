@@ -129,3 +129,78 @@ test('admins see staff edits in the change log, with what changed', async ({ pag
   await log.getByRole('button', { name: 'Coffee morning for parents' }).click();
   await expect(page.getByRole('dialog', { name: 'Event Details' })).toBeVisible();
 });
+
+test('admins see who deleted which event, and what it was, under Deleted in the change log', async ({ page }) => {
+  await mockSupabase(page, { role: 'admin', events: [eventRow({ id: OWN, title: 'Coffee morning', date: daysFromNow(2) })] });
+  const asked: string[] = [];
+  await page.route('**/rest/v1/event_history**', (route) => {
+    if (route.request().method() === 'HEAD') {
+      return route.fulfill({ status: 200, headers: { 'Content-Range': '*/0', 'Access-Control-Expose-Headers': 'Content-Range' } });
+    }
+    const url = decodeURIComponent(route.request().url());
+    asked.push(url);
+    if (!url.includes('action=eq.deleted')) return route.fulfill({ json: [] });
+    return route.fulfill({
+      json: [
+        {
+          id: 'h1', event_id: '10000000-0000-0000-0000-0000000000d1', event_title: 'Anon test event',
+          user_id: ADMIN_ID, user_name: 'Ada Admin', action: 'deleted', timestamp: new Date().toISOString(),
+          changes: {
+            when: { old: 'Tue 20 Oct 2026, 10:00–11:30' },
+            status: { old: 'Pending review' },
+            contacts: { old: 'Anon Person (anon@mail.ie)' }
+          },
+          users: { role: 'admin' }
+        },
+        {
+          id: 'h2', event_id: '10000000-0000-0000-0000-0000000000d2', event_title: 'Cheap watches',
+          user_id: ADMIN_ID, user_name: 'Ada Admin', action: 'deleted', timestamp: new Date(Date.now() - 60_000).toISOString(),
+          changes: { status: { old: 'Pending review' }, declined: true },
+          users: { role: 'admin' }
+        }
+      ]
+    });
+  });
+  await signIn(page);
+
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: /Change log/ }).click();
+  const log = page.getByRole('dialog', { name: 'Change log' });
+  await log.getByRole('tab', { name: 'Deleted' }).click();
+
+  const deleted = log.getByRole('listitem').filter({ hasText: 'Anon test event' });
+  await expect(deleted).toContainText('Ada Admin deleted Anon test event');
+  await expect(deleted.locator('del').filter({ hasText: 'Tue 20 Oct 2026, 10:00–11:30' })).toBeVisible();
+  await expect(deleted.locator('del').filter({ hasText: 'Anon Person (anon@mail.ie)' })).toBeVisible();
+  // Gone from the calendar: nothing to open
+  await expect(deleted.getByRole('button', { name: 'Anon test event' })).toHaveCount(0);
+  await expect(log.getByRole('listitem').filter({ hasText: 'Cheap watches' })).toContainText('Ada Admin declined Cheap watches');
+  expect(asked.at(-1)).toContain('event_title');
+  await expectAccessible(page);
+});
+
+test('the change log still loads before the database has migration 018', async ({ page }) => {
+  await mockSupabase(page, { role: 'admin', events: [eventRow({ id: OWN, title: 'Coffee morning', date: daysFromNow(2) })] });
+  await page.route('**/rest/v1/event_history**', (route) => {
+    if (route.request().method() === 'HEAD') {
+      return route.fulfill({ status: 200, headers: { 'Content-Range': '*/0', 'Access-Control-Expose-Headers': 'Content-Range' } });
+    }
+    if (route.request().url().includes('event_title')) {
+      return route.fulfill({ status: 400, json: { code: '42703', message: 'column event_history.event_title does not exist' } });
+    }
+    return route.fulfill({
+      json: [{
+        id: 'h1', event_id: OWN, user_id: ADMIN_ID, user_name: 'Ada Admin', action: 'updated', timestamp: new Date().toISOString(),
+        changes: { title: { old: 'Coffee', new: 'Coffee morning' } }, events: { title: 'Coffee morning' }, users: { role: 'admin' }
+      }]
+    });
+  });
+  await signIn(page);
+
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: /Change log/ }).click();
+  const log = page.getByRole('dialog', { name: 'Change log' });
+  await log.getByRole('tab', { name: 'All activity' }).click();
+  await expect(log.getByRole('listitem').first()).toContainText('Ada Admin changed Coffee morning');
+  await expect(log.getByRole('alert')).toHaveCount(0);
+});

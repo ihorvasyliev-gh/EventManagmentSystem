@@ -10,32 +10,49 @@ export interface ChangeLogEntry extends EventHistoryEntry {
 }
 
 type ChangeLogRow = HistoryRow & {
-  events: { title: string } | null;
+  /** The event's name when the entry was written (migration 018) */
+  event_title?: string | null;
+  /** Before migration 018: the event itself, gone once it is deleted */
+  events?: { title: string } | null;
   users: { role: string } | null;
 };
 
-const COLUMNS = 'id,event_id,user_id,user_name,action,changes,timestamp,events(title)';
+const COLUMNS = 'id,event_id,user_id,user_name,action,changes,timestamp,event_title';
+const COLUMNS_BEFORE_018 = 'id,event_id,user_id,user_name,action,changes,timestamp,events(title)';
 
 /** Entries in one page of the change log */
 export const CHANGE_LOG_PAGE = 50;
 
 /**
- * The latest history entries of every event (admins see them all), newest first, older than
- * `before` when given. `staffEdits`: only changes staff made to their own events.
+ * Which entries: changes staff made to their own events, deleted events (and declined
+ * submissions), or everything
  */
-export const getChangeLog = async (options: { staffEdits: boolean; before?: Date }): Promise<ChangeLogEntry[]> => {
-  let query = supabase
-    .from('event_history')
-    .select(`${COLUMNS},users${options.staffEdits ? '!inner' : ''}(role)`)
-    .order('timestamp', { ascending: false })
-    .limit(CHANGE_LOG_PAGE);
-  if (options.staffEdits) query = query.eq('action', 'updated').eq('users.role', 'staff');
-  if (options.before) query = query.lt('timestamp', options.before.toISOString());
-  const { data, error } = await query;
+export type ChangeLogView = 'staff' | 'deleted' | 'all';
+
+/**
+ * The latest history entries of every event (admins see them all, deleted events' too), newest
+ * first, older than `before` when given.
+ */
+export const getChangeLog = async (options: { view: ChangeLogView; before?: Date }): Promise<ChangeLogEntry[]> => {
+  const staffEdits = options.view === 'staff';
+  const page = (columns: string) => {
+    let query = supabase
+      .from('event_history')
+      .select(`${columns},users${staffEdits ? '!inner' : ''}(role)`)
+      .order('timestamp', { ascending: false })
+      .limit(CHANGE_LOG_PAGE);
+    if (staffEdits) query = query.eq('action', 'updated').eq('users.role', 'staff');
+    if (options.view === 'deleted') query = query.eq('action', 'deleted');
+    if (options.before) query = query.lt('timestamp', options.before.toISOString());
+    return query;
+  };
+  let { data, error } = await page(COLUMNS);
+  // The database hasn't run migration 018 yet (no event_title column)
+  if (error?.code === '42703') ({ data, error } = await page(COLUMNS_BEFORE_018));
   if (error) throw new Error(error.message || 'The change log could not be loaded.');
   return ((data || []) as unknown as ChangeLogRow[]).map((row) => ({
     ...mapHistoryRow(row),
-    eventTitle: row.events?.title ?? 'Deleted event',
+    eventTitle: row.event_title ?? row.events?.title ?? 'Deleted event',
     authorRole: row.users?.role === 'admin' ? 'admin' : row.users?.role === 'staff' ? 'staff' : null
   }));
 };

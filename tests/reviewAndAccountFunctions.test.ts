@@ -128,7 +128,7 @@ test('/api/upload is for signed-in admins only', async () => {
   mockFetch(authRoutes);
   const form = () => {
     const f = new FormData();
-    f.append('file', new File(['x'], 'a.png', { type: 'image/png' }));
+    f.append('file', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], 'a.png', { type: 'image/png' }));
     return f;
   };
   const anon = await upload({ request: new Request('https://app.test/api/upload', { method: 'PUT', body: form() }), env: { ...env, BUCKET: fakeBucket() } });

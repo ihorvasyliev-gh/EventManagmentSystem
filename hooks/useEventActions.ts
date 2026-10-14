@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type React from 'react';
 import { type Event, type User } from '../types';
-import { updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions } from '../services/eventService';
+import { updateEvent, deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, clearRecurrenceExceptions, EditConflictError } from '../services/eventService';
 import { cacheExceptions } from '../utils/eventsCache';
 import { isSameDay } from '../utils/date';
 import { isRecurringEvent } from '../utils/recurrence';
@@ -64,6 +64,8 @@ export const useEventActions = ({
     }
 
     const isDraftBeingPublished = (originalEvent.status === 'draft' || modalAutoApprove) && eventData.status === 'published';
+    // The version the form was opened with (the list may already hold a newer one from realtime)
+    const baseUpdatedAt = (selectedEvent?.id === id ? selectedEvent.updatedAt : undefined) ?? originalEvent.updatedAt;
 
     // Optimistic update: update event immediately
     const optimisticEvent: Event = {
@@ -81,7 +83,7 @@ export const useEventActions = ({
 
     // Sync with server in background
     try {
-      const serverEvent = await updateEvent(id, eventData, user.id, user.fullName);
+      const serverEvent = await updateEvent(id, eventData, user.id, user.fullName, baseUpdatedAt);
       // Hand-picked dates: the form already left out deleted days, so the saved list is complete
       if (originalEvent.recurrence?.type === 'custom' && recurrenceExceptions.get(id)?.length) {
         await clearRecurrenceExceptions(id);
@@ -96,6 +98,14 @@ export const useEventActions = ({
         showToast('Event updated successfully', 'success');
       }
     } catch (e) {
+      if (e instanceof EditConflictError) {
+        // Their version goes on the calendar; the form reopens on it with these changes, so saving
+        // again replaces theirs knowingly and closing keeps theirs
+        setEvents((prev) => prev.map((ev) => (ev.id === id ? e.current : ev)));
+        showToast('Someone else changed this event while you were editing it. Your changes are still in the form: save again to replace their version, or close the form to keep theirs.', 'warning', 12000);
+        openToEdit(e.current, { autoApprove: modalAutoApprove, draft: eventData });
+        throw markHandled(e);
+      }
       console.error("Error updating event", e);
       // Rollback optimistic update on error
       setEvents((prev) => prev.map((ev) => (ev.id === id ? originalEvent : ev)));

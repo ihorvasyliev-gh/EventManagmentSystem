@@ -37,7 +37,7 @@ const send = (file: File | null, token?: string) => {
   return new Request('https://app.test/api/digest', { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
 };
 
-const pdf = new File([new Uint8Array([37, 80, 68, 70])], 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf', { type: 'application/pdf' });
+const pdf = new File(['%PDF-1.3\n'], 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf', { type: 'application/pdf' });
 
 test('an admin shares the digest: it is stored under digests/ and the link to it comes back', async () => {
   mockFetch(authRoutes);
@@ -58,6 +58,8 @@ test('only admins can share the digest, and only as a PDF', async () => {
   assert.equal((await onRequestPost({ request: send(pdf, 'staff-token'), env: { ...env, BUCKET: bucket } })).status, 403);
   const page = new File(['<html>'], 'digest.html', { type: 'text/html' });
   assert.equal((await onRequestPost({ request: send(page, 'admin-token'), env: { ...env, BUCKET: bucket } })).status, 415);
+  const renamed = new File(['<html>'], 'digest.pdf', { type: 'application/pdf' });
+  assert.equal((await onRequestPost({ request: send(renamed, 'admin-token'), env: { ...env, BUCKET: bucket } })).status, 415);
   assert.equal((await onRequestPost({ request: send(null, 'admin-token'), env: { ...env, BUCKET: bucket } })).status, 400);
   assert.equal(uploaded.size, 0);
 });

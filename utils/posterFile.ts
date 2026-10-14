@@ -1,4 +1,5 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
+import { sniffFileKind, type FileKind } from './fileKind.ts';
 
 /**
  * Poster uploads. Images are used as they are; a PDF flyer is turned into an image of one
@@ -87,28 +88,10 @@ export interface OpenedPdf {
   close: () => void;
 }
 
-/**
- * Work apps under an organisation's app protection (Microsoft Intune, "MAM") save files
- * encrypted: an attachment saved from work Outlook on a phone starts with this tag instead
- * of its own header. Only those apps hold the key, so no browser or website can read it.
- */
-const MANAGED_ENCRYPTION_TAG = 'MSMAMAR';
 export const MANAGED_ENCRYPTION_MESSAGE =
   'This flyer was saved from a protected work app (such as Outlook), so it’s encrypted and can’t be uploaded from this phone. Please upload it from a computer, or send the event without a poster and email the flyer to the coordinator.';
 
-export type FileKind = 'pdf' | 'png' | 'jpeg' | 'gif' | 'webp' | 'managed-encrypted' | 'unknown';
-
-/** What a file really is, from its first bytes (at least 16; up to 1 KB for a PDF) */
-export const sniffFileKind = (head: Uint8Array): FileKind => {
-  const text = String.fromCharCode(...head.subarray(0, 1024));
-  if (text.slice(0, 32).includes(MANAGED_ENCRYPTION_TAG)) return 'managed-encrypted';
-  if (head[0] === 0x89 && text.slice(1, 4) === 'PNG') return 'png';
-  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpeg';
-  if (text.startsWith('GIF8')) return 'gif';
-  if (text.startsWith('RIFF') && text.slice(8, 12) === 'WEBP') return 'webp';
-  if (text.includes('%PDF-')) return 'pdf';
-  return 'unknown';
-};
+export { sniffFileKind, type FileKind };
 
 /** A whole PDF starts with "%PDF-" and ends with "%%EOF" (each may sit within 1 KB of its end of the file) */
 export const looksLikeWholePdf = (data: Uint8Array): boolean => {

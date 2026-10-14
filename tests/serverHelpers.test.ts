@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkSubmission } from '../server/submission.ts';
-import { fileKeyFromUrl } from '../server/files.ts';
+import { fileKeyFromUrl, contentMatchesType } from '../server/files.ts';
 import { generateTempPassword } from '../server/password.ts';
 import { describeWhen, declinedEmail, newSubmissionEmail } from '../server/notifications.ts';
 import { selectAll } from '../server/supabase.ts';
@@ -125,4 +125,17 @@ test('error reports group by message and first stack line, not by numbers in the
   const c = await errorFingerprint('Something else', 'Error: x\n    at load (app.js:10:5)');
   assert.equal(a, b);
   assert.notEqual(a, c);
+});
+
+test('images and PDFs must really be what their type says; other files are only downloaded', async () => {
+  const file = (bytes: string | Uint8Array, type: string) => new File([bytes], 'f', { type });
+  assert.equal(await contentMatchesType(file(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'image/png'), 'image/png'), true);
+  assert.equal(await contentMatchesType(file(new Uint8Array([0xff, 0xd8, 0xff, 0xe1]), 'image/jpeg'), 'image/jpeg'), true);
+  assert.equal(await contentMatchesType(file('%PDF-1.7', 'application/pdf'), 'application/pdf'), true);
+  // A page renamed flyer.png, or a JPG called .png
+  assert.equal(await contentMatchesType(file('<svg onload="alert(1)">', 'image/png'), 'image/png'), false);
+  assert.equal(await contentMatchesType(file(new Uint8Array([0xff, 0xd8, 0xff, 0xe1]), 'image/png'), 'image/png'), false);
+  assert.equal(await contentMatchesType(file('<html>', 'application/pdf'), 'application/pdf'), false);
+  // Word, Excel and text files are served as downloads, never shown on the site
+  assert.equal(await contentMatchesType(file('a,b\n1,2', 'application/vnd.ms-excel'), 'application/vnd.ms-excel'), true);
 });

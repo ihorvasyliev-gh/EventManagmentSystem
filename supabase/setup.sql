@@ -9,7 +9,8 @@
 -- Who can do what:
 --   * Nobody without an account can read or write anything. The public /submit form and the
 --     calendar feed go through the Cloudflare functions, which use the service-role key.
---   * Staff (every new account) see published events and can submit drafts.
+--   * Staff (every new account) see published events and submit drafts through the /submit
+--     form (/api/submit checks them); only admins write events directly.
 --   * Nobody changes their row in users from the browser: accounts are managed by the
 --     Cloudflare functions (service role) and here in SQL.
 --   * Admins see everything, publish, edit and delete. A role is changed only here, in SQL:
@@ -42,7 +43,8 @@ CREATE TABLE IF NOT EXISTS public.events (
   date TIMESTAMP WITH TIME ZONE NOT NULL,
   end_date TIMESTAMP WITH TIME ZONE,
   location TEXT,
-  poster_url TEXT,
+  -- A path on this site (/api/file/…) or an http(s) address: the app opens it
+  poster_url TEXT CHECK (poster_url IS NULL OR poster_url ~* '^(/|https?://)'),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
   category TEXT,
   tags TEXT[] DEFAULT '{}',
@@ -73,7 +75,7 @@ CREATE TABLE IF NOT EXISTS public.event_attachments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  url TEXT NOT NULL,
+  url TEXT NOT NULL CHECK (url ~* '^(/|https?://)'),
   type TEXT NOT NULL CHECK (type IN ('image', 'pdf', 'document', 'other')),
   size BIGINT NOT NULL,
   uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -196,6 +198,32 @@ DROP TRIGGER IF EXISTS on_event_created ON public.events;
 CREATE TRIGGER on_event_created
   AFTER INSERT ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.create_event_history_entry();
+
+-- A deleted or restored date of a repeating event counts as a change to the event: only the
+-- events table sends live updates, so this is what tells the other open calendars
+CREATE OR REPLACE FUNCTION public.touch_events_of_exceptions()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  -- changed_rows: the dates added, or removed (rows removed along with their event, on delete
+  -- cascade, find no event left to touch)
+  UPDATE public.events SET updated_at = NOW() WHERE id IN (SELECT DISTINCT event_id FROM changed_rows);
+  RETURN NULL;
+END;
+$$;
+
+-- Once per statement: clearing a series' dates sends one update, not one per date
+DROP TRIGGER IF EXISTS on_recurrence_exceptions_added ON public.recurrence_exceptions;
+CREATE TRIGGER on_recurrence_exceptions_added
+  AFTER INSERT ON public.recurrence_exceptions
+  REFERENCING NEW TABLE AS changed_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.touch_events_of_exceptions();
+
+DROP TRIGGER IF EXISTS on_recurrence_exceptions_removed ON public.recurrence_exceptions;
+CREATE TRIGGER on_recurrence_exceptions_removed
+  AFTER DELETE ON public.recurrence_exceptions
+  REFERENCING OLD TABLE AS changed_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.touch_events_of_exceptions();
 
 -- Every new account gets the role staff, whatever the sign-up request says
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -331,15 +359,17 @@ CREATE POLICY "Users are viewable by authenticated users"
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 REVOKE INSERT, UPDATE, DELETE ON public.users FROM anon, authenticated;
 
--- events: staff see published events and their own drafts and can only create drafts
+-- events: staff see published events and their own drafts; their submissions go through
+-- /api/submit (service role), so only admins insert directly
 DROP POLICY IF EXISTS "Signed-in users see published events, admins see all" ON public.events;
 CREATE POLICY "Signed-in users see published events, admins see all"
   ON public.events FOR SELECT TO authenticated
   USING (status = 'published' OR creator_id = auth.uid() OR public.is_admin());
 DROP POLICY IF EXISTS "Admins create events, staff create drafts" ON public.events;
-CREATE POLICY "Admins create events, staff create drafts"
+DROP POLICY IF EXISTS "Admins create events" ON public.events;
+CREATE POLICY "Admins create events"
   ON public.events FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin() OR (status = 'draft' AND creator_id = auth.uid()));
+  WITH CHECK (public.is_admin());
 DROP POLICY IF EXISTS "Admins update events" ON public.events;
 CREATE POLICY "Admins update events"
   ON public.events FOR UPDATE TO authenticated

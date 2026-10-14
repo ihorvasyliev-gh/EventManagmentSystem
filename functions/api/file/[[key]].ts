@@ -62,8 +62,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     return new Response(object.body, {
       headers,
     });
-  } catch (err: any) {
-    return new Response(`Error retrieving file: ${err.message}`, { status: 500 });
+  } catch (err) {
+    // The details stay in the logs: they can name the bucket or the storage error
+    console.error('Serving a file failed:', key, err);
+    return new Response('The file could not be loaded. Please try again.', { status: 500 });
   }
 };
 

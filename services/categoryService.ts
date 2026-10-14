@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { type EventCategoryItem } from '../types';
 
 /**
- * Получить все категории событий
+ * Every event category
  */
 export const getCategories = async (): Promise<EventCategoryItem[]> => {
   const { data, error } = await supabase
@@ -28,10 +28,10 @@ export const getCategories = async (): Promise<EventCategoryItem[]> => {
 };
 
 /**
- * Создать новую категорию
+ * Adds a category (admins)
  */
 export const createCategory = async (name: string, userId: string): Promise<EventCategoryItem> => {
-  // Проверяем, не существует ли уже категория с таким именем
+  // Not if one with this name exists already
   const { data: existing } = await supabase
     .from('event_categories')
     .select('id')

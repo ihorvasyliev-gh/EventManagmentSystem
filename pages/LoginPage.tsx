@@ -33,7 +33,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   const requestIdRef = React.useRef(0);
   const isMountedRef = React.useRef(true);
 
-  // Очистка при размонтировании компонента
+  // Forget pending sign-ins when the page goes away
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -44,12 +44,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Предотвращаем множественные отправки
+    // One sign-in at a time
     if (isLoading) {
       return;
     }
 
-    // Увеличиваем ID запроса для отслеживания актуальности
+    // Each attempt gets a number, so a late answer to an older one is ignored
     const currentRequestId = ++requestIdRef.current;
     setIsLoading(true);
     setError('');
@@ -57,19 +57,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
     try {
       const user = await login(email, password, rememberMe);
       
-      // Проверяем, что это все еще актуальный запрос и компонент смонтирован
+      // Still the latest attempt, and the page is still open
       if (currentRequestId !== requestIdRef.current || !isMountedRef.current) {
         return;
       }
       
       onLogin(user);
     } catch (err: any) {
-      // Проверяем, что это все еще актуальный запрос и компонент смонтирован
+      // Still the latest attempt, and the page is still open
       if (currentRequestId !== requestIdRef.current || !isMountedRef.current) {
         return;
       }
       
-      // Игнорируем ошибки отмены запроса (AbortError)
+      // A cancelled request isn't an error to show
       if (err?.name === 'AbortError' || err?.message?.includes('aborted') || err?.message?.includes('cancelled')) {
         return;
       }
@@ -77,10 +77,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
       const errorMessage = err.message || 'Login failed';
       setError(errorMessage);
       
-      // Логируем ошибку в консоль для отладки
+      // For debugging (stripped from production builds)
       console.error('Authentication error:', err);
     } finally {
-      // Обновляем состояние только если это актуальный запрос
+      // Only the latest attempt updates the page
       if (currentRequestId === requestIdRef.current && isMountedRef.current) {
         setIsLoading(false);
       }

@@ -57,8 +57,6 @@
     /* text-slate-400 (tailwind.config.js): readable grey for light and dark mode */
     --text-muted: 115 115 115;
     --font-sans: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
@@ -188,50 +186,18 @@ html {
     }
 }
 
+/* No will-change: kept after the animation, it held every animated panel (the calendar card
+   included) on its own GPU layer for good */
 .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
-    will-change: opacity;
 }
 
 .animate-slide-up {
     animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: transform, opacity;
 }
 
 .animate-scale-in {
     animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: transform, opacity;
-}
-
-/* --- Interactive Elements --- */
-
-.btn-hover-effect {
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-hover-effect:hover {
-    will-change: transform;
-    transform: translateY(-1px) translateZ(0);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.btn-hover-effect:active {
-    transform: translateY(0) scale(0.98) translateZ(0);
-}
-
-/* GPU-accelerated transitions (use on animated elements only) */
-.transition-transform {
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.transition-opacity {
-    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.transition-all-gpu {
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Hide scrollbar utility (e.g. for horizontal day strips) */
@@ -275,12 +241,6 @@ html {
 /* Smooth scrolling */
 html {
     scroll-behavior: smooth;
-}
-
-/* Performance optimizations */
-* {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
 }
 
 
@@ -332,20 +292,6 @@ textarea,
     }
 }
 
-/* Prevent double-tap zoom on buttons and links */
-button,
-a,
-[role="button"] {
-    touch-action: manipulation;
-}
-
-/* Improve scrolling on mobile */
-@media (max-width: 640px) {
-    * {
-        -webkit-overflow-scrolling: touch;
-    }
-}
-
 /* A phone held sideways: page content clears the notch (viewport-fit=cover in index.html) */
 body {
     padding-left: env(safe-area-inset-left, 0px);
@@ -366,56 +312,8 @@ body {
 /* Animation for slide down (used in mobile menus) */
 .animate-slide-down {
     animation: slideDownFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: transform, opacity;
 }
 
-/* Touch-friendly hover states (only on non-touch devices) */
-@media (hover: hover) and (pointer: fine) {
-    .btn-hover-effect:hover {
-        transform: translateY(-1px) translateZ(0);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    }
-}
-
-/* Active states for touch devices */
-@media (hover: none) and (pointer: coarse) {
-    .btn-hover-effect:active {
-        transform: translateY(0) scale(0.97) translateZ(0);
-        opacity: 0.8;
-    }
-}
-
-/* --- Mobile Calendar Optimizations --- */
-
-/* Event indicator dots for grid view on mobile */
-@media (max-width: 640px) {
-    /* Ensure dots have adequate touch targets */
-    .event-dot {
-        min-width: 8px;
-        min-height: 8px;
-    }
-    
-    /* Sticky headers for agenda view */
-    .sticky {
-        position: -webkit-sticky;
-        position: sticky;
-    }
-}
-
-/* Improved line-clamp for multi-line text truncation */
-.line-clamp-1 {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
 /* Respect users who prefer less motion */
 @media (prefers-reduced-motion: reduce) {
     *,

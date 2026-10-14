@@ -8,6 +8,7 @@ import { clickableProps, formatEventRangeText } from './shared';
 interface MonthDayCellProps {
   day: Date;
   dayEvents: Event[];
+  isToday: boolean;
   isMobile: boolean;
   /** Phones: the day whose events show under the grid */
   isSelected: boolean;
@@ -25,6 +26,7 @@ interface MonthDayCellProps {
 const MonthDayCell: React.FC<MonthDayCellProps> = ({
   day,
   dayEvents,
+  isToday,
   isMobile,
   isSelected,
   canAdd,
@@ -33,11 +35,11 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
   onSelect,
   onOpenDay
 }) => {
-  const isToday = isSameDay(day, new Date());
   const hasEvents = dayEvents.length > 0;
 
   return (
     <div
+      aria-current={isToday ? 'date' : undefined}
       onClick={() => {
         if (isMobile) {
           onSelect(day);
@@ -142,4 +144,5 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
   );
 };
 
-export default MonthDayCell;
+// Re-renders only when its own day changes (not when the popover opens or another day is picked)
+export default React.memo(MonthDayCell);

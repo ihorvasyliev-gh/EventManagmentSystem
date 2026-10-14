@@ -65,3 +65,16 @@ test('deleting one date of a weekly event keeps the rest', async ({ page }) => {
   expect(exceptions).toHaveLength(1);
   expect(backend.writes.some((w) => w.method === 'DELETE')).toBe(false);
 });
+
+test('a calendar left open overnight moves “today” on at midnight', async ({ page }) => {
+  // A date in the past, so the mocked session token is still valid by the page's clock
+  await page.clock.install({ time: new Date('2026-03-10T23:59:30Z') });
+  await mockSupabase(page, { events: [] });
+  await signIn(page);
+  const today = page.locator('[aria-current="date"]');
+  await expect(today).toHaveCount(1);
+  await expect(today).toContainText('10');
+
+  await page.clock.fastForward('02:00');
+  await expect(today).toContainText('11');
+});

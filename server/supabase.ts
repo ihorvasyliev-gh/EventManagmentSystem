@@ -38,17 +38,42 @@ export const supabaseConfig = (env: SupabaseEnv): SupabaseConfig | null => {
 
 const keyHeaders = (key: string): Record<string, string> => ({ apikey: key, Authorization: `Bearer ${key}` });
 
-/** The signed-in user behind an access token, with their role, or null */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The user id written in an access token, unverified (the auth server checks the token itself) */
+export const tokenSubject = (token: string): string | null => {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const sub = (JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as { sub?: unknown }).sub;
+    return typeof sub === 'string' && UUID_RE.test(sub) ? sub : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The signed-in user behind an access token, with their role, or null. The token is checked by
+ * the auth server; the profile is read at the same time for the id the token names (instead of
+ * one request after the other, which every function call waited for), and used only if that is
+ * the id the auth server confirms.
+ */
 export const getCaller = async (cfg: SupabaseConfig, token: string | null): Promise<Caller | null> => {
   if (!token) return null;
-  const meRes = await fetch(`${cfg.url}/auth/v1/user`, { headers: { apikey: cfg.anonKey, Authorization: `Bearer ${token}` } });
+  const headers = { apikey: cfg.anonKey, Authorization: `Bearer ${token}` };
+  // Read with the caller's own token: row-level security lets signed-in users read profiles
+  const readProfile = (id: string) =>
+    fetch(`${cfg.url}/rest/v1/users?id=eq.${encodeURIComponent(id)}&select=role,full_name,email`, { headers });
+  const claimed = tokenSubject(token);
+  const [meRes, early] = await Promise.all([
+    fetch(`${cfg.url}/auth/v1/user`, { headers }),
+    claimed ? readProfile(claimed).catch(() => null) : Promise.resolve(null)
+  ]);
   if (!meRes.ok) return null;
   const me = (await meRes.json()) as { id?: string; email?: string };
   if (!me.id) return null;
-  // Read with the caller's own token: row-level security lets signed-in users read profiles
-  const profileRes = await fetch(`${cfg.url}/rest/v1/users?id=eq.${encodeURIComponent(me.id)}&select=role,full_name,email`, {
-    headers: { apikey: cfg.anonKey, Authorization: `Bearer ${token}` }
-  });
+  const profileRes = early && claimed === me.id ? early : await readProfile(me.id);
   const profile = profileRes.ok ? ((await profileRes.json()) as Array<{ role?: string; full_name?: string; email?: string }>)[0] : undefined;
   if (!profile) return null;
   return {

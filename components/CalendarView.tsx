@@ -3,6 +3,7 @@ import { type Event, type ViewMode, UserRole } from '../types';
 import { addMonths, isMultiDayEvent, APP_LOCALE } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { useMedia } from '../hooks/useMedia';
+import { useToday } from '../hooks/useToday';
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe';
 import { isAnyModalOpen } from '../hooks/useModalFocusTrap';
 import WeekView from './WeekView';
@@ -81,6 +82,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
   const isMobile = useMedia('(max-width: 640px)');
+  const today = useToday();
   const canAdd = !!onAddEventForDate && userRole === UserRole.ADMIN;
 
   // Remember the chosen view separately for phone and desktop layouts
@@ -251,10 +253,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }, [displayEvents, currentDate]);
 
   // Split month's events into upcoming (>= today midnight or ending today) and past (concluded strictly before today)
-  const startOfToday = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  }, []);
+  const startOfToday = today;
 
   const { upcomingEvents, pastEvents } = useMemo(() => {
     const upcoming: Event[] = [];
@@ -305,6 +304,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <div key={`week-${weekStart.toISOString()}`} className="animate-fade-in">
             <WeekView
               currentDate={currentDate}
+              today={today}
               events={displayEvents}
               onEventClick={onEventClick}
               onAddEventForDate={onAddEventForDate}
@@ -319,6 +319,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <div key={`month-${currentDate.getFullYear()}-${currentDate.getMonth()}`} className="animate-fade-in">
             <MonthGrid
               currentDate={currentDate}
+              today={today}
               eventsByDayKey={eventsByDayKey}
               isMobile={isMobile}
               selectedDay={selectedMobileDay}

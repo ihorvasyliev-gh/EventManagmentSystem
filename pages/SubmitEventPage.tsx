@@ -1,10 +1,12 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MapPin, AlertCircle } from 'lucide-react';
-import { submitEvent, getPublishedEventsForSubmitters } from '../services/submissionService';
+import { submitEvent, saveOwnEvent, getPublishedEventsForSubmitters, type SubmissionData } from '../services/submissionService';
 import { type User as AuthUser, UserRole, type Event } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
 import SessionPlaces from '../components/SessionPlaces';
-import { type TimeSlot, formatTimeRange, compareByStartTime, getSlotsForDate } from '../utils/multiDateUtils';
+import {
+  type TimeSlot, type ScheduleState, formatTimeRange, compareByStartTime, getSlotsForDate, readScheduleFromEvent, materializeCustomSchedule
+} from '../utils/multiDateUtils';
 import { useEventSchedule } from '../hooks/useEventSchedule';
 import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
@@ -19,12 +21,15 @@ import SubmitPreview from '../components/submit/SubmitPreview';
 import { SubmitTopBar, SubmitIntro, RestoredDraftNotice } from '../components/submit/SubmitIntro';
 import { Section, FieldError, inputClass } from '../components/submit/formParts';
 import CategoryPicker from '../components/submit/CategoryPicker';
+import RepeatPicker from '../components/submit/RepeatPicker';
+import { type RepeatSetting, NO_REPEAT, describeSeries, repeatFromRule, ruleFromRepeat, untilDate } from '../utils/repeat';
+import { ApiError } from '../services/apiClient';
 import PosterUpload from '../components/submit/PosterUpload';
 import ContactFields, { extraContactId, type ContactField } from '../components/submit/ContactFields';
 import { type ContactRow, newContactRow, toContactRows, fromContactRows } from '../utils/contacts';
 import SubmitButton, { SUBMIT_FORM_ID } from '../components/submit/SubmitButton';
 import {
-  type SavedDraft, readSavedSubmitter, saveSubmitter, readDraft, clearDraft, scheduleFromDraft, useDraftAutosave
+  type SavedDraft, readSavedSubmitter, saveSubmitter, readDraft, clearDraft, scheduleFromDraft, repeatFromDraft, useDraftAutosave
 } from '../components/submit/draft';
 import { usePosterFile } from '../hooks/usePosterFile';
 import TurnstileWidget, { TURNSTILE_ENABLED, type TurnstileHandle } from '../components/TurnstileWidget';
@@ -35,7 +40,7 @@ const DESCRIPTION_SOFT_LIMIT = 600;
 const DESCRIPTION_MAX = 2000;
 
 /** Form fields that can show an error (`contact-0-name` is the second contact's name) */
-type FieldName = 'title' | 'dates' | 'location' | 'description' | 'name' | 'email' | 'poster' | `contact-${number}-${ContactField}`;
+type FieldName = 'title' | 'dates' | 'repeat' | 'location' | 'description' | 'name' | 'email' | 'poster' | `contact-${number}-${ContactField}`;
 
 const contactErrorKey = (index: number, field: ContactField): FieldName => `${extraContactId(index)}-${field}` as FieldName;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -48,12 +53,30 @@ interface SubmitEventPageProps {
   initialDate?: Date | null;
   /** Admins: an event to copy ("Duplicate"): its details are filled in, the dates are left to pick */
   template?: Event | null;
+  /**
+   * Staff changing an event of their own (the series as stored): the form opens with all its
+   * details and saves through /api/edit-event, which logs what changed
+   */
+  editing?: Event | null;
+  /** Days deleted from that series earlier ("Delete only this occurrence"): left out of the dates */
+  editingExceptions?: Date[];
+  /** After the changes to `editing` are saved */
+  onSaved?: (result: { event: Event; changed: boolean; exceptionsCleared: boolean }) => void;
 }
+
+/** A stored event's dates, times and places as the form shows them */
+const scheduleOfEvent = (event: Event, exceptions?: Date[]): ScheduleState => {
+  const remaining = materializeCustomSchedule(event, exceptions);
+  // No suggested end time: an event saved without one keeps it that way
+  return readScheduleFromEvent(remaining ? { ...event, ...remaining } : event, null);
+};
 
 const fmtChipDate = (d: Date) => formatOccurrenceLabel(d);
 
 /** The event form for staff (sent for review) and admins (published straight away) */
-const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, currentUser, events = [], initialDate, template }) => {
+const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
+  onBackToLogin, currentUser, events = [], initialDate, template, editing, editingExceptions, onSaved
+}) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   // No date is picked up front, except the day an admin opened the form from
@@ -65,38 +88,46 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [initialDate]);
 
   // A saved draft is offered back unless the admin came here for a specific day or to duplicate
-  // an event, whose details then fill the form instead (dates are left to pick)
+  // an event, whose details then fill the form instead (dates are left to pick), or someone is
+  // changing their event (all of it is filled in)
+  const source = editing ?? template;
   const [restoredDraft] = useState<SavedDraft | null>(() => {
-    if (template) {
-      const category = CATEGORIES.find((c) => c === template.category);
+    if (source) {
+      const category = CATEGORIES.find((c) => c === source.category);
       return {
-        title: template.title,
+        title: source.title,
         category: category ?? CATEGORIES[0],
         dates: [],
-        location: template.location,
-        description: template.description,
-        submitterName: template.submitterName,
-        submitterEmail: template.submitterEmail,
-        extraContacts: template.extraContacts
+        location: source.location,
+        description: source.description,
+        submitterName: source.submitterName,
+        submitterEmail: source.submitterEmail,
+        extraContacts: source.extraContacts
       };
     }
     return initialDate ? null : readDraft();
   });
 
   const [title, setTitle] = useState(restoredDraft?.title ?? '');
-  const [category, setCategory] = useState<EventCategoryName>(
-    restoredDraft && CATEGORIES.includes(restoredDraft.category) ? restoredDraft.category : CATEGORIES[0]
+  // An event being changed keeps its category, even one an admin added (or none)
+  const [category, setCategory] = useState<string>(() => {
+    if (editing) return editing.category ?? '';
+    return restoredDraft && CATEGORIES.includes(restoredDraft.category) ? restoredDraft.category : CATEGORIES[0];
+  });
+  const scheduleControls = useEventSchedule(() =>
+    editing ? scheduleOfEvent(editing, editingExceptions) : scheduleFromDraft(restoredDraft, defaultDate)
   );
-  const scheduleControls = useEventSchedule(() => scheduleFromDraft(restoredDraft, defaultDate));
+  // Every week / 2 weeks / month from the first date (only with one date and one time picked)
+  const [repeat, setRepeat] = useState<RepeatSetting>(() => (editing ? repeatFromRule(editing.recurrence) : repeatFromDraft(restoredDraft)));
   const { schedule, update: updateSchedule, sessions, occurrences, activePerDate } = scheduleControls;
   const { dates: selectedDates, shared: sharedTimes, sameTime: sameTimeForAll, perDate: perDateTimes, samePlace, location, places } = schedule;
   const setLocation = (value: string) => updateSchedule({ location: value });
   const [description, setDescription] = useState(restoredDraft?.description ?? '');
-  const [submitterName, setSubmitterName] = useState(() => (template && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
-  const [submitterEmail, setSubmitterEmail] = useState(() => (template && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
+  const [submitterName, setSubmitterName] = useState(() => (source && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
+  const [submitterEmail, setSubmitterEmail] = useState(() => (source && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
   // More contact people (the person sending it in is the first)
   const [extraContacts, setExtraContacts] = useState<ContactRow[]>(() => toContactRows(restoredDraft?.extraContacts));
-  const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft && !template);
+  const [showDraftNotice, setShowDraftNotice] = useState(!!restoredDraft && !source);
   const rememberedSubmitter = !currentUser && !!readSavedSubmitter().email;
 
   // Events at the same time are shown as a heads-up. Signed in, they're the calendar's own;
@@ -118,9 +149,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     };
   }, [events, currentUser]);
 
+  const editingId = editing?.id;
   const conflictInfo = useMemo(
-    () => detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(activeEvents, selectedDates)),
-    [occurrences, selectedDates, activeEvents]
+    () => detectOccurrenceConflicts(occurrences, getOccurrencesAroundDates(activeEvents, selectedDates), editingId),
+    [occurrences, selectedDates, activeEvents, editingId]
   );
   // Same-time events, with likely duplicates (similar name or same venue) first
   const overlaps = useMemo(
@@ -139,8 +171,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setErrors((prev) => (prev.poster === (message ?? undefined) ? prev : { ...prev, poster: message ?? undefined }))
   );
   const { file: posterFile, preview: posterPreview } = poster;
-  // Duplicating: start with the original's poster (it stays shared until replaced)
-  const templatePosterUrl = template?.posterUrl ?? null;
+  // Duplicating or changing an event: start with its poster (a copy shares it until replaced)
+  const templatePosterUrl = source?.posterUrl ?? null;
   useEffect(() => {
     if (templatePosterUrl) poster.reset(templatePosterUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the template
@@ -162,17 +194,34 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   const placeValues = useMemo(() => (samePlace ? [] : sessions.map((s) => places[s.key] ?? '')), [samePlace, sessions, places]);
   const submitErrorRef = useRef<HTMLDivElement>(null);
 
+  // A repeat starts from one date at one time; with more picked, the event runs on just those
+  const canRepeat = sessions.length <= 1;
+  const activeRepeat = canRepeat ? repeat : NO_REPEAT;
+  const firstStart = occurrences[0]?.start ?? null;
+  const repeatLabel = firstStart ? describeSeries(ruleFromRepeat(activeRepeat), firstStart) : null;
+
   // Autosave the draft (text fields only — files can't be stored)
   const draftToSave: SavedDraft = {
-    title, category, location, description,
+    // (only a new event is kept as a draft, and its category is one of the list)
+    title, category: category as EventCategoryName, location, description,
     dates: selectedDates.map((d) => d.toISOString()),
     sharedTimes,
     sameTime: sameTimeForAll, perDateTimes,
     samePlace, places,
     submitterName, submitterEmail,
-    extraContacts: fromContactRows(extraContacts)
+    extraContacts: fromContactRows(extraContacts),
+    repeat
   };
-  useDraftAutosave(draftToSave, [title, location, description, ...placeValues].some((v) => v.trim()), !submitted);
+  // Changes to an existing event aren't kept as a draft (they'd come back as a new event)
+  useDraftAutosave(draftToSave, [title, location, description, ...placeValues].some((v) => v.trim()), !submitted && !editing);
+
+  // Changing an event: leaving with unsaved changes asks first (the poster is compared on its own:
+  // it is filled in just after the first render)
+  const formSnapshot = JSON.stringify([
+    title, category, description, scheduleControls.snapshot, activeRepeat, submitterName, submitterEmail, fromContactRows(extraContacts)
+  ]);
+  const [baseline] = useState(formSnapshot);
+  const hasChanges = () => formSnapshot !== baseline || !!posterFile || (posterPreview ?? null) !== templatePosterUrl;
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -220,6 +269,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       const timeError = scheduleControls.validateTimes();
       if (timeError) next.dates = timeError;
     }
+    const lastDate = activeRepeat.type !== 'none' ? untilDate(activeRepeat.until) : undefined;
+    if (lastDate && sortedDates.length > 0) {
+      const firstDay = new Date(sortedDates[0]);
+      firstDay.setHours(0, 0, 0, 0);
+      if (lastDate < firstDay) next.repeat = 'The last date is before the first date.';
+    }
     if (samePlace) {
       if (!location.trim()) next.location = 'Where is it happening? A room or address is fine.';
     } else {
@@ -248,7 +303,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     const found = validate();
     setErrors(found);
     const order: FieldName[] = [
-      'title', 'dates', 'location', 'description', 'poster', 'name', 'email',
+      'title', 'dates', 'repeat', 'location', 'description', 'poster', 'name', 'email',
       ...extraContacts.flatMap((_, i) => [contactErrorKey(i, 'name'), contactErrorKey(i, 'email')])
     ];
     const firstInvalid = order.find((f) => found[f]);
@@ -259,7 +314,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       return;
     }
 
-    if (isAdmin) {
+    // Admins publish and staff save changes to their event without the review screen
+    if (isAdmin || editing) {
       void sendEvent();
       return;
     }
@@ -283,6 +339,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       title: title.trim(),
       category,
       days,
+      repeat: repeatLabel ?? undefined,
       location: samePlace ? location.trim() : '',
       description: description.trim(),
       posterUrl: posterPreview,
@@ -313,24 +370,37 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   }, [reviewing, focusField]);
 
   const sendEvent = async () => {
-    const { date: startDateTime, endDate: endDateTime, location: eventLocation, recurrence } = scheduleControls.build();
+    const built = scheduleControls.build();
+    const data: SubmissionData = {
+      title: title.trim(),
+      description: description.trim(),
+      date: built.date,
+      endDate: built.endDate,
+      location: built.location,
+      category,
+      submitterName: submitterName.trim(),
+      submitterEmail: submitterEmail.trim(),
+      extraContacts: fromContactRows(extraContacts),
+      posterFile: posterFile || undefined,
+      // Picked dates make their own series; one date may repeat on a pattern
+      recurrence: built.recurrence ?? ruleFromRepeat(activeRepeat)
+    };
     setSubmitError(null);
     setIsSubmitting(true);
     try {
+      if (editing) {
+        const result = await saveOwnEvent(editing.id, data, {
+          baseUpdatedAt: editing.updatedAt,
+          keepPoster: !!posterPreview && posterPreview === templatePosterUrl
+        });
+        onSaved?.(result);
+        return;
+      }
+
       await submitEvent({
-        title: title.trim(),
-        description: description.trim(),
-        date: startDateTime,
-        endDate: endDateTime,
-        location: eventLocation,
-        category,
-        submitterName: submitterName.trim(),
-        submitterEmail: submitterEmail.trim(),
-        extraContacts: fromContactRows(extraContacts),
-        posterFile: posterFile || undefined,
+        ...data,
         existingPosterUrl: !posterFile && posterPreview && posterPreview === templatePosterUrl ? templatePosterUrl : null,
         publish: isAdmin,
-        recurrence,
         turnstileToken
       });
 
@@ -344,11 +414,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
       // A check token works once; the next attempt needs a new one
       if (needsHumanCheck) turnstileRef.current?.reset();
       const message = err instanceof Error && err.message ? err.message : '';
-      setSubmitError(
-        message
-          ? `The event could not be sent (${message}). Your details are saved — please try again.`
-          : 'The event could not be sent. Please check your connection and try again — your details are saved.'
-      );
+      if (editing) {
+        // Saved by someone else meanwhile: the server's message says what to do
+        setSubmitError(err instanceof ApiError && err.status === 409
+          ? message
+          : `Your changes could not be saved${message ? ` (${message})` : ''}. They are still in the form — please try again.`);
+      } else {
+        setSubmitError(
+          message
+            ? `The event could not be sent (${message}). Your details are saved — please try again.`
+            : 'The event could not be sent. Please check your connection and try again — your details are saved.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -361,6 +438,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
     setExtraContacts([]);
     poster.reset();
     scheduleControls.reset(scheduleFromDraft(null, defaultDate));
+    setRepeat(NO_REPEAT);
     setErrors({});
     setSubmitError(null);
   };
@@ -378,6 +456,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
   };
 
   const backLabel = currentUser ? 'Back to calendar' : 'Staff login';
+  const handleBack = onBackToLogin && (() => {
+    if (editing && hasChanges() && !window.confirm('You have unsaved changes. Discard them?')) return;
+    onBackToLogin();
+  });
 
   // --- Success screen ---------------------------------------------------------
   if (submitted) {
@@ -425,12 +507,12 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
-      <SubmitTopBar onBack={onBackToLogin} backLabel={backLabel} />
+      <SubmitTopBar onBack={handleBack} backLabel={backLabel} />
 
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-8 pb-32 lg:pb-12">
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 xl:gap-10 lg:items-start">
           <div className="min-w-0">
-            <SubmitIntro isAdmin={isAdmin} />
+            <SubmitIntro isAdmin={isAdmin} editing={editing ? { published: editing.status === 'published' } : null} />
 
             {showDraftNotice && (
               <RestoredDraftNotice onStartFresh={handleDiscardDraft} onDismiss={() => setShowDraftNotice(false)} />
@@ -457,11 +539,15 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                   <FieldError id="err-title" message={errors.title} />
                 </div>
 
-                <CategoryPicker value={category} onChange={setCategory} />
+                <CategoryPicker value={category} onChange={setCategory} extra={editing?.category} />
               </Section>
 
               {/* 2. When */}
-              <Section step={2} title="When is it?" hint="Tap every date it runs on — for a series, pick each day.">
+              <Section
+                step={2}
+                title="When is it?"
+                hint="Tap the date, or every date of a series. Every week or month? Pick the first date and choose how it repeats below."
+              >
                 <div id="field-dates" tabIndex={-1} className="outline-none scroll-mt-24">
                   <MultiDatePicker
                     selectedDates={selectedDates}
@@ -478,6 +564,15 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
                     error={errors.dates}
                   />
                 </div>
+
+                <RepeatPicker
+                  value={repeat}
+                  onChange={(next) => { setRepeat(next); clearError('repeat'); }}
+                  firstDate={firstStart}
+                  dateCount={selectedDates.length}
+                  sessionCount={sessions.length}
+                  error={errors.repeat}
+                />
 
                 <OverlapList
                   entries={overlaps}
@@ -565,8 +660,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {/* 4. Who */}
               <Section
                 step={4}
-                title={isAdmin ? (extraContacts.length > 0 ? 'Contact people' : 'Contact person') : 'Your details'}
-                hint={isAdmin
+                title={isAdmin || editing ? (extraContacts.length > 0 ? 'Contact people' : 'Contact person') : 'Your details'}
+                hint={isAdmin || editing
                   ? 'Shown as the contact in the digest. Add more people if there are several.'
                   : 'So Elizabeth can reach you with any questions. Anyone else you add is shown as a contact in the digest too.'}
               >
@@ -609,16 +704,18 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
               {/* Desktop / tablet submit */}
               <div className="hidden sm:flex items-center justify-between gap-4 pt-1">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {isAdmin ? 'Published to the calendar immediately.' : 'Sent to Elizabeth for review before it’s published.'}
+                  {editing
+                    ? (editing.status === 'published' ? 'Your changes go on the calendar straight away.' : 'It stays in the review queue, with your changes.')
+                    : isAdmin ? 'Published to the calendar immediately.' : 'Sent to Elizabeth for review before it’s published.'}
                 </p>
-                <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} />
+                <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={!!editing} />
               </div>
             </form>
           </div>
 
           {/* Sidebar: live preview + what happens next (desktop) */}
           <SubmitPreview
-            isAdmin={isAdmin}
+            showGuide={!isAdmin && !editing}
             title={title}
             category={category}
             description={description}
@@ -626,13 +723,14 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({ onBackToLogin, curren
             dates={sortedDates}
             timeLabel={timeLabel}
             placeLabel={placeLabel}
+            repeatLabel={repeatLabel}
           />
         </div>
       </div>
 
       {/* Phone: submit bar always within thumb reach */}
       <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} full />
+        <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={!!editing} full />
       </div>
     </div>
   );

@@ -57,6 +57,30 @@ export const storeFile = async (bucket: FileBucket, file: File, contentType: str
 };
 
 /**
+ * Checks and stores a flyer sent with the event form (/api/submit, /api/edit-event): an image
+ * (a PDF flyer arrives already turned into one) that really is one. Returns its URL, or why it
+ * was refused with the status to answer.
+ */
+export const storeFlyer = async (
+  bucket: FileBucket | undefined,
+  poster: File
+): Promise<{ url: string } | { error: string; status: number }> => {
+  if (!bucket) return { error: 'Flyer uploads are not set up on the server.', status: 500 };
+  if (poster.size > MAX_UPLOAD_BYTES) return { error: 'The flyer is too large (max 15 MB).', status: 413 };
+  const type = (poster.type || '').toLowerCase();
+  if (!IMAGE_TYPES.has(type)) return { error: 'The flyer must be an image (PNG, JPG, GIF or WEBP) or a PDF.', status: 415 };
+  if (!(await contentMatchesType(poster, type))) {
+    return { error: 'The flyer’s file is damaged or isn’t really an image. Please save it again as a PNG or JPG and send it once more.', status: 415 };
+  }
+  try {
+    return { url: (await storeFile(bucket, poster, type)).url };
+  } catch (err) {
+    console.error('Flyer upload failed:', err);
+    return { error: 'The flyer could not be uploaded. Please try again.', status: 502 };
+  }
+};
+
+/**
  * How /api/file hands a stored file over, under its own name (without the random part of the key
  * or the digests/ folder). A shared digest downloads: opened in a tab, PDF extensions (Adobe
  * Acrobat's) take it over and render it badly; saved, it opens in the person's own PDF app.

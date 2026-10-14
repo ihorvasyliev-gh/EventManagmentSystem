@@ -14,6 +14,7 @@ import PosterLightbox from './PosterLightbox';
 import { expandRecurringEvents, isRecurringEvent } from '../utils/recurrence';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { useToast } from '../contexts/ToastContext';
+import { ownsEvent } from '../utils/eventOwnership';
 
 interface EventModalProps {
   isOpen: boolean;
@@ -22,11 +23,14 @@ interface EventModalProps {
   events?: Event[];
   role: UserRole;
   currentUserId?: string;
+  currentUserEmail?: string;
   onUpdate?: (id: string, eventData: EventInput) => Promise<void>;
   onDelete?: (id: string) => Promise<void>; // For event deletion
   onDeleteInstance?: (eventId: string, instanceDate: Date) => Promise<void>; // For instance deletion
   /** Admins: start a new event from this one (same details, new dates) */
   onDuplicate?: (event: Event) => void;
+  /** Staff: change an event of their own (in the full-screen form) */
+  onEditOwn?: (event: Event) => void;
   initialMode?: 'view' | 'edit';
   autoApproveOnSave?: boolean;
   /** Unsaved form data to restore (e.g. after a failed save) */
@@ -48,10 +52,12 @@ const EventModal: React.FC<EventModalProps> = ({
   events = [],
   role,
   currentUserId = '1',
+  currentUserEmail,
   onUpdate,
   onDelete,
   onDeleteInstance,
   onDuplicate,
+  onEditOwn,
   initialMode = 'view',
   autoApproveOnSave = false,
   draft = null,
@@ -128,21 +134,25 @@ const EventModal: React.FC<EventModalProps> = ({
   useModalFocusTrap(isOpen, () => requestCloseRef.current(), modalPanelRef);
 
   const showForm = isEditing;
+  const isAdmin = role === UserRole.ADMIN;
+  // Staff change their own events in the full-screen form instead
+  const canEditOwn = !isAdmin && !!event && !!onEditOwn && ownsEvent(event, { id: currentUserId, email: currentUserEmail });
 
-  // "E" opens the edit form from the details view (admins)
+  // "E" opens the edit form from the details view (admins, and staff on their own events)
   useEffect(() => {
-    if (!isOpen || showForm || showDeleteDialog || role !== UserRole.ADMIN) return;
+    if (!isOpen || showForm || showDeleteDialog || (!isAdmin && !canEditOwn)) return;
     const handleKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) return;
       if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setIsEditing(true);
+        if (canEditOwn && event) onEditOwn?.(event);
+        else setIsEditing(true);
       }
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [isOpen, showForm, showDeleteDialog, role]);
+  }, [isOpen, showForm, showDeleteDialog, isAdmin, canEditOwn, onEditOwn, event]);
 
   // Opening (or "Cancel" back to the details): the mode, attachments and history of the event
   useEffect(() => {
@@ -394,7 +404,8 @@ const EventModal: React.FC<EventModalProps> = ({
             isEditing={isEditing}
             isSubmitting={isSubmitting}
             autoApproveOnSave={autoApproveOnSave}
-            canManage={role === UserRole.ADMIN && !!event}
+            canManage={isAdmin && !!event}
+            onEditOwn={canEditOwn && event && onEditOwn ? () => onEditOwn(event) : undefined}
             onCancel={handleCancelForm}
             onClose={onClose}
             onDelete={() => setShowDeleteDialog(true)}

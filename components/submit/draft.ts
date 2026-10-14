@@ -7,6 +7,7 @@ import {
   type TimeRange, type TimeSlot, type SessionPlaces as SessionPlacesMap, type ScheduleState, makeSlot
 } from '../../utils/multiDateUtils.ts';
 import { type EventCategoryName } from '../../constants/categories.ts';
+import { type RepeatSetting, NO_REPEAT, isRepeatChoice } from '../../utils/repeat.ts';
 import type { EventContact } from '../../types.ts';
 
 const SUBMITTER_STORAGE_KEY = 'ccp_submitter_details';
@@ -50,6 +51,8 @@ export interface SavedDraft {
   submitterEmail?: string;
   /** Contact people after the submitter */
   extraContacts?: EventContact[];
+  /** Repeats every week / 2 weeks / month (older drafts don't have it) */
+  repeat?: RepeatSetting;
 }
 
 /** The unsent event, if one was saved with anything typed in it */
@@ -126,4 +129,11 @@ export const scheduleFromDraft = (draft: SavedDraft | null, defaultDate: Date | 
     location: draft?.location ?? '',
     places: draft?.places && typeof draft.places === 'object' ? draft.places : {},
   };
+};
+
+/** A draft's repeat, if it is one the form offers */
+export const repeatFromDraft = (draft: SavedDraft | null): RepeatSetting => {
+  const saved = draft?.repeat;
+  if (!saved || typeof saved !== 'object' || !isRepeatChoice(saved)) return NO_REPEAT;
+  return { type: saved.type, interval: saved.interval, until: typeof saved.until === 'string' ? saved.until : '' };
 };

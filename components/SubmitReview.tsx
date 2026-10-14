@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ArrowLeft, CalendarDays, CheckCircle2, Clock, ImageIcon, Info, Mail, MapPin, Pencil, Send, User, AlertCircle
+  ArrowLeft, CalendarDays, CheckCircle2, Clock, ImageIcon, Info, Mail, MapPin, Pencil, Repeat, Send, User, AlertCircle
 } from 'lucide-react';
 import { getCategoryDotColor } from './WeekView';
 import ThemeToggle from './ThemeToggle';
@@ -14,6 +14,8 @@ export interface SubmissionSummary {
   category: string;
   /** One entry per day, with that day's times (and places when they differ) */
   days: Array<{ key: string; date: string; sessions: Array<{ key: string; time: string; place: string }> }>;
+  /** How it repeats from its first date ("Every week on Thursday from … until …"), if it does */
+  repeat?: string;
   /** Shared venue ('' when each date and time has its own) */
   location: string;
   description: string;
@@ -55,8 +57,8 @@ const Block: React.FC<{ icon: React.ReactNode; label: string; onEdit: () => void
   </div>
 );
 
-/** The dates with their times (and places), grouped by day */
-export const ScheduleList: React.FC<{ days: SubmissionSummary['days']; compact?: boolean }> = ({ days, compact }) => (
+/** The dates with their times (and places), grouped by day, and how the event repeats */
+export const ScheduleList: React.FC<{ days: SubmissionSummary['days']; repeat?: string; compact?: boolean }> = ({ days, repeat, compact }) => (
   <ul className={compact ? 'space-y-1.5' : 'space-y-2'}>
     {days.map((day) => (
       <li key={day.key} className="flex flex-col min-[420px]:flex-row min-[420px]:items-baseline gap-x-3 gap-y-0.5">
@@ -82,6 +84,11 @@ export const ScheduleList: React.FC<{ days: SubmissionSummary['days']; compact?:
         </span>
       </li>
     ))}
+    {repeat && (
+      <li className="flex items-start gap-2 font-medium text-brand-700 dark:text-brand-300">
+        <Repeat className="w-3.5 h-3.5 mt-[0.2rem] shrink-0" aria-hidden="true" /> {repeat}
+      </li>
+    )}
   </ul>
 );
 
@@ -198,11 +205,11 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
           <div className="px-4 sm:px-6 pb-2 mt-2">
             <Block
               icon={<CalendarDays className="w-4 h-4" />}
-              label={dateCount === 1 ? 'Date & time' : `${dateCount} dates`}
+              label={summary.repeat ? 'Repeats' : dateCount === 1 ? 'Date & time' : `${dateCount} dates`}
               onEdit={() => onEdit('dates')}
               editLabel="Edit dates and times"
             >
-              <ScheduleList days={summary.days} />
+              <ScheduleList days={summary.days} repeat={summary.repeat} />
             </Block>
 
             {summary.location && (

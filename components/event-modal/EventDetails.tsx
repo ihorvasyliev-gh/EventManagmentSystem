@@ -8,6 +8,7 @@ import EventHistory from '../EventHistory';
 import { getCategoryColor } from '../WeekView';
 import AddToCalendarMenu from './AddToCalendarMenu';
 import { eventContacts } from '../../utils/contacts';
+import { describeRepeat } from '../../utils/repeat';
 
 interface EventDetailsProps {
   event: Event;
@@ -163,6 +164,9 @@ const EventDetails: React.FC<EventDetailsProps> = ({
         <p className="text-[10px] text-brand-600 dark:text-brand-300 font-bold uppercase tracking-[0.14em] flex items-center gap-1.5">
           <Repeat className="h-3 w-3" /> Other upcoming dates
         </p>
+        {describeRepeat(event.recurrence, event.date) && (
+          <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-300">{describeRepeat(event.recurrence, event.date)}</p>
+        )}
         <ul className="mt-2 flex flex-wrap gap-1.5">
           {seriesDates.upcoming.map((o) => (
             <li key={o.instanceKey ?? o.date.getTime()} className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 tabular-nums">

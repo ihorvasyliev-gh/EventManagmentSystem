@@ -227,8 +227,16 @@ You can simply approve the submission in the **Submissions Inbox**, then click *
 ### An event has more than one contact person
 In the form, under **Contact person**, click **Add another contact person** and enter their name and email (up to five people in all). When editing an event, use **Add contact person** under **Contact Details**. Everyone listed appears as a contact on the event, in the digest PDF and in the WhatsApp text.
 
+### A staff member changed their event — how do I see what changed?
+Staff who sign in can change the events they sent in (the ones they sent while signed in, or that list their email as the first contact). A published event stays published, so their changes are on the calendar straight away; a pending one stays in your inbox with the changes.
+
+Every change is recorded. **Account menu** (your name, top right) → **Change log** lists them, newest first: who changed which event, and each field's old value (struck out) and new value — for example *Date & time: ~~Thu 15 Oct, 10:00–11:30~~ → Thu 22 Oct, 10:00–11:30*. A number beside **Change log** (and a dot on your initials) counts the staff changes since you last opened it on this device, and those are marked **New**. Click the event's name to open it; **All activity** also shows admins' edits and new submissions. Each event's own changes are also listed under **History** at the bottom of its details.
+
 ### Can staff view the submissions inbox?
 No. The **Submissions** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff only see published events on the public calendar.
+
+### A staff member's event happens every week
+In the form, under the date picker, **Does it repeat?** offers **Every week**, **Every 2 weeks** and **Every month**, from the date they picked, with an optional **Last date** (empty: it carries on). The inbox shows it as, for example, *Every week on Thursday from Thu 15 Oct 2026, with no end date*. Approving it puts every date on the calendar and in each digest. To repeat in another way (every day, every 3 weeks, a set number of times), edit it and use **Recurrence** in the edit form.
 
 ### An event repeats with small changes — do I have to type it all again?
 No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact people and flyer. Pick the new date, change anything else that is different and click **Publish event**.

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchAllPages } from './paging';
 import { EVENT_COLUMNS, type EventRow, type AttachmentRow, type HistoryRow, mapEventRow, mapAttachmentRow, mapHistoryRow, eventToRow, toIsoList } from './eventMapper';
 import { deleteStoredFiles } from './fileService';
+import { describeChanges } from '../utils/eventChanges';
 
 export { uploadPoster as uploadPosterToR2 } from './fileService';
 
@@ -100,14 +101,10 @@ export const updateEvent = async (
     throw new EditConflictError(mapEventRow(oldEventData));
   }
 
-  const changes: Record<string, { old: unknown; new: unknown }> = {};
-  if (eventData.title !== oldEventData.title) changes.title = { old: oldEventData.title, new: eventData.title };
-  if (eventData.description !== oldEventData.description) changes.description = { old: oldEventData.description || '', new: eventData.description || '' };
-  if (eventData.location !== oldEventData.location) changes.location = { old: oldEventData.location || '', new: eventData.location || '' };
-  if (eventData.status !== oldEventData.status) changes.status = { old: oldEventData.status, new: eventData.status };
-  if (eventData.category !== oldEventData.category) changes.category = { old: oldEventData.category || null, new: eventData.category || null };
+  const row = eventToRow(eventData);
+  const changes = describeChanges(oldEventData, row);
 
-  let update = supabase.from('events').update(eventToRow(eventData)).eq('id', id);
+  let update = supabase.from('events').update(row).eq('id', id);
   // Only if nobody saved it between the check above and this write
   if (oldEventData.updated_at) update = update.eq('updated_at', oldEventData.updated_at);
   const { data: updatedEventData, error: updateError } = await update

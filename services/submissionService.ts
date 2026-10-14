@@ -25,6 +25,31 @@ export interface SubmissionData {
   existingPosterUrl?: string | null;
 }
 
+/** The form's fields as /api/submit and /api/edit-event read them */
+const eventFields = (data: SubmissionData) => {
+  const rule = data.recurrence;
+  const custom = rule?.type === 'custom';
+  const pattern = !!rule && rule.type !== 'custom' && rule.type !== 'none';
+  return {
+    title: data.title.trim(),
+    description: data.description.trim(),
+    date: data.date.toISOString(),
+    end_date: data.endDate ? data.endDate.toISOString() : null,
+    location: data.location.trim(),
+    category: data.category || null,
+    recurrence_type: rule?.type ?? 'none',
+    recurrence_interval: pattern ? rule.interval || 1 : null,
+    recurrence_end_date: pattern && rule.endDate ? rule.endDate.toISOString() : null,
+    recurrence_occurrences: pattern ? rule.occurrences || null : null,
+    recurrence_custom_dates: custom ? toIsoList(rule.customDates) : null,
+    recurrence_custom_end_dates: custom ? toIsoList(rule.customEndDates) : null,
+    recurrence_custom_locations: custom ? rule.customLocations ?? null : null,
+    submitter_name: data.submitterName.trim(),
+    submitter_email: data.submitterEmail.trim(),
+    extra_contacts: data.extraContacts ?? []
+  };
+};
+
 /**
  * Sends the /submit form: the event and its flyer go to the server together, so if the flyer
  * can't be saved the whole submission fails with a message, instead of arriving without it.
@@ -33,25 +58,36 @@ export interface SubmissionData {
 export const submitEvent = async (data: SubmissionData): Promise<{ id: string; status: Event['status'] }> => {
   const form = new FormData();
   form.append('event', JSON.stringify({
-    title: data.title.trim(),
-    description: data.description.trim(),
-    date: data.date.toISOString(),
-    end_date: data.endDate ? data.endDate.toISOString() : null,
-    location: data.location.trim(),
-    category: data.category || null,
-    recurrence_type: data.recurrence?.type === 'custom' ? 'custom' : 'none',
-    recurrence_custom_dates: data.recurrence?.type === 'custom' ? toIsoList(data.recurrence.customDates) : null,
-    recurrence_custom_end_dates: data.recurrence?.type === 'custom' ? toIsoList(data.recurrence.customEndDates) : null,
-    recurrence_custom_locations: data.recurrence?.type === 'custom' ? data.recurrence.customLocations ?? null : null,
-    submitter_name: data.submitterName.trim(),
-    submitter_email: data.submitterEmail.trim(),
-    extra_contacts: data.extraContacts ?? [],
+    ...eventFields(data),
     publish: !!data.publish,
     poster_url: data.posterFile ? null : data.existingPosterUrl ?? null
   }));
   if (data.posterFile) form.append('poster', data.posterFile, data.posterFile.name);
   if (data.turnstileToken) form.append('turnstileToken', data.turnstileToken);
   return callApi<{ id: string; status: Event['status'] }>('/api/submit', { method: 'POST', form, auth: 'optional' });
+};
+
+/**
+ * Saves staff's changes to an event of their own (/api/edit-event, which logs what changed).
+ * `baseUpdatedAt` is when the version the form opened was saved: if anyone saved it since,
+ * nothing is written and an ApiError with status 409 says so. Without a new `posterFile`,
+ * `keepPoster` keeps the stored flyer, or removes it when false.
+ */
+export const saveOwnEvent = async (
+  id: string,
+  data: SubmissionData,
+  options: { baseUpdatedAt?: Date; keepPoster: boolean }
+): Promise<{ event: Event; changed: boolean; exceptionsCleared: boolean }> => {
+  const form = new FormData();
+  form.append('event', JSON.stringify({
+    ...eventFields(data),
+    id,
+    base_updated_at: options.baseUpdatedAt ? options.baseUpdatedAt.toISOString() : null,
+    keep_poster: !data.posterFile && options.keepPoster
+  }));
+  if (data.posterFile) form.append('poster', data.posterFile, data.posterFile.name);
+  const result = await callApi<{ event: EventRow; changed: boolean; exceptionsCleared: boolean }>('/api/edit-event', { method: 'POST', form });
+  return { event: mapEventRow(result.event), changed: result.changed, exceptionsCleared: result.exceptionsCleared };
 };
 
 /** Drafts waiting for review (admins), newest first */

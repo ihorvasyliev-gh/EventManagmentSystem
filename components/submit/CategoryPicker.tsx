@@ -2,12 +2,15 @@ import React from 'react';
 import { EVENT_CATEGORIES, type EventCategoryName } from '../../constants/categories';
 import { getCategoryDotColor } from '../WeekView';
 
-/** The categories as a row of pills (radio buttons underneath) */
-const CategoryPicker: React.FC<{ value: EventCategoryName; onChange: (category: EventCategoryName) => void }> = ({ value, onChange }) => (
+/**
+ * The categories as a row of pills (radio buttons underneath). An event being edited may have
+ * a category an admin added: it is offered too, first.
+ */
+const CategoryPicker: React.FC<{ value: string; onChange: (category: string) => void; extra?: string | null }> = ({ value, onChange, extra }) => (
   <fieldset>
     <legend className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">Category</legend>
     <div className="flex flex-wrap gap-2">
-      {EVENT_CATEGORIES.map((cat) => {
+      {[...(extra && !EVENT_CATEGORIES.includes(extra as EventCategoryName) ? [extra] : []), ...EVENT_CATEGORIES].map((cat) => {
         const selected = value === cat;
         return (
           <label

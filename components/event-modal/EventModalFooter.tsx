@@ -15,6 +15,8 @@ interface EventModalFooterProps {
   onDelete: () => void;
   onDuplicate?: () => void;
   onEdit: () => void;
+  /** Staff on an event of their own: Edit opens the full-screen form */
+  onEditOwn?: () => void;
 }
 
 const secondaryButton = 'cta inline-flex justify-center items-center rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all w-full sm:w-auto';
@@ -29,7 +31,8 @@ const EventModalFooter: React.FC<EventModalFooterProps> = ({
   onClose,
   onDelete,
   onDuplicate,
-  onEdit
+  onEdit,
+  onEditOwn
 }) => (
   <div className="bg-slate-50 dark:bg-slate-800/50 px-4 sm:px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex flex-col-reverse sm:flex-row-reverse gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
     {showForm ? (
@@ -76,6 +79,22 @@ const EventModalFooter: React.FC<EventModalFooterProps> = ({
         >
           {/* Words only under 400px: with the icon it didn't fit beside Delete and Duplicate */}
           <Pencil className="hidden min-[400px]:block h-4 w-4 shrink-0" />
+          Edit event
+        </button>
+      </div>
+    ) : onEditOwn ? (
+      <div className="flex w-full items-center gap-2">
+        <button type="button" onClick={onClose} className="cta hidden sm:inline-flex sm:ml-auto justify-center items-center rounded px-5 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all">
+          Close
+        </button>
+        <button
+          type="button"
+          onClick={onEditOwn}
+          className="cta inline-flex justify-center items-center gap-1.5 rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-brand-600 text-white hover:bg-brand-700 shadow-sm transition-all flex-1 sm:flex-none"
+          title="Change your event (E)"
+          aria-keyshortcuts="e"
+        >
+          <Pencil className="h-4 w-4 shrink-0" />
           Edit event
         </button>
       </div>

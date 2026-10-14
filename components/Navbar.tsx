@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -19,6 +19,10 @@ interface NavbarProps {
   onOpenStaff?: () => void;
   /** Admins: event statistics for Board reports */
   onOpenStats?: () => void;
+  /** Admins: who changed which event (staff change their own events without review) */
+  onOpenChangeLog?: () => void;
+  /** Changes staff made since the change log was last opened */
+  changeLogCount?: number;
   onChangePassword?: () => void;
 }
 
@@ -47,6 +51,8 @@ const Navbar: React.FC<NavbarProps> = ({
   onOpenSubmitEvent,
   onOpenStaff,
   onOpenStats,
+  onOpenChangeLog,
+  changeLogCount = 0,
   onChangePassword
 }) => {
   const { theme, toggleTheme } = useTheme();
@@ -195,8 +201,11 @@ const Navbar: React.FC<NavbarProps> = ({
                   className="flex items-center gap-2 rounded-xl pl-1 pr-2 py-1 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
                   title={`${user.fullName} (${user.role})`}
                 >
-                  <span className="w-9 h-9 rounded-full bg-ccp-green-600 text-white text-xs font-bold inline-flex items-center justify-center" aria-hidden="true">
+                  <span className="relative w-9 h-9 rounded-full bg-ccp-green-600 text-white text-xs font-bold inline-flex items-center justify-center" aria-hidden="true">
                     {initialsOf(user.fullName)}
+                    {isAdmin && changeLogCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-brand-600 ring-2 ring-white dark:ring-slate-900" />
+                    )}
                   </span>
                   <span className="hidden xl:flex flex-col items-start leading-tight max-w-[10rem]">
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-full">{user.fullName}</span>
@@ -226,6 +235,15 @@ const Navbar: React.FC<NavbarProps> = ({
                         <BarChart3 className="h-4 w-4 text-slate-400" /> Statistics
                       </button>
                     )}
+                    {isAdmin && onOpenChangeLog && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenChangeLog)} className={accountItem}>
+                        <History className="h-4 w-4 text-slate-400" />
+                        <span className="flex-1">Change log</span>
+                        {changeLogCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white" aria-label={`${changeLogCount} new`}>{changeLogCount}</span>
+                        )}
+                      </button>
+                    )}
                     <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
                     <button type="button" role="menuitem" onClick={closeMenuAnd(onLogout)} className={`${accountItem} !text-red-600 dark:!text-red-400`}>
                       <LogOut className="h-4 w-4" /> Sign out
@@ -244,6 +262,9 @@ const Navbar: React.FC<NavbarProps> = ({
                 aria-controls="app-menu"
               >
                 {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {!isMenuOpen && isAdmin && changeLogCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-brand-600 ring-2 ring-white dark:ring-slate-900" aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
@@ -309,6 +330,15 @@ const Navbar: React.FC<NavbarProps> = ({
                   <button type="button" onClick={closeMenuAnd(onOpenStats)} className={menuItem}>
                     <BarChart3 className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Statistics</span>
+                  </button>
+                )}
+                {isAdmin && onOpenChangeLog && (
+                  <button type="button" onClick={closeMenuAnd(onOpenChangeLog)} className={menuItem}>
+                    <History className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Change log</span>
+                    {changeLogCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-600 text-white" aria-label={`${changeLogCount} new`}>{changeLogCount}</span>
+                    )}
                   </button>
                 )}
                 {onExportClick && (

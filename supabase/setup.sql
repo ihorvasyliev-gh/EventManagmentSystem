@@ -10,7 +10,8 @@
 --   * Nobody without an account can read or write anything. The public /submit form and the
 --     calendar feed go through the Cloudflare functions, which use the service-role key.
 --   * Staff (every new account) see published events and submit drafts through the /submit
---     form (/api/submit checks them); only admins write events directly.
+--     form (/api/submit checks them). They change their own events through /api/edit-event,
+--     which logs what changed; only admins write events directly.
 --   * Nobody changes their row in users from the browser: accounts are managed by the
 --     Cloudflare functions (service role) and here in SQL.
 --   * Admins see everything, publish, edit and delete. A role is changed only here, in SQL:
@@ -363,12 +364,18 @@ CREATE POLICY "Users are viewable by authenticated users"
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 REVOKE INSERT, UPDATE, DELETE ON public.users FROM anon, authenticated;
 
--- events: staff see published events and their own drafts; their submissions go through
--- /api/submit (service role), so only admins insert directly
+-- events: staff see published events and their own drafts (sent in signed in, or naming their
+-- email as the contact); their submissions and changes go through /api/submit and
+-- /api/edit-event (service role), so only admins write directly
 DROP POLICY IF EXISTS "Signed-in users see published events, admins see all" ON public.events;
 CREATE POLICY "Signed-in users see published events, admins see all"
   ON public.events FOR SELECT TO authenticated
-  USING (status = 'published' OR creator_id = (SELECT auth.uid()) OR (SELECT public.is_admin()));
+  USING (
+    status = 'published'
+    OR creator_id = (SELECT auth.uid())
+    OR lower(submitter_email) = (SELECT lower(auth.jwt() ->> 'email'))
+    OR (SELECT public.is_admin())
+  );
 DROP POLICY IF EXISTS "Admins create events, staff create drafts" ON public.events;
 DROP POLICY IF EXISTS "Admins create events" ON public.events;
 CREATE POLICY "Admins create events"

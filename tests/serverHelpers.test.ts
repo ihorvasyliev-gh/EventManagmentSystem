@@ -33,7 +33,34 @@ test('submissions are refused when required fields are missing or too long', () 
   assert.equal(checkSubmission({ ...valid, submitter_email: 'nope' }).ok, false);
   assert.equal(checkSubmission({ ...valid, date: 'tomorrow' }).ok, false);
   assert.equal(checkSubmission({ ...valid, end_date: '2026-11-05T09:00:00.000Z' }).ok, false);
-  assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly' }).ok, false);
+  assert.equal(checkSubmission({ ...valid, recurrence_type: 'fortnightly' }).ok, false);
+});
+
+test('an event can repeat every week, 2 weeks or month from its date, until a last date or on and on', () => {
+  const weekly = checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_interval: 2, recurrence_end_date: '2026-12-17T00:00:00.000Z' });
+  assert.ok(weekly.ok);
+  assert.equal(weekly.row.recurrence_type, 'weekly');
+  assert.equal(weekly.row.recurrence_interval, 2);
+  assert.equal(weekly.row.recurrence_end_date, '2026-12-17T00:00:00.000Z');
+  assert.equal(weekly.row.recurrence_custom_dates, null);
+
+  const forever = checkSubmission({ ...valid, recurrence_type: 'monthly' });
+  assert.ok(forever.ok);
+  assert.equal(forever.row.recurrence_interval, 1);
+  assert.equal(forever.row.recurrence_end_date, null);
+
+  // The last date may be the first day itself (its midnight is before the start time)
+  assert.ok(checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_end_date: '2026-11-05T00:00:00.000Z' }).ok);
+  assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_end_date: '2026-11-03T00:00:00.000Z' }).ok, false);
+  assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_end_date: 'soon' }).ok, false);
+  assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_interval: 0 }).ok, false);
+  assert.equal(checkSubmission({ ...valid, recurrence_type: 'weekly', recurrence_interval: 1.5 }).ok, false);
+
+  // A one-off or picked dates carry no repeat fields, whatever was sent
+  const single = checkSubmission({ ...valid, recurrence_interval: 2, recurrence_end_date: '2026-12-17T00:00:00.000Z' });
+  assert.ok(single.ok);
+  assert.equal(single.row.recurrence_interval, null);
+  assert.equal(single.row.recurrence_end_date, null);
 });
 
 test('more contact people are checked like the submitter: a name and a valid email each, up to five in all', () => {
@@ -99,6 +126,10 @@ test('emails name the event, its first date in Irish time and how many more date
   assert.doesNotMatch(newSubmissionEmail(ev, 'https://app.test').text, /Other contacts/);
   const withOthers = { ...ev, extra_contacts: [{ name: 'Bob', email: 'bob@x.ie' }, { name: 'Cat', email: 'cat@x.ie' }] };
   assert.match(newSubmissionEmail(withOthers, 'https://app.test').text, /Other contacts: Bob \(bob@x\.ie\), Cat \(cat@x\.ie\)/);
+
+  const weekly = { title: 'Coffee morning', date: '2026-10-15T09:00:00.000Z', recurrence_type: 'weekly', recurrence_interval: 1, recurrence_end_date: null };
+  assert.match(describeWhen(weekly), /Thu 15 Oct 2026, 10:00 \(every week on Thursday\)/);
+  assert.match(describeWhen({ ...weekly, recurrence_end_date: '2026-12-17T00:00:00.000Z' }), /\(every week on Thursday, until Thu 17 Dec 2026\)/);
 });
 
 test('selectAll pages through every row instead of stopping at the API limit', async () => {

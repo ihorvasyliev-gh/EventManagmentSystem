@@ -26,7 +26,9 @@ import { useEventActions } from './hooks/useEventActions';
 import { useSubmissionActions } from './hooks/useSubmissionActions';
 import { useDeepLinks, eventShareLink } from './hooks/useDeepLinks';
 import { useAppShortcuts } from './hooks/useAppShortcuts';
+import { useChangeLogBadge } from './hooks/useChangeLogBadge';
 import { loadOrReload } from './utils/staleChunk';
+import { cacheExceptions } from './utils/eventsCache';
 
 // Windows and pages load when first opened; after a deploy an old tab reloads instead of crashing
 const lazyWithReload = <T extends React.ComponentType<any>>(load: () => Promise<{ default: T }>) =>
@@ -42,6 +44,7 @@ const SubmitEventPage = lazyWithReload(() => import('./pages/SubmitEventPage'));
 const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
 const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'));
 const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
+const ChangeLogModal = lazyWithReload(() => import('./components/ChangeLogModal'));
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -77,6 +80,15 @@ const AppContent: React.FC = () => {
   const [isStaffOpen, setIsStaffOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  // Admins: the change log, and how many staff edits came in since it was last opened
+  const changeLog = useChangeLogBadge(isAdmin, events);
+  const [changeLogNewSince, setChangeLogNewSince] = useState<Date | null>(null);
+  const [isChangeLogOpen, setIsChangeLogOpen] = useState(false);
+  const { markSeen: markChangeLogSeen } = changeLog;
+  const openChangeLog = useCallback(() => {
+    setChangeLogNewSince(markChangeLogSeen());
+    setIsChangeLogOpen(true);
+  }, [markChangeLogSeen]);
   const openInbox = useCallback(() => setIsSubmissionsModalOpen(true), []);
   const openExport = useCallback(() => setIsExportModalOpen(true), []);
 
@@ -87,21 +99,47 @@ const AppContent: React.FC = () => {
   });
 
   const { open: openEvent, close: closeEventModal } = modal;
-  const { openWith: openSubmitPageWith } = submitPage;
+  const { openWith: openSubmitPageWith, openToEdit: openSubmitPageToEdit, close: closeSubmitPage } = submitPage;
+  // The series itself, not the one occurrence that was opened
+  const seriesOf = useCallback(
+    (event: Event) => (isRecurringEvent(event) ? events.find((e) => e.id === event.id) ?? event : event),
+    [events]
+  );
   const handleDuplicateEvent = useCallback((event: Event) => {
-    // The series itself, not the one occurrence that was opened
-    const source = isRecurringEvent(event) ? events.find((e) => e.id === event.id) ?? event : event;
     closeEventModal();
-    openSubmitPageWith(null, source);
-  }, [events, closeEventModal, openSubmitPageWith]);
+    openSubmitPageWith(null, seriesOf(event));
+  }, [seriesOf, closeEventModal, openSubmitPageWith]);
+
+  // Staff change their own events in the full-screen form
+  const handleEditOwnEvent = useCallback((event: Event) => {
+    closeEventModal();
+    openSubmitPageToEdit(seriesOf(event));
+  }, [seriesOf, closeEventModal, openSubmitPageToEdit]);
+  const handleOwnEventSaved = useCallback(({ event, changed, exceptionsCleared }: { event: Event; changed: boolean; exceptionsCleared: boolean }) => {
+    setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
+    // Days deleted earlier were left out of the saved dates
+    if (exceptionsCleared) {
+      setRecurrenceExceptions((prev) => {
+        if (!prev.has(event.id)) return prev;
+        const next = new Map(prev);
+        next.delete(event.id);
+        cacheExceptions(next);
+        return next;
+      });
+    }
+    closeSubmitPage();
+    if (!changed) showToast('Nothing was changed', 'info');
+    else if (event.status === 'published') showToast('Your changes are saved and on the calendar', 'success');
+    else showToast('Your changes are saved. The event is still waiting for review', 'success');
+  }, [setEvents, setRecurrenceExceptions, closeSubmitPage, showToast]);
 
   useAppShortcuts(user, submitPage.open);
   useDeepLinks({ user, loadingEvents, events, recurrenceExceptions, onOpenEvent: openEvent, onOpenInbox: openInbox, showToast });
 
   // Filtered events
   const filteredEvents = useMemo(() => {
-    return filterEvents(events, { ...filters, search: searchQuery }, user?.role, user?.id);
-  }, [events, filters, searchQuery, user?.role, user?.id]);
+    return filterEvents(events, { ...filters, search: searchQuery }, user?.role, user?.id, user?.email);
+  }, [events, filters, searchQuery, user?.role, user?.id, user?.email]);
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() || filters.category || filters.status || filters.dateRange ||
@@ -109,8 +147,8 @@ const AppContent: React.FC = () => {
   );
   // Everything this person can see before search and filters, for "Showing X of Y"
   const unfilteredCount = useMemo(
-    () => (hasActiveFilters ? filterEvents(events, {}, user?.role, user?.id).length : 0),
-    [hasActiveFilters, events, user?.role, user?.id]
+    () => (hasActiveFilters ? filterEvents(events, {}, user?.role, user?.id, user?.email).length : 0),
+    [hasActiveFilters, events, user?.role, user?.id, user?.email]
   );
   const clearAllFilters = useCallback(() => {
     setSearchQuery('');
@@ -155,6 +193,9 @@ const AppContent: React.FC = () => {
           events={events}
           initialDate={submitPage.initialDate}
           template={submitPage.template}
+          editing={submitPage.editing}
+          editingExceptions={submitPage.editing ? recurrenceExceptions.get(submitPage.editing.id) : undefined}
+          onSaved={handleOwnEventSaved}
           onBackToLogin={submitPage.close}
         />
       </Suspense>
@@ -195,6 +236,8 @@ const AppContent: React.FC = () => {
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
         onOpenStaff={() => setIsStaffOpen(true)}
         onOpenStats={() => setIsStatsOpen(true)}
+        onOpenChangeLog={openChangeLog}
+        changeLogCount={changeLog.count}
         onChangePassword={() => setIsChangePasswordOpen(true)}
       />
 
@@ -267,10 +310,12 @@ const AppContent: React.FC = () => {
             events={events}
             role={user.role}
             currentUserId={user.id}
+            currentUserEmail={user.email}
             onUpdate={handleUpdateEvent}
             onDelete={handleDeleteEvent}
             onDeleteInstance={handleDeleteInstance}
             onDuplicate={isAdmin ? handleDuplicateEvent : undefined}
+            onEditOwn={isAdmin ? undefined : handleEditOwnEvent}
             recurrenceExceptions={recurrenceExceptions}
             initialMode={modal.initialMode}
             autoApproveOnSave={modal.autoApprove}
@@ -300,6 +345,18 @@ const AppContent: React.FC = () => {
       {isStatsOpen && isAdmin && (
         <Suspense fallback={null}>
           <StatsModal isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} events={events} recurrenceExceptions={recurrenceExceptions} />
+        </Suspense>
+      )}
+
+      {isChangeLogOpen && isAdmin && (
+        <Suspense fallback={null}>
+          <ChangeLogModal
+            isOpen={isChangeLogOpen}
+            onClose={() => setIsChangeLogOpen(false)}
+            events={events}
+            onOpenEvent={openEvent}
+            newSince={changeLogNewSince}
+          />
         </Suspense>
       )}
 

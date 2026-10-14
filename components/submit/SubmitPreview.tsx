@@ -1,10 +1,11 @@
 import React from 'react';
-import { CalendarDays, Clock, ImageIcon, Info, MapPin, Sparkles } from 'lucide-react';
+import { CalendarDays, Clock, ImageIcon, Info, MapPin, Repeat, Sparkles } from 'lucide-react';
 import { getCategoryDotColor } from '../WeekView';
 import { formatOccurrenceLabel } from '../../utils/digestGrouping';
 
 interface SubmitPreviewProps {
-  isAdmin: boolean;
+  /** Staff sending in a new event: what can be included, and what happens next */
+  showGuide: boolean;
   title: string;
   category: string;
   description: string;
@@ -13,10 +14,12 @@ interface SubmitPreviewProps {
   dates: Date[];
   timeLabel: string;
   placeLabel: string;
+  /** How it repeats, if it does */
+  repeatLabel?: string | null;
 }
 
 /** Desktop sidebar on the submit form: the event as it will look, and what happens next */
-const SubmitPreview: React.FC<SubmitPreviewProps> = ({ isAdmin, title, category, description, posterPreview, dates, timeLabel, placeLabel }) => (
+const SubmitPreview: React.FC<SubmitPreviewProps> = ({ showGuide, title, category, description, posterPreview, dates, timeLabel, placeLabel, repeatLabel }) => (
   <aside className="hidden lg:block sticky top-24 space-y-4" aria-label="Preview">
     <div className="bg-white dark:bg-slate-800 rounded-leaf shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="px-5 pt-4 pb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-600 dark:text-brand-300">
@@ -43,6 +46,11 @@ const SubmitPreview: React.FC<SubmitPreviewProps> = ({ isAdmin, title, category,
             {dates.length > 4 && ` +${dates.length - 4} more`}
           </span>
         </p>
+        {repeatLabel && (
+          <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <Repeat className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" /> <span>{repeatLabel}</span>
+          </p>
+        )}
         <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <Clock className="w-4 h-4 shrink-0 text-slate-400" /> {timeLabel}
         </p>
@@ -56,7 +64,7 @@ const SubmitPreview: React.FC<SubmitPreviewProps> = ({ isAdmin, title, category,
       </div>
     </div>
 
-    {!isAdmin && (
+    {showGuide && (
       <div className="rounded-leaf-sm border border-slate-200 dark:border-slate-700 p-5 space-y-4">
         <div>
           <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5 flex items-center gap-2">

@@ -1,10 +1,10 @@
 import React from 'react';
-import { Send } from 'lucide-react';
+import { Save, Send } from 'lucide-react';
 
 export const SUBMIT_FORM_ID = 'submit-event-form';
 
-/** "Check & submit" (staff) or "Publish event" (admins); `full` for the phone's bottom bar */
-const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; full?: boolean }> = ({ isAdmin, isSubmitting, full }) => (
+/** "Check & submit" (staff), "Publish event" (admins) or "Save changes" (staff editing their event); `full` for the phone's bottom bar */
+const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; editing?: boolean; full?: boolean }> = ({ isAdmin, isSubmitting, editing, full }) => (
   <button
     type="submit"
     form={SUBMIT_FORM_ID}
@@ -14,12 +14,12 @@ const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; full?: b
     {isSubmitting ? (
       <>
         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        {isAdmin ? 'Publishing…' : 'Sending…'}
+        {editing ? 'Saving…' : isAdmin ? 'Publishing…' : 'Sending…'}
       </>
     ) : (
       <>
-        <Send className="w-4 h-4" />
-        {isAdmin ? 'Publish event' : 'Check & submit'}
+        {editing ? <Save className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+        {editing ? 'Save changes' : isAdmin ? 'Publish event' : 'Check & submit'}
       </>
     )}
   </button>

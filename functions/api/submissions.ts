@@ -47,7 +47,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (ids.length === 0 || ids.length > MAX_IDS) return fail('Invalid request.', 400);
   const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, MAX_REASON) : '';
   const idFilter = `id=in.(${ids.join(',')})`;
-  const columns = 'id,title,date,location,status,tags,poster_url,recurrence_custom_dates,submitter_name,submitter_email';
+  const columns = 'id,title,date,location,status,tags,poster_url,recurrence_type,recurrence_interval,recurrence_end_date,recurrence_occurrences,recurrence_custom_dates,submitter_name,submitter_email';
 
   const notify = (emails: Promise<unknown>) => {
     if (context.waitUntil) context.waitUntil(emails);

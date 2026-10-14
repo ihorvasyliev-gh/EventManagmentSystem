@@ -66,7 +66,7 @@ const SubmitSuccess: React.FC<SubmitSuccessProps> = ({ summary, isAdmin, signedI
             </div>
           </div>
           <div className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 text-sm">
-            <ScheduleList days={summary.days} compact />
+            <ScheduleList days={summary.days} repeat={summary.repeat} compact />
           </div>
           <ol className="px-4 sm:px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 space-y-3">
             {steps.map(([label, hint, state], i) => (

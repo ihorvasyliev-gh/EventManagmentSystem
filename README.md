@@ -24,7 +24,8 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. |
 | 📲 **WhatsApp, email & a link** | Admins copy an emoji-friendly WhatsApp version of the digest, or open a ready-to-send covering email for the Board that lists every event. Both carry a link to the digest PDF (uploaded once, open to anyone with the link for six months), so nothing needs attaching. |
 | 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
-| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. You can delete a single occurrence. |
+| 🔁 **Recurring & multi-date events** | Daily, weekly, monthly and yearly repeats, or hand-picked dates, each with its own time if needed. The `/submit` form offers *every week*, *every 2 weeks* and *every month* under the date picker, with an optional last date. You can delete a single occurrence. |
+| ✏️ **Staff edit their own events** | Signed-in staff change the events they sent in (signed in, or naming their email as the contact) in the same form. Published events stay published, pending ones stay pending; every change is logged field by field, and admins see staff changes in the **Change log**, with a count of new ones. |
 | 👥 **Staff accounts** | Admins add staff and reset forgotten passwords: the person gets a temporary password and chooses their own at the next sign-in. Everyone can change their password from the account menu. |
 | 📊 **Statistics** | Events, dates and venues per period, by category and month, ready to paste into a Board report. |
 | 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
@@ -70,7 +71,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `016_faster_policies.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `017_staff_own_events.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -106,15 +107,16 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Add to a personal calendar, export, subscribe | ✅ | ✅ |
 | Submit events for review | ✅ | ✅ |
 | See their own submissions on the calendar, marked *Pending review*, until they're approved | ✅ | ✅ |
+| Change their own events (each change is logged for the admins) | ✅ | ✅ |
 | Change their own password | ✅ | ✅ |
 | Create, edit, duplicate and delete events and occurrences | | ✅ |
 | Review submissions and see everyone's drafts | | ✅ |
 | Manage categories | | ✅ |
-| Add staff accounts, reset passwords, see statistics | | ✅ |
+| Add staff accounts, reset passwords, see statistics and the change log | | ✅ |
 | Preview and download the Events Digest | ✅ | ✅ |
 | Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 
-Row-level security enforces these rules in the database: staff read published events (and their own drafts) and can only create drafts. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
+Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to their own events through `/api/edit-event`, which checks the event is theirs and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions.
 
 **Forgotten password:** the person emails the contact on the login page (*Forgot your password?* fills in the email). An admin opens **account menu → Staff accounts → Reset password** and passes on the temporary password shown; at their next sign-in they choose a new one.
 
@@ -138,6 +140,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | Endpoint | Method | Who | Purpose |
 |---|---|---|---|
 | `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish). Up to 30 per network in 15 minutes (admins unlimited) |
+| `/api/edit-event` | `POST` | staff (own events), admins | Saves changes to an event (and a new flyer) in one request, checked like `/api/submit`; status stays as it was. Refuses if someone saved the event meanwhile, and logs what changed |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
 | `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
 | `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
@@ -170,6 +173,8 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 │   ├── pdf/                 Events Digest PDF (digest/: layouts, page parts) and WhatsApp text
 │   ├── digestText.ts        Covering email for the digest (and helpers the PDF shares)
 │   ├── recurrence.ts        Expands recurring events
+│   ├── repeat.ts            Repeats in words, and the form's every week / 2 weeks / month
+│   ├── eventChanges.ts      What changed in an event, for its history (app and /api/edit-event)
 │   └── export.ts            ICS and Excel export
 ├── functions/api/           Cloudflare Pages Functions (see API above)
 ├── server/                  What the functions share: Supabase access, emails, files, feed, checks,

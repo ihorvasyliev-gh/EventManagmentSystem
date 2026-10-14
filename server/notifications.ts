@@ -1,9 +1,14 @@
 /** Wording of the notification emails (plain text, so they read well in any mail app) */
+import { describeRepeat } from '../utils/repeat.ts';
 
 export interface NotifiedEvent {
   title: string;
   date: string;
   location?: string | null;
+  recurrence_type?: string | null;
+  recurrence_interval?: number | null;
+  recurrence_end_date?: string | null;
+  recurrence_occurrences?: number | null;
   recurrence_custom_dates?: string[] | null;
   submitter_name?: string | null;
   submitter_email?: string | null;
@@ -21,10 +26,20 @@ const whenFormatter = new Intl.DateTimeFormat('en-IE', {
   hourCycle: 'h23'
 });
 
-/** "Thu 15 Oct 2026, 10:00", plus "(and 3 more dates)" for a series */
+/**
+ * "Thu 15 Oct 2026, 10:00", plus "(and 3 more dates)" for picked dates or "(every week on
+ * Thursday, until …)" for a repeating series
+ */
 export const describeWhen = (ev: NotifiedEvent): string => {
   const first = new Date(ev.date);
   const label = isNaN(first.getTime()) ? ev.date : whenFormatter.format(first);
+  const repeat = describeRepeat({
+    type: ev.recurrence_type,
+    interval: ev.recurrence_interval,
+    endDate: ev.recurrence_end_date,
+    occurrences: ev.recurrence_occurrences
+  }, ev.date);
+  if (repeat) return `${label} (${repeat.charAt(0).toLowerCase()}${repeat.slice(1)})`;
   const more = (ev.recurrence_custom_dates?.length ?? 1) - 1;
   return more > 0 ? `${label} (and ${more} more ${more === 1 ? 'date' : 'dates'})` : label;
 };

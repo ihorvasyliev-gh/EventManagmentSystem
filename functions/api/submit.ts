@@ -14,7 +14,7 @@ import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
 import { verifyTurnstile, type TurnstileEnv } from '../../server/turnstile.ts';
 import { type EmailEnv, sendEmail, appUrl } from '../../server/email.ts';
-import { type FileBucket, IMAGE_TYPES, MAX_UPLOAD_BYTES, storeFile, fileKeyFromUrl, contentMatchesType } from '../../server/files.ts';
+import { type FileBucket, MAX_UPLOAD_BYTES, storeFlyer, fileKeyFromUrl } from '../../server/files.ts';
 import { checkSubmission, type SubmissionInput } from '../../server/submission.ts';
 import { newSubmissionEmail } from '../../server/notifications.ts';
 import { SUBMIT_LIMIT, withinRateLimit } from '../../server/rateLimit.ts';
@@ -87,19 +87,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   const poster = form.get('poster');
   if (poster && typeof poster !== 'string') {
-    if (!env.BUCKET) return fail('Flyer uploads are not set up on the server.', 500);
-    if (poster.size > MAX_UPLOAD_BYTES) return fail('The flyer is too large (max 15 MB).', 413);
-    const type = (poster.type || '').toLowerCase();
-    if (!IMAGE_TYPES.has(type)) return fail('The flyer must be an image (PNG, JPG, GIF or WEBP) or a PDF.', 415);
-    if (!(await contentMatchesType(poster, type))) {
-      return fail('The flyer’s file is damaged or isn’t really an image. Please save it again as a PNG or JPG and send it once more.', 415);
-    }
-    try {
-      posterUrl = (await storeFile(env.BUCKET, poster, type)).url;
-    } catch (err) {
-      console.error('Flyer upload failed:', err);
-      return fail('The flyer could not be uploaded. Please try again.', 502);
-    }
+    const stored = await storeFlyer(env.BUCKET, poster);
+    if ('error' in stored) return fail(stored.error, stored.status);
+    posterUrl = stored.url;
   }
 
   const row = {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy } from 'lucide-react';
+import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat } from 'lucide-react';
 import { type Event } from '../types';
 import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
@@ -10,6 +10,7 @@ import { groupOverlaps, type OverlapEntry } from '../utils/duplicateDetection';
 import OverlapList from './OverlapList';
 import { eventContacts } from '../utils/contacts';
 import { readScheduleFromEvent, formatTimeRange, listSessions, buildOccurrences } from '../utils/multiDateUtils';
+import { describeSeries } from '../utils/repeat';
 
 interface SubmissionsModalProps {
   isOpen: boolean;
@@ -173,6 +174,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const overlaps = overlapsById.get(event.id) ?? [];
               const duplicate = duplicateOf(event.id);
               const isConfirmingApprove = approveConfirmId === event.id;
+              const repeat = describeSeries(event.recurrence, event.date);
               // Each date and time on its own line when times or places differ
               const listEach = !!perDate || schedule.shared.length > 1 || !!places;
 
@@ -217,6 +219,12 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                               {formatTimeRange(schedule.shared[0])}
                             </p>
                           </>
+                        )}
+                        {repeat && (
+                          <p className="flex items-start gap-2 font-medium text-brand-700 dark:text-brand-300">
+                            <Repeat className="w-4 h-4 mt-0.5 shrink-0" />
+                            <span>{repeat}</span>
+                          </p>
                         )}
                         {!places && event.location && (
                           <p className="flex items-start gap-2">

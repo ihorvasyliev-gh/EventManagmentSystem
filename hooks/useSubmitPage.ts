@@ -7,7 +7,8 @@ export const isSubmitUrl = (): boolean =>
 
 /**
  * The full-screen event form (/submit, or /?mode=submit from inside the app), kept in the
- * address so the browser's Back button closes it. Admins create events through it too.
+ * address so the browser's Back button closes it. Admins create events through it too, and
+ * staff change their own events in it.
  */
 export const useSubmitPage = () => {
   const [isOpen, setIsOpen] = useState(() => typeof window !== 'undefined' && isSubmitUrl());
@@ -15,10 +16,13 @@ export const useSubmitPage = () => {
   const [initialDate, setInitialDate] = useState<Date | null>(null);
   // Event copied into the form ("Duplicate")
   const [template, setTemplate] = useState<Event | null>(null);
+  // Staff's own event being changed
+  const [editing, setEditing] = useState<Event | null>(null);
 
-  const openWith = useCallback((date: Date | null, copyOf: Event | null = null) => {
+  const openWith = useCallback((date: Date | null, copyOf: Event | null = null, toEdit: Event | null = null) => {
     setInitialDate(date);
     setTemplate(copyOf);
+    setEditing(toEdit);
     setIsOpen(true);
     if (!isSubmitUrl()) {
       window.history.pushState({}, '', '/?mode=submit');
@@ -28,11 +32,13 @@ export const useSubmitPage = () => {
 
   const open = useCallback(() => openWith(null), [openWith]);
   const openWithDate = useCallback((date: Date | null) => openWith(date), [openWith]);
+  const openToEdit = useCallback((event: Event) => openWith(null, null, event), [openWith]);
 
   const close = useCallback(() => {
     setIsOpen(false);
     setInitialDate(null);
     setTemplate(null);
+    setEditing(null);
     if (isSubmitUrl()) {
       window.history.pushState({}, '', '/');
     }
@@ -44,5 +50,5 @@ export const useSubmitPage = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  return { isOpen, initialDate, template, open, openWith, openWithDate, close };
+  return { isOpen, initialDate, template, editing, open, openWith, openWithDate, openToEdit, close };
 };

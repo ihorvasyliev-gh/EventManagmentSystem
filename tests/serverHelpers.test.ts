@@ -4,7 +4,7 @@ import { checkSubmission } from '../server/submission.ts';
 import { fileKeyFromUrl, contentMatchesType } from '../server/files.ts';
 import { generateTempPassword } from '../server/password.ts';
 import { describeWhen, declinedEmail, newSubmissionEmail } from '../server/notifications.ts';
-import { selectAll } from '../server/supabase.ts';
+import { selectAll, getCaller } from '../server/supabase.ts';
 import { errorFingerprint } from '../functions/api/client-error.ts';
 
 const valid = {
@@ -138,4 +138,49 @@ test('images and PDFs must really be what their type says; other files are only 
   assert.equal(await contentMatchesType(file('<html>', 'application/pdf'), 'application/pdf'), false);
   // Word, Excel and text files are served as downloads, never shown on the site
   assert.equal(await contentMatchesType(file('a,b\n1,2', 'application/vnd.ms-excel'), 'application/vnd.ms-excel'), true);
+});
+
+test('the caller is checked by the auth server and their profile read at the same time', async () => {
+  const ADMIN = '00000000-0000-0000-0000-00000000000a';
+  const OTHER = '00000000-0000-0000-0000-00000000000c';
+  const jwt = (sub: string) => `h.${Buffer.from(JSON.stringify({ sub })).toString('base64url')}.sig`;
+  const cfg = { url: 'https://sb.test', anonKey: 'anon' };
+  const realFetch = globalThis.fetch;
+  try {
+    const run = async (token: string, confirmedId: string | null) => {
+      const profiles: Array<{ id: string; whileChecking: boolean }> = [];
+      let checking = false;
+      globalThis.fetch = (async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith('/auth/v1/user')) {
+          checking = true;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          checking = false;
+          return confirmedId ? Response.json({ id: confirmedId, email: 'a@x.ie' }) : new Response('{}', { status: 401 });
+        }
+        const id = /id=eq\.([0-9a-f-]+)/.exec(url)![1];
+        profiles.push({ id, whileChecking: checking });
+        return Response.json([{ role: id === ADMIN ? 'admin' : 'staff', full_name: id === ADMIN ? 'Ada' : 'Other', email: 'a@x.ie' }]);
+      }) as typeof fetch;
+      return { caller: await getCaller(cfg, token), profiles };
+    };
+
+    const both = await run(jwt(ADMIN), ADMIN);
+    assert.equal(both.caller?.role, 'admin');
+    assert.deepEqual(both.profiles, [{ id: ADMIN, whileChecking: true }], 'read while the token is checked: one round trip, not two');
+
+    // A token naming someone else than the auth server confirms: the confirmed id's profile is used
+    const mismatch = await run(jwt(ADMIN), OTHER);
+    assert.equal(mismatch.caller?.id, OTHER);
+    assert.equal(mismatch.caller?.role, 'staff');
+
+    // A refused token is no caller, whatever it claims
+    assert.equal((await run(jwt(ADMIN), null)).caller, null);
+    // Not a JWT: the profile is read after the check, as before
+    const plain = await run('opaque-token', ADMIN);
+    assert.deepEqual(plain.profiles, [{ id: ADMIN, whileChecking: false }]);
+    assert.equal(plain.caller?.role, 'admin');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

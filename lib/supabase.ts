@@ -11,7 +11,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env.local file.');
 }
 
-// Проверяем, что URL и ключ не являются placeholder значениями
+// Not the placeholders from env.example.txt
 if (supabaseUrl.includes('your-project') || supabaseAnonKey.includes('your-anon')) {
   console.error('Supabase configuration appears to use placeholder values. Please update your .env.local file.');
   throw new Error('Invalid Supabase configuration. Please check your .env.local file.');

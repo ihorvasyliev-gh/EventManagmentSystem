@@ -153,6 +153,9 @@ CREATE INDEX IF NOT EXISTS idx_recurrence_exceptions_event_id ON public.recurren
 CREATE INDEX IF NOT EXISTS idx_recurrence_exceptions_date ON public.recurrence_exceptions(exception_date);
 CREATE INDEX IF NOT EXISTS idx_client_errors_day ON public.client_errors(day);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON public.rate_limits(window_start);
+-- "Is this file still used?" before a flyer or attachment is deleted from R2
+CREATE INDEX IF NOT EXISTS idx_events_poster_url ON public.events(poster_url) WHERE poster_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_attachments_url ON public.event_attachments(url);
 
 -- ============================================
 -- 3. Functions and triggers
@@ -339,6 +342,7 @@ GRANT EXECUTE ON FUNCTION public.hit_rate_limit(TEXT, INTEGER, INTEGER) TO servi
 -- 4. Row-level security
 -- ============================================
 -- No policy mentions anon, so visitors without an account can't read or write anything.
+-- is_admin() and auth.uid() sit in a sub-select: worked out once per query, not per row.
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
@@ -364,20 +368,20 @@ REVOKE INSERT, UPDATE, DELETE ON public.users FROM anon, authenticated;
 DROP POLICY IF EXISTS "Signed-in users see published events, admins see all" ON public.events;
 CREATE POLICY "Signed-in users see published events, admins see all"
   ON public.events FOR SELECT TO authenticated
-  USING (status = 'published' OR creator_id = auth.uid() OR public.is_admin());
+  USING (status = 'published' OR creator_id = (SELECT auth.uid()) OR (SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins create events, staff create drafts" ON public.events;
 DROP POLICY IF EXISTS "Admins create events" ON public.events;
 CREATE POLICY "Admins create events"
   ON public.events FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin());
+  WITH CHECK ((SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins update events" ON public.events;
 CREATE POLICY "Admins update events"
   ON public.events FOR UPDATE TO authenticated
-  USING (public.is_admin()) WITH CHECK (public.is_admin());
+  USING ((SELECT public.is_admin())) WITH CHECK ((SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins delete events" ON public.events;
 CREATE POLICY "Admins delete events"
   ON public.events FOR DELETE TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- The events policy applies inside these subqueries: you see what belongs to events you can see
 DROP POLICY IF EXISTS "Attachments follow their event" ON public.event_attachments;
@@ -387,11 +391,11 @@ CREATE POLICY "Attachments follow their event"
 DROP POLICY IF EXISTS "Admins add attachments" ON public.event_attachments;
 CREATE POLICY "Admins add attachments"
   ON public.event_attachments FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin());
+  WITH CHECK ((SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins delete attachments" ON public.event_attachments;
 CREATE POLICY "Admins delete attachments"
   ON public.event_attachments FOR DELETE TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "History follows its event" ON public.event_history;
 CREATE POLICY "History follows its event"
@@ -401,7 +405,7 @@ CREATE POLICY "History follows its event"
 DROP POLICY IF EXISTS "Admins write history" ON public.event_history;
 CREATE POLICY "Admins write history"
   ON public.event_history FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin() AND user_id = auth.uid());
+  WITH CHECK ((SELECT public.is_admin()) AND user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS "Deleted dates follow their event" ON public.recurrence_exceptions;
 CREATE POLICY "Deleted dates follow their event"
@@ -410,11 +414,11 @@ CREATE POLICY "Deleted dates follow their event"
 DROP POLICY IF EXISTS "Admins delete dates" ON public.recurrence_exceptions;
 CREATE POLICY "Admins delete dates"
   ON public.recurrence_exceptions FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin());
+  WITH CHECK ((SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins restore dates" ON public.recurrence_exceptions;
 CREATE POLICY "Admins restore dates"
   ON public.recurrence_exceptions FOR DELETE TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 DROP POLICY IF EXISTS "Signed-in users see categories" ON public.event_categories;
 CREATE POLICY "Signed-in users see categories"
@@ -423,11 +427,11 @@ CREATE POLICY "Signed-in users see categories"
 DROP POLICY IF EXISTS "Admins add categories" ON public.event_categories;
 CREATE POLICY "Admins add categories"
   ON public.event_categories FOR INSERT TO authenticated
-  WITH CHECK (public.is_admin());
+  WITH CHECK ((SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Admins delete categories" ON public.event_categories;
 CREATE POLICY "Admins delete categories"
   ON public.event_categories FOR DELETE TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 REVOKE ALL ON public.rate_limits FROM anon, authenticated;
 
@@ -436,7 +440,7 @@ GRANT SELECT ON public.client_errors TO authenticated;
 DROP POLICY IF EXISTS "Admins read error reports" ON public.client_errors;
 CREATE POLICY "Admins read error reports"
   ON public.client_errors FOR SELECT TO authenticated
-  USING (public.is_admin());
+  USING ((SELECT public.is_admin()));
 
 -- ============================================
 -- 5. Standard CCP categories

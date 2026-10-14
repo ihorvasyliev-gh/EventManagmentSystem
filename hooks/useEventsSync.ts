@@ -131,9 +131,18 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
     void refreshEvents(false);
   }, [userId, refreshEvents]);
 
-  // Keep the local cache in step with every change (not the copy just restored from it)
+  // Keep the local cache in step with every change (not the copy just restored from it). Writing
+  // a big calendar takes a moment, so it waits until the browser is idle, and a burst of
+  // changes is written once.
   useEffect(() => {
-    if (userId && events !== restoredFromCacheRef.current) cacheEvents(events);
+    if (!userId || events === restoredFromCacheRef.current) return;
+    const write = () => cacheEvents(events);
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(write, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(write, 200);
+    return () => clearTimeout(timer);
   }, [userId, events]);
 
   // Live changes from other people (and echoes of our own)

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { cacheUser, clearUserCache } from '../utils/sessionCache';
 import { setRememberMe, clearAllAuthTokens } from '../utils/authStorage';
 
-// Преобразуем данные пользователя из Supabase в наш формат
+// A users row as the app's User
 const mapSupabaseUserToUser = (supabaseUser: any): User => {
   return {
     id: supabaseUser.id,
@@ -47,7 +47,7 @@ export const changePassword = async (email: string, currentPassword: string, new
   await setNewPassword(newPassword);
 };
 
-// Вспомогательная функция для таймаута запросов с поддержкой отмены
+// Rejects when a request takes longer than timeoutMs
 const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs: number = 10000): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((_, reject) => {
@@ -64,7 +64,7 @@ const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs: number = 10000): Pro
       })
       .catch(error => {
         clearTimeout(timeoutId);
-        // Если это AbortError, пробрасываем его как есть, но с более понятным сообщением
+        // A cancelled request: pass it on with a clearer message
         if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
           throw new Error('Request was cancelled. Please try again.');
         }
@@ -74,13 +74,13 @@ const withTimeout = <T>(promise: PromiseLike<T>, timeoutMs: number = 10000): Pro
   ]);
 };
 
-// Вход пользователя
+// Sign in
 export const login = async (email: string, password: string, rememberMe: boolean = true): Promise<User> => {
   try {
-    // Устанавливаем предпочтение хранилища перед аутентификацией
+    // Where the session is kept ("Remember me") must be set before signing in
     setRememberMe(rememberMe);
 
-    // Добавляем таймаут для запроса аутентификации
+    // Don't wait for ever on a bad connection
     const authPromise = supabase.auth.signInWithPassword({
       email,
       password
@@ -89,10 +89,10 @@ export const login = async (email: string, password: string, rememberMe: boolean
     const { data: authData, error: authError } = await withTimeout(authPromise, 10000);
 
     if (authError) {
-      // Улучшенная обработка ошибок с более понятными сообщениями
+      // Supabase's errors in plain words
       let errorMessage = authError.message || 'Invalid email or password';
 
-      // Парсим специфичные ошибки Supabase
+      // The errors people actually meet
       if (authError.status === 400) {
         if (authError.message?.includes('Email not confirmed')) {
           errorMessage = 'Please confirm your email address before signing in. Check your inbox for a confirmation email.';
@@ -114,14 +114,7 @@ export const login = async (email: string, password: string, rememberMe: boolean
       throw new Error('Failed to sign in. Please try again.');
     }
 
-    // Проверяем, подтвержден ли email (если требуется)
-    // ВАЖНО: Если в Supabase Dashboard отключено подтверждение email, 
-    // эта проверка может блокировать вход. Комментируем её, если подтверждение отключено.
-    // if (authData.user.email_confirmed_at === null) {
-    //   throw new Error('Please confirm your email address before signing in. Check your inbox for a confirmation email.');
-    // }
-
-    // Получаем профиль пользователя из public.users с таймаутом
+    // The person's profile (role, name) from public.users
     const userQueryPromise = supabase
       .from('users')
       .select('*')
@@ -140,32 +133,32 @@ export const login = async (email: string, password: string, rememberMe: boolean
     }
 
     const user = mapSupabaseUserToUser(userData);
-    // Кэшируем пользователя для быстрого восстановления сессии
+    // Cached, so the next visit shows the calendar straight away
     cacheUser(user);
     return user;
   } catch (error: any) {
-    // Логируем ошибку для отладки
+    // For debugging (stripped from production builds)
     console.error('Login error:', error);
 
-    // Обрабатываем AbortError отдельно
+    // A cancelled request
     if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('cancelled')) {
       throw new Error('Request was cancelled. Please try again.', { cause: error });
     }
 
-    // Если это уже наша ошибка (таймаут или другая обработанная), просто пробрасываем её
+    // Already in plain words (a timeout or a cancelled request)
     if (error.message && (error.message.includes('timeout') || error.message.includes('Request was cancelled'))) {
       throw error;
     }
 
-    // Для других ошибок пробрасываем с понятным сообщением
+    // Anything else, with its message
     throw new Error(error.message || 'Login failed. Please check your connection and try again.', { cause: error });
   }
 };
 
-// Выход пользователя
+// Sign out
 export const logout = async (): Promise<void> => {
   const { error } = await supabase.auth.signOut();
-  // Очищаем кэш пользователя и все токены при выходе
+  // Nothing of the session stays on the device
   clearUserCache();
   clearAllAuthTokens();
   if (error) {
@@ -173,7 +166,7 @@ export const logout = async (): Promise<void> => {
   }
 };
 
-// Получить текущего пользователя
+// The signed-in user's profile, or null
 export const getCurrentUser = async (userId?: string): Promise<User | null> => {
   try {
     let currentUserId = userId;
@@ -204,11 +197,11 @@ export const getCurrentUser = async (userId?: string): Promise<User | null> => {
     }
 
     const user = mapSupabaseUserToUser(userData);
-    // Кэшируем пользователя при получении
+    // Cached for the next visit
     cacheUser(user);
     return user;
   } catch (error: any) {
-    // Игнорируем AbortError и таймауты при проверке сессии - это нормально
+    // A cancelled or slow check is normal (e.g. the tab was closed): no user for now
     if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('cancelled') || error?.message?.includes('timeout')) {
       return null;
     }
@@ -217,7 +210,7 @@ export const getCurrentUser = async (userId?: string): Promise<User | null> => {
   }
 };
 
-// Получить текущую сессию
+// The current Supabase session
 export const getSession = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return session;

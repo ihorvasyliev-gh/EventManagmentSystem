@@ -147,7 +147,7 @@ export const updateEvent = async (
 };
 
 /**
- * Получить список исключений для группы событий одним пакетным запросом (1 запрос вместо N)
+ * The deleted dates of several events in one request (instead of one per event)
  */
 export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<Map<string, Date[]>> => {
   const map = new Map<string, Date[]>();
@@ -198,10 +198,10 @@ export const getAllRecurrenceExceptions = async (): Promise<Map<string, Date[]>>
 };
 
 /**
- * Удалить конкретный экземпляр повторяющегося события
+ * Deletes one occurrence of a repeating event (the series keeps its other dates)
  */
 export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Date, userId: string, userName: string): Promise<void> => {
-  // Проверяем, существует ли событие и является ли оно повторяющимся
+  // The event must exist and repeat
   const { data: eventData, error: fetchError } = await supabase
     .from('events')
     .select('id, recurrence_type')
@@ -216,11 +216,11 @@ export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Da
     throw new Error('Event is not recurring');
   }
 
-  // Нормализуем дату (убираем время, оставляем только дату)
+  // The day only, without the time
   const normalizedDate = new Date(instanceDate);
   normalizedDate.setHours(0, 0, 0, 0);
 
-  // Добавляем исключение
+  // Record the deleted day
   const { error: insertError } = await supabase
     .from('recurrence_exceptions')
     .insert({
@@ -229,14 +229,14 @@ export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Da
     });
 
   if (insertError) {
-    // Если исключение уже существует, это нормально (idempotent)
+    // Already deleted: nothing to do
     if (insertError.code !== '23505') { // Unique constraint violation
       console.error('Error adding recurrence exception:', insertError);
       throw new Error(insertError.message || 'Failed to delete instance');
     }
   }
 
-  // Добавляем запись в историю
+  // A line in the event's history
   const formattedDate = normalizedDate.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: '2-digit',
@@ -260,7 +260,7 @@ export const deleteRecurrenceInstance = async (eventId: string, instanceDate: Da
 
   if (historyError) {
     console.error('Error creating history entry:', historyError);
-    // Не прерываем операцию, только логируем
+    // The date is deleted either way; only its history line is missing
   }
 };
 

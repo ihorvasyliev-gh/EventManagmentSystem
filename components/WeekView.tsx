@@ -6,6 +6,8 @@ import { shortCategoryLabel } from '../constants/categories';
 import { PendingBadge } from './calendar/shared';
 
 export interface WeekViewProps {
+  /** Today at midnight (moves on at midnight) */
+  today: Date;
   currentDate: Date;
   events: Event[];
   onEventClick: (event: Event) => void;
@@ -109,13 +111,12 @@ const formatTimeRange = (event: Event): string => {
 
 const WeekView: React.FC<WeekViewProps> = ({
   currentDate,
+  today,
   events,
   onEventClick,
   onAddEventForDate,
   userRole
 }) => {
-  const today = useMemo(() => new Date(), []);
-
   // Compute Monday to Sunday
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
 

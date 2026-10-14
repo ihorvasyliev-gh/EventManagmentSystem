@@ -11,7 +11,7 @@ export interface CachedUser {
 }
 
 /**
- * Сохранить пользователя в кэш активного хранилища (sessionStorage для одноразового входа, localStorage для Remember Me)
+ * Caches the user where the session is (sessionStorage for a one-time sign-in, localStorage with Remember Me)
  */
 export const cacheUser = (user: User): void => {
   try {
@@ -26,7 +26,7 @@ export const cacheUser = (user: User): void => {
     activeStorage?.setItem(USER_CACHE_KEY, serialized);
     activeStorage?.setItem(USER_CACHE_TIMESTAMP_KEY, ts);
 
-    // Если Remember Me выключен, убеждаемся, что в постоянном localStorage нет данных пользователя
+    // Without Remember Me, nothing about the user stays in localStorage
     if (!isRememberMeEnabled()) {
       const ls = safeGetStorage('local');
       ls?.removeItem(USER_CACHE_KEY);
@@ -38,14 +38,14 @@ export const cacheUser = (user: User): void => {
 };
 
 /**
- * Получить пользователя из кэша (синхронно)
+ * The cached user, read synchronously
  */
 export const getCachedUser = (): User | null => {
   try {
     const activeStorage = getActiveAuthStorage();
     let cachedStr = activeStorage?.getItem(USER_CACHE_KEY);
 
-    // Если Remember Me включен, но в активном хранилище еще нет, проверяем localStorage напрямую
+    // With Remember Me, also look in localStorage directly
     if (!cachedStr && isRememberMeEnabled()) {
       const ls = safeGetStorage('local');
       cachedStr = ls?.getItem(USER_CACHE_KEY);
@@ -55,7 +55,7 @@ export const getCachedUser = (): User | null => {
 
     const cached: CachedUser = JSON.parse(cachedStr);
 
-    // Проверяем, не устарел ли кэш
+    // Too old: sign in again
     const age = Date.now() - cached.timestamp;
     if (age > CACHE_DURATION_MS) {
       clearUserCache();
@@ -71,7 +71,7 @@ export const getCachedUser = (): User | null => {
 };
 
 /**
- * Очистить кэш пользователя из обоих хранилищ
+ * Clears the cached user from both storages
  */
 export const clearUserCache = (): void => {
   try {

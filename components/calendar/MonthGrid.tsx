@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { type Event } from '../../types';
 import { getDaysInMonth, getFirstDayOfMonth, isSameDay } from '../../utils/date';
 import MonthDayCell from './MonthDayCell';
@@ -7,6 +7,8 @@ import { toDayKey } from './shared';
 
 interface MonthGridProps {
   currentDate: Date;
+  /** Today at midnight (moves on at midnight) */
+  today: Date;
   eventsByDayKey: Map<string, Event[]>;
   isMobile: boolean;
   /** Phones: the day whose events show under the grid */
@@ -21,10 +23,13 @@ interface MonthGridProps {
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+/** One array for every day without events, so those cells don't re-render for a new empty one */
+const NO_EVENTS: Event[] = [];
 
 /** The month as a grid of days (weeks start on Monday); on phones, the tapped day's events below */
 const MonthGrid: React.FC<MonthGridProps> = ({
   currentDate,
+  today,
   eventsByDayKey,
   isMobile,
   selectedDay,
@@ -54,6 +59,12 @@ const MonthGrid: React.FC<MonthGridProps> = ({
     return days;
   }, [currentDate, daysInMonth, firstDay]);
 
+  // The same function for every cell and render, so unchanged days skip re-rendering
+  const toggleSelectedDay = useCallback(
+    (d: Date) => onSelectedDayChange((prev) => (prev && isSameDay(prev, d) ? null : d)),
+    [onSelectedDayChange]
+  );
+
   const selectedDayEvents = useMemo(
     () => (selectedDay ? eventsByDayKey.get(toDayKey(selectedDay)) || [] : []),
     [selectedDay, eventsByDayKey]
@@ -74,13 +85,14 @@ const MonthGrid: React.FC<MonthGridProps> = ({
             <MonthDayCell
               key={day.toISOString()}
               day={day}
-              dayEvents={eventsByDayKey.get(toDayKey(day)) || []}
+              dayEvents={eventsByDayKey.get(toDayKey(day)) || NO_EVENTS}
+              isToday={isSameDay(day, today)}
               isMobile={isMobile}
               isSelected={isMobile && !!selectedDay && isSameDay(day, selectedDay)}
               canAdd={canAdd}
               onEventClick={onEventClick}
               onAddEventForDate={onAddEventForDate}
-              onSelect={(d) => onSelectedDayChange(prev => (prev && isSameDay(prev, d) ? null : d))}
+              onSelect={toggleSelectedDay}
               onOpenDay={onOpenDay}
             />
           ) : (

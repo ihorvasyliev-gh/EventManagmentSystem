@@ -105,9 +105,10 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | View, search and filter published events | ✅ | ✅ |
 | Add to a personal calendar, export, subscribe | ✅ | ✅ |
 | Submit events for review | ✅ | ✅ |
+| See their own submissions on the calendar, marked *Pending review*, until they're approved | ✅ | ✅ |
 | Change their own password | ✅ | ✅ |
 | Create, edit, duplicate and delete events and occurrences | | ✅ |
-| Review submissions and see drafts | | ✅ |
+| Review submissions and see everyone's drafts | | ✅ |
 | Manage categories | | ✅ |
 | Add staff accounts, reset passwords, see statistics | | ✅ |
 | Preview and download the Events Digest | ✅ | ✅ |

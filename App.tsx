@@ -97,8 +97,8 @@ const AppContent: React.FC = () => {
 
   // Filtered events
   const filteredEvents = useMemo(() => {
-    return filterEvents(events, { ...filters, search: searchQuery }, user?.role);
-  }, [events, filters, searchQuery, user?.role]);
+    return filterEvents(events, { ...filters, search: searchQuery }, user?.role, user?.id);
+  }, [events, filters, searchQuery, user?.role, user?.id]);
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() || filters.category || filters.status || filters.dateRange ||
@@ -214,7 +214,7 @@ const AppContent: React.FC = () => {
         {hasActiveFilters && !loadingEvents && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/30 px-4 py-2.5 text-sm text-brand-800 dark:text-brand-200" role="status">
             <span>
-              Showing <strong>{filteredEvents.length}</strong> of {filterEvents(events, {}, user.role).length} events
+              Showing <strong>{filteredEvents.length}</strong> of {filterEvents(events, {}, user.role, user.id).length} events
               {searchQuery.trim() && <> matching “{searchQuery.trim()}”</>}
             </span>
             <button

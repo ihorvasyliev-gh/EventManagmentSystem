@@ -19,7 +19,7 @@ export const clickableProps = (onActivate: () => void) => ({
   }
 });
 
-/** Drafts are only visible to admins: say plainly that they aren't published yet */
+/** Drafts are seen only by admins and the person who submitted them: say plainly that they aren't published yet */
 export const PendingBadge: React.FC<{ event: Event }> = ({ event }) =>
   event.status === 'draft' ? (
     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">

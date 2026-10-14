@@ -31,7 +31,14 @@ const EventDetails: React.FC<EventDetailsProps> = ({
     {/* Header Info */}
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
-        {event.status === 'draft' && <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full">Draft</span>}
+        {event.status === 'draft' && (
+          <span
+            title="Not published yet: only admins and the person who submitted it can see it"
+            className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 rounded-full"
+          >
+            Pending review
+          </span>
+        )}
         {event.category && (
           <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-[0.12em] ${getCategoryColor(event.category)}`}>
             {event.category}

@@ -1,11 +1,11 @@
-import { type Event, type EventFilters, UserRole } from '../types.ts';
+import type { Event, EventFilters, UserRole } from '../types.ts';
 import { expandRecurringEvents, getEventLocations } from './recurrence.ts';
 import { eventContacts } from './contacts.ts';
 
 // Open-ended date filters still need a finite window to look for occurrences in
 const OPEN_RANGE_YEARS = 5;
 
-export const filterEvents = (events: Event[], filters: EventFilters, userRole?: UserRole): Event[] => {
+export const filterEvents = (events: Event[], filters: EventFilters, userRole?: UserRole, userId?: string): Event[] => {
   let filtered = [...events];
 
   // Search filter
@@ -31,11 +31,15 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
     filtered = filtered.filter(event => event.status === filters.status);
   } else {
     // By default, show only published events (unless status filter is explicitly set)
-    // Admins can see drafts, but non-admins can only see published events
-    if (userRole === UserRole.ADMIN) {
+    // Admins see every draft; staff see their own submissions while they wait for review
+    // ('admin' rather than UserRole.ADMIN: the unit tests can't load the enum)
+    if (userRole === 'admin') {
       filtered = filtered.filter(event => event.status === 'published' || event.status === 'draft' || event.status === undefined);
     } else {
-      filtered = filtered.filter(event => event.status === 'published' || event.status === undefined);
+      filtered = filtered.filter(event =>
+        event.status === 'published' || event.status === undefined ||
+        (event.status === 'draft' && !!userId && event.creatorId === userId)
+      );
     }
   }
 

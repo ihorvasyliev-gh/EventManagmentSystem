@@ -81,8 +81,9 @@ Before the form sends, you check everything on a review screen. Sometimes a smal
 
 1. **Instant Confirmation:** You will see a green checkmark screen confirming your submission was received.
 2. **Review:** Your submission goes to Elizabeth for quick moderation on Thursday.
+   * If you were **signed in** when you sent it, the event is on your calendar straight away, with a yellow **Pending review** label and a dashed border, so you can see it was received. Only you and the admins can see it until it's approved. (Events sent from the form without signing in don't show up this way.)
 3. **Publication:** Once approved:
-   * It immediately appears on the interactive company calendar.
+   * It immediately appears on the interactive company calendar (for you, the **Pending review** label goes away).
    * It is automatically included in Friday morning's **Upcoming Events Digest** sent to the Board and staff.
    * It is included in the Friday WhatsApp digest.
    * You can also open **Digest** yourself to preview or download the PDF for any period.

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockSupabase, signIn, watchCsp, expectAccessible, eventRow, daysFromNow } from './support';
+import { mockSupabase, signIn, watchCsp, expectAccessible, eventRow, daysFromNow, ADMIN_ID } from './support';
 
 test('the login page explains how to get a forgotten password reset', async ({ page }) => {
   const assertNoCsp = await watchCsp(page);
@@ -40,6 +40,29 @@ test('an admin signs in, sees the calendar and declines a submission', async ({ 
   await expect(page.getByText('Submission declined')).toBeVisible();
   expect(declined).toEqual({ action: 'decline', ids: ['10000000-0000-0000-0000-000000000002'] });
   await assertNoCsp();
+});
+
+test('staff see their own submission on the calendar, marked pending review, but not other people’s', async ({ page }) => {
+  await mockSupabase(page, {
+    role: 'staff',
+    events: [
+      eventRow({ id: '10000000-0000-0000-0000-000000000001', title: 'Enterprise breakfast', date: daysFromNow(1) }),
+      // Sent by the signed-in staff member
+      eventRow({ id: '10000000-0000-0000-0000-000000000002', title: 'Coffee morning', date: daysFromNow(1, 14), status: 'draft', creator_id: ADMIN_ID }),
+      eventRow({ id: '10000000-0000-0000-0000-000000000003', title: 'Book club', date: daysFromNow(1, 16), status: 'draft', creator_id: null })
+    ]
+  });
+  await signIn(page);
+  await expect(page.getByText('Enterprise breakfast').first()).toBeVisible();
+  await expect(page.getByText('Coffee morning').first()).toBeVisible();
+  await expect(page.getByText('Book club')).toHaveCount(0);
+  await expectAccessible(page);
+
+  await page.getByText('Coffee morning').first().click();
+  const details = page.getByRole('dialog', { name: 'Event Details' });
+  await expect(details.getByRole('heading', { name: 'Coffee morning' })).toBeVisible();
+  await expect(details.getByText('Pending review')).toBeVisible();
+  await expectAccessible(page);
 });
 
 test('after a password reset, the app asks for a new password before anything else', async ({ page }) => {

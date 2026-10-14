@@ -4,6 +4,7 @@ import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/da
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { shortCategoryLabel } from '../constants/categories';
+import { PendingBadge } from './calendar/shared';
 
 export interface WeekViewProps {
   currentDate: Date;
@@ -303,11 +304,14 @@ const WeekView: React.FC<WeekViewProps> = ({
                     tabIndex={0}
                     onClick={() => onEventClick(event)}
                     onKeyDown={cardKeyDown(event)}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px]"
+                    className={`p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px] ${event.status === 'draft' ? 'border-dashed' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
-                        {event.category || 'Event'}
+                      <span className="flex items-center gap-1 flex-wrap min-w-0 max-w-full">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
+                          {event.category || 'Event'}
+                        </span>
+                        <PendingBadge event={event} />
                       </span>
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
@@ -436,6 +440,8 @@ const WeekView: React.FC<WeekViewProps> = ({
                             <span className="truncate">{event.location}</span>
                           </div>
                         )}
+
+                        {event.status === 'draft' && <div><PendingBadge event={event} /></div>}
                       </div>
                     );
                   })

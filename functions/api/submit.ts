@@ -4,7 +4,8 @@
  *
  * Anyone can submit (no account needed): the event is saved as a draft for review. Signed-in
  * admins can publish straight away. The flyer and the event are saved in one request, so an
- * event never arrives without the flyer that was sent with it.
+ * event never arrives without the flyer that was sent with it. Everyone but admins is limited
+ * to SUBMIT_LIMIT submissions per network (server/rateLimit.ts).
  *
  * Needs SUPABASE_SERVICE_ROLE_KEY and the R2 binding BUCKET. Optional: TURNSTILE_SECRET_KEY
  * (bot check) and the email settings in server/email.ts (tell admins about new submissions).
@@ -16,6 +17,7 @@ import { type EmailEnv, sendEmail, appUrl } from '../../server/email.ts';
 import { type FileBucket, IMAGE_TYPES, MAX_UPLOAD_BYTES, storeFile, fileKeyFromUrl } from '../../server/files.ts';
 import { checkSubmission, type SubmissionInput } from '../../server/submission.ts';
 import { newSubmissionEmail } from '../../server/notifications.ts';
+import { SUBMIT_LIMIT, withinRateLimit } from '../../server/rateLimit.ts';
 
 interface Env extends SupabaseEnv, TurnstileEnv, EmailEnv {
   BUCKET?: FileBucket;
@@ -43,6 +45,17 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   const declared = Number(request.headers.get('content-length') || 0);
   if (declared > MAX_UPLOAD_BYTES + 256 * 1024) return fail('The flyer is too large (max 15 MB).', 413);
 
+  // Before the upload is read: a flood is turned away cheaply
+  const caller = await getCaller(cfg, bearerToken(request));
+  if (caller?.role !== 'admin' && !(await withinRateLimit(cfg, SUBMIT_LIMIT, request.headers.get('CF-Connecting-IP')))) {
+    const minutes = Math.round(SUBMIT_LIMIT.windowSeconds / 60);
+    return json(
+      { error: `A lot of events have just been sent from this network. Please wait ${minutes} minutes and send it again: your event stays in the form.` },
+      429,
+      { 'Retry-After': String(SUBMIT_LIMIT.windowSeconds) }
+    );
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
@@ -50,7 +63,6 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     return fail('Invalid request.', 400);
   }
 
-  const caller = await getCaller(cfg, bearerToken(request));
   if (!caller) {
     const token = form.get('turnstileToken');
     const human = await verifyTurnstile(env, typeof token === 'string' ? token : null, request.headers.get('CF-Connecting-IP'));

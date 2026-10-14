@@ -44,7 +44,9 @@ The functions also accept `SUPABASE_URL` / `SUPABASE_ANON_KEY` if you prefer nam
 
 ## 4. Turnstile (optional bot check on the public form)
 
-The submission form is open to anyone, so bots can find it. Turnstile adds an invisible-or-one-click check.
+The submission form is open to anyone with the link, so bots can find it. A limit is always on: each network
+(an office shares one) can send up to 30 events in 15 minutes, counted in Supabase (migration 014); admins
+aren't limited. Turnstile adds an invisible-or-one-click check on top.
 
 1. Cloudflare Dashboard → **Turnstile** → **Add widget**.
 2. **Hostnames:** your site, e.g. `ccp-event-calendar.pages.dev` (and your own domain, if any).

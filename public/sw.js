@@ -3,8 +3,9 @@
 // and /api/ responses are never cached here (files under /api/file are cached by the browser,
 // and calendar data must never come from a stale copy).
 
-const CACHE_NAME = 'ccp-calendar-v3';
-const RUNTIME_CACHE = 'ccp-runtime-cache-v3';
+// v4: older caches could hold the app's page saved under a script's name (see remember())
+const CACHE_NAME = 'ccp-calendar-v4';
+const RUNTIME_CACHE = 'ccp-runtime-cache-v4';
 // Built files have hashed names, so every deploy adds new ones: keep only the most recent
 const MAX_RUNTIME_ENTRIES = 80;
 
@@ -65,8 +66,17 @@ async function trimCache(cache) {
     }
 }
 
+/**
+ * A file that no longer exists (an old build's script, asked for by a tab opened before a deploy)
+ * comes back as the app's page: never keep that page under a script's, style's or image's name.
+ */
+function isPageForAsset(request, response) {
+    const isPage = request.mode === 'navigate' || request.destination === 'document';
+    return !isPage && (response.headers.get('content-type') || '').includes('text/html');
+}
+
 async function remember(request, response) {
-    if (!response.ok || response.type === 'opaque') return;
+    if (!response.ok || response.type === 'opaque' || isPageForAsset(request, response)) return;
     const cache = await caches.open(RUNTIME_CACHE);
     await cache.put(request, response);
     await trimCache(cache);

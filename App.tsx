@@ -26,19 +26,22 @@ import { useEventActions } from './hooks/useEventActions';
 import { useSubmissionActions } from './hooks/useSubmissionActions';
 import { useDeepLinks, eventShareLink } from './hooks/useDeepLinks';
 import { useAppShortcuts } from './hooks/useAppShortcuts';
+import { loadOrReload } from './utils/staleChunk';
 
-// Lazy load modals for code splitting
-const EventModal = lazy(() => import('./components/EventModal'));
-const ExportModal = lazy(() => import('./components/ExportModal'));
-const SubmissionsModal = lazy(() => import('./components/SubmissionsModal'));
-const FortnightlyBulletinModal = lazy(() => import('./components/FortnightlyBulletinModal'));
+// Windows and pages load when first opened; after a deploy an old tab reloads instead of crashing
+const lazyWithReload = <T extends React.ComponentType<any>>(load: () => Promise<{ default: T }>) =>
+  lazy(() => loadOrReload(load));
+const EventModal = lazyWithReload(() => import('./components/EventModal'));
+const ExportModal = lazyWithReload(() => import('./components/ExportModal'));
+const SubmissionsModal = lazyWithReload(() => import('./components/SubmissionsModal'));
+const FortnightlyBulletinModal = lazyWithReload(() => import('./components/FortnightlyBulletinModal'));
 // A shared digest's page (/digest/…): anyone with the link, no account, no calendar
-const DigestViewPage = lazy(() => import('./pages/DigestViewPage'));
+const DigestViewPage = lazyWithReload(() => import('./pages/DigestViewPage'));
 const isDigestPage = () => window.location.pathname.startsWith('/digest/');
-const SubmitEventPage = lazy(() => import('./pages/SubmitEventPage'));
-const StaffModal = lazy(() => import('./components/StaffModal'));
-const PasswordModal = lazy(() => import('./components/PasswordModal'));
-const StatsModal = lazy(() => import('./components/StatsModal'));
+const SubmitEventPage = lazyWithReload(() => import('./pages/SubmitEventPage'));
+const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
+const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'));
+const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();

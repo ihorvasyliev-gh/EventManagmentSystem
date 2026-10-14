@@ -1,4 +1,5 @@
 import { type SupabaseConfig, serviceRest } from './supabase.ts';
+import { sniffFileKind, KIND_OF_TYPE } from '../utils/fileKind.ts';
 
 /** The part of an R2 bucket binding the functions use (typed here so the app's checks can import it) */
 export interface FileBucket {
@@ -27,6 +28,18 @@ export const ALLOWED_TYPES = new Set([
 ]);
 
 const FILE_PATH = '/api/file/';
+
+/**
+ * Whether a file really is what its type says. The type comes from the file's name, and images
+ * and PDFs are shown on this site's own pages, so their first bytes are checked (other files are
+ * only ever downloaded).
+ */
+export const contentMatchesType = async (file: Blob, contentType: string): Promise<boolean> => {
+  const expected = KIND_OF_TYPE[contentType];
+  if (!expected) return true;
+  const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  return sniffFileKind(head) === expected;
+};
 
 export interface StoredFile {
   key: string;

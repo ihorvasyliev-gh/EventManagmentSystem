@@ -14,6 +14,10 @@ const event = {
   submitter_email: 'sam@x.ie'
 };
 
+/** The first bytes of real image files */
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+
 const send = (fields: { event?: unknown; poster?: File; token?: string; auth?: string; ip?: string }) => {
   const form = new FormData();
   if (fields.event !== undefined) form.append('event', JSON.stringify(fields.event));
@@ -54,7 +58,7 @@ test('anyone can submit with a flyer; it is saved as a draft with the flyer, in 
   const inserted: Array<Record<string, unknown>> = [];
   const calls = mockFetch(dbRoutes(inserted));
   const bucket = fakeBucket();
-  const poster = new File([new Uint8Array([1, 2, 3])], 'flyer.png', { type: 'image/png' });
+  const poster = new File([PNG], 'flyer.png', { type: 'image/png' });
   const res = await onRequestPost({ request: send({ event: { ...event, publish: true }, poster }), env: { ...env, BUCKET: bucket, RESEND_API_KEY: 'k', NOTIFY_FROM: 'CCP <c@x.ie>' } });
   assert.equal(res.status, 201);
   assert.equal(inserted.length, 1);
@@ -81,6 +85,17 @@ test('with Turnstile switched on, a submission without a valid check is refused'
   mockFetch(dbRoutes(inserted));
   const res = await onRequestPost({ request: send({ event, token: 'bad' }), env: { ...env, TURNSTILE_SECRET_KEY: 'secret' } });
   assert.equal(res.status, 403);
+  assert.equal(inserted.length, 0);
+});
+
+test('a flyer that only claims to be an image (a page renamed .png) is refused before it is stored', async () => {
+  const inserted: unknown[] = [];
+  mockFetch(dbRoutes(inserted));
+  const bucket = fakeBucket();
+  const fake = new File(['<!doctype html><script>alert(1)</script>'], 'flyer.png', { type: 'image/png' });
+  const res = await onRequestPost({ request: send({ event, poster: fake }), env: { ...env, BUCKET: bucket } });
+  assert.equal(res.status, 415);
+  assert.equal(bucket.stored.size, 0);
   assert.equal(inserted.length, 0);
 });
 
@@ -116,7 +131,7 @@ test('when the event cannot be saved, the uploaded flyer is removed again', asyn
     ({ url, method }) => (method === 'POST' && url.includes('/rest/v1/events') ? json({ message: 'boom' }, 500) : undefined)
   ]);
   const bucket = fakeBucket();
-  const res = await onRequestPost({ request: send({ event, poster: new File(['x'], 'f.jpg', { type: 'image/jpeg' }) }), env: { ...env, BUCKET: bucket } });
+  const res = await onRequestPost({ request: send({ event, poster: new File([JPEG], 'f.jpg', { type: 'image/jpeg' }) }), env: { ...env, BUCKET: bucket } });
   assert.equal(res.status, 502);
   assert.equal(bucket.stored.size, 0);
   assert.equal(bucket.deleted.length, 1);
@@ -153,7 +168,7 @@ test('a network that has sent too many events in a short time is asked to wait; 
   const inserted: unknown[] = [];
   const calls = mockFetch([limitRoute(false), ...dbRoutes(inserted)]);
   const bucket = fakeBucket();
-  const poster = new File([new Uint8Array([1, 2, 3])], 'flyer.png', { type: 'image/png' });
+  const poster = new File([PNG], 'flyer.png', { type: 'image/png' });
   const res = await onRequestPost({ request: send({ event, poster, ip: '203.0.113.7' }), env: { ...env, BUCKET: bucket } });
   assert.equal(res.status, 429);
   assert.equal(res.headers.get('Retry-After'), '900');

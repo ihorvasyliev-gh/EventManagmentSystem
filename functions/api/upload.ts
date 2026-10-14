@@ -6,7 +6,7 @@
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
-import { type FileBucket, ALLOWED_TYPES, MAX_UPLOAD_BYTES, storeFile } from '../../server/files.ts';
+import { type FileBucket, ALLOWED_TYPES, MAX_UPLOAD_BYTES, storeFile, contentMatchesType } from '../../server/files.ts';
 
 interface Env extends SupabaseEnv {
   BUCKET?: FileBucket;
@@ -32,6 +32,7 @@ export const onRequestPut = async ({ request, env }: { request: Request; env: En
     if (file.size > MAX_UPLOAD_BYTES) return fail('File is too large (max 15 MB).', 413);
     const contentType = (file.type || '').toLowerCase();
     if (!ALLOWED_TYPES.has(contentType)) return fail('This file type is not allowed.', 415);
+    if (!(await contentMatchesType(file, contentType))) return fail('The file is damaged or isn’t what its name says.', 415);
 
     return json(await storeFile(env.BUCKET, file, contentType));
   } catch (err) {

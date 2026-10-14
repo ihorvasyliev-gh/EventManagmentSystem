@@ -1,7 +1,24 @@
-import { type Event } from '../types';
+import type { Event } from '../types.ts';
+import { getActiveAuthStorage, isRememberMeEnabled, safeGetStorage } from './authStorage.ts';
 
 const EVENTS_CACHE_KEY = 'ccp_events_cache';
 const EVENTS_CACHE_TIMESTAMP_KEY = 'ccp_events_cache_timestamp';
+const EXCEPTIONS_CACHE_KEY = 'ccp_exceptions_cache';
+const CACHE_KEYS = [EVENTS_CACHE_KEY, EVENTS_CACHE_TIMESTAMP_KEY, EXCEPTIONS_CACHE_KEY];
+
+/**
+ * The calendar (drafts and submitters' emails included) is kept where the session is: on the
+ * device with "Remember me", otherwise only for this tab. Before, it stayed in localStorage for
+ * a week even after a one-time sign-in on a shared computer.
+ */
+const cacheStorage = (): Storage | null => getActiveAuthStorage();
+
+/** Without "Remember me", removes any copy left in localStorage (e.g. by an older version) */
+const dropPersistentCopy = (): void => {
+  if (isRememberMeEnabled()) return;
+  const ls = safeGetStorage('local');
+  CACHE_KEYS.forEach((key) => ls?.removeItem(key));
+};
 // The cache is shown straight away and refreshed in the background (stale-while-revalidate), so it
 // only has to be recent enough to be a fair first picture. 30 minutes meant a skeleton on most visits.
 const CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,7 +28,7 @@ interface CachedEvents {
   timestamp: number;
 }
 
-/** Сериализуем события для localStorage (Date → ISO string) */
+/** Events as JSON for Web Storage (dates as ISO strings) */
 function serialize(events: Event[]): string {
   const raw = events.map((e) => ({
     ...e,
@@ -43,7 +60,7 @@ function serialize(events: Event[]): string {
   return JSON.stringify(raw);
 }
 
-/** Восстанавливаем Date из ISO строк */
+/** Events back from JSON, with their dates */
 function deserialize(json: string): Event[] {
   const raw = JSON.parse(json) as any[];
   return raw.map((e) => ({
@@ -72,29 +89,34 @@ function deserialize(json: string): Event[] {
 export function cacheEvents(events: Event[]): void {
   try {
     const cached: CachedEvents = { events, timestamp: Date.now() };
-    localStorage.setItem(EVENTS_CACHE_KEY, serialize(events));
-    localStorage.setItem(EVENTS_CACHE_TIMESTAMP_KEY, cached.timestamp.toString());
+    const storage = cacheStorage();
+    storage?.setItem(EVENTS_CACHE_KEY, serialize(events));
+    storage?.setItem(EVENTS_CACHE_TIMESTAMP_KEY, cached.timestamp.toString());
+    dropPersistentCopy();
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to cache events:', err);
+    if (import.meta.env?.DEV) console.warn('Failed to cache events:', err);
   }
 }
 
 /** Marks the cached events as just confirmed by the server (nothing had changed) */
 export function touchEventsCache(): void {
   try {
-    if (localStorage.getItem(EVENTS_CACHE_KEY)) localStorage.setItem(EVENTS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+    const storage = cacheStorage();
+    if (storage?.getItem(EVENTS_CACHE_KEY)) storage.setItem(EVENTS_CACHE_TIMESTAMP_KEY, Date.now().toString());
   } catch {
     // Storage unavailable: the cache just isn't kept
   }
 }
 
-/** Возвращает кеш только если он ещё «свежий» (в пределах TTL). */
+/** The cached events, while they are recent enough (CACHE_DURATION_MS) */
 export function getCachedEvents(): Event[] | null {
   try {
-    const json = localStorage.getItem(EVENTS_CACHE_KEY);
+    dropPersistentCopy();
+    const storage = cacheStorage();
+    const json = storage?.getItem(EVENTS_CACHE_KEY);
     if (!json) return null;
 
-    const ts = localStorage.getItem(EVENTS_CACHE_TIMESTAMP_KEY);
+    const ts = storage?.getItem(EVENTS_CACHE_TIMESTAMP_KEY);
     const age = ts ? Date.now() - parseInt(ts, 10) : Infinity;
     if (age > CACHE_DURATION_MS) return null;
 
@@ -107,17 +129,15 @@ export function getCachedEvents(): Event[] | null {
 
 export function clearEventsCache(): void {
   try {
-    localStorage.removeItem(EVENTS_CACHE_KEY);
-    localStorage.removeItem(EVENTS_CACHE_TIMESTAMP_KEY);
-    localStorage.removeItem(EXCEPTIONS_CACHE_KEY);
+    for (const storage of [safeGetStorage('local'), safeGetStorage('session')]) {
+      CACHE_KEYS.forEach((key) => storage?.removeItem(key));
+    }
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to clear events cache:', err);
+    if (import.meta.env?.DEV) console.warn('Failed to clear events cache:', err);
   }
 }
 
 // --- Exceptions Cache ---
-
-const EXCEPTIONS_CACHE_KEY = 'ccp_exceptions_cache';
 
 /** Serialize Map<string, Date[]> to JSON */
 function serializeExceptions(map: Map<string, Date[]>): string {
@@ -140,15 +160,16 @@ function deserializeExceptions(json: string): Map<string, Date[]> {
 
 export function cacheExceptions(exceptions: Map<string, Date[]>): void {
   try {
-    localStorage.setItem(EXCEPTIONS_CACHE_KEY, serializeExceptions(exceptions));
+    cacheStorage()?.setItem(EXCEPTIONS_CACHE_KEY, serializeExceptions(exceptions));
+    dropPersistentCopy();
   } catch (err) {
-    if (import.meta.env.DEV) console.warn('Failed to cache exceptions:', err);
+    if (import.meta.env?.DEV) console.warn('Failed to cache exceptions:', err);
   }
 }
 
 export function getCachedExceptions(): Map<string, Date[]> | null {
   try {
-    const json = localStorage.getItem(EXCEPTIONS_CACHE_KEY);
+    const json = cacheStorage()?.getItem(EXCEPTIONS_CACHE_KEY);
     if (!json) return null;
     return deserializeExceptions(json);
   } catch {

@@ -130,3 +130,27 @@ test('a save that fails reopens the form with the changes kept', async ({ page }
   await expect(page.getByText('Event updated successfully')).toBeVisible();
   expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({ title: 'Spring job fair', description: 'Meet twenty employers' });
 });
+
+test('saving after someone else changed the event says so instead of overwriting them', async ({ page }) => {
+  const backend = await mockSupabase(page, {
+    events: [eventRow({ id: ID, title: 'Job fair', date: daysFromNow(3), end_date: daysFromNow(3, 12), location: 'City Hall', description: 'Meet employers', updated_at: '2026-10-01T08:00:00.000001+00:00' })]
+  });
+  await signIn(page);
+  await page.getByText('Job fair').first().click();
+  await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: /Edit event/ }).click();
+  const form = page.getByRole('dialog', { name: 'Edit Event' });
+
+  // Meanwhile another admin moves it
+  Object.assign(backend.events[0], { location: 'Heron House', updated_at: '2026-10-01T09:30:00.000001+00:00' });
+  await form.getByPlaceholder(/Enterprise Network Breakfast/).fill('Spring job fair');
+  await form.getByRole('button', { name: 'Save Changes' }).click();
+
+  await expect(page.getByText(/Someone else changed this event while you were editing it/)).toBeVisible();
+  expect(backend.writes).toHaveLength(0);
+  await expect(form.getByPlaceholder(/Enterprise Network Breakfast/)).toHaveValue('Spring job fair');
+
+  // Saving again replaces their version, knowingly
+  await form.getByRole('button', { name: 'Save Changes' }).click();
+  await expect(page.getByText('Event updated successfully')).toBeVisible();
+  expect(backend.writes.find((w) => w.method === 'PATCH')?.body).toMatchObject({ title: 'Spring job fair', location: 'City Hall' });
+});

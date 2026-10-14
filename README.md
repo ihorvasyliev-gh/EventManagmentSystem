@@ -70,7 +70,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `014_locked_profiles_and_submit_limit.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `015_live_deleted_dates_and_safe_links.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 

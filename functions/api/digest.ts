@@ -8,7 +8,7 @@
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
-import { type FileBucket } from '../../server/files.ts';
+import { type FileBucket, contentMatchesType } from '../../server/files.ts';
 
 /** Listing as well as storing: old digests are found by their upload date */
 export interface DigestBucket extends FileBucket {
@@ -74,7 +74,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     return fail('Invalid request.', 400);
   }
   if (!file || typeof file === 'string') return fail('No PDF found in the request.', 400);
-  if ((file.type || '').toLowerCase() !== 'application/pdf') return fail('The digest must be a PDF.', 415);
+  if ((file.type || '').toLowerCase() !== 'application/pdf' || !(await contentMatchesType(file, 'application/pdf'))) {
+    return fail('The digest must be a PDF.', 415);
+  }
   if (file.size > DIGEST_MAX_BYTES) return fail('The digest PDF is too large to share as a link.', 413);
 
   const name = (file.name || 'events-digest.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');

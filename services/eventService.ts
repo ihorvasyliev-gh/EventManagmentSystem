@@ -58,7 +58,28 @@ export const getEventsWithRelated = async (events: Event[]): Promise<Event[]> =>
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'createdAt'>, userId: string, userName: string): Promise<Event> => {
+/** Someone else saved the event after the form was opened; `current` is what is saved now */
+export class EditConflictError extends Error {
+  current: Event;
+  constructor(current: Event) {
+    super('Someone else changed this event while you were editing it.');
+    this.name = 'EditConflictError';
+    this.current = current;
+  }
+}
+
+/**
+ * Saves an edited event. `baseUpdatedAt` is when the version the form was opened with was saved:
+ * if the event has been saved since (another admin, another tab), nothing is written and
+ * EditConflictError says so, instead of silently overwriting their changes.
+ */
+export const updateEvent = async (
+  id: string,
+  eventData: Omit<Event, 'id' | 'createdAt'>,
+  userId: string,
+  userName: string,
+  baseUpdatedAt?: Date
+): Promise<Event> => {
   if (!id || typeof id !== 'string' || !UUID_REGEX.test(id)) {
     console.error('updateEvent: invalid or non-UUID id', { id });
     throw new Error('Invalid event ID. Please close and reopen the event.');
@@ -74,6 +95,10 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
   if (fetchError || !oldEventData) {
     throw new Error('Event not found');
   }
+  const savedAt = oldEventData.updated_at ? new Date(oldEventData.updated_at).getTime() : null;
+  if (baseUpdatedAt && savedAt !== null && savedAt !== baseUpdatedAt.getTime()) {
+    throw new EditConflictError(mapEventRow(oldEventData));
+  }
 
   const changes: Record<string, { old: unknown; new: unknown }> = {};
   if (eventData.title !== oldEventData.title) changes.title = { old: oldEventData.title, new: eventData.title };
@@ -82,13 +107,18 @@ export const updateEvent = async (id: string, eventData: Omit<Event, 'id' | 'cre
   if (eventData.status !== oldEventData.status) changes.status = { old: oldEventData.status, new: eventData.status };
   if (eventData.category !== oldEventData.category) changes.category = { old: oldEventData.category || null, new: eventData.category || null };
 
-  const { data: updatedEventData, error: updateError } = await supabase
-    .from('events')
-    .update(eventToRow(eventData))
-    .eq('id', id)
+  let update = supabase.from('events').update(eventToRow(eventData)).eq('id', id);
+  // Only if nobody saved it between the check above and this write
+  if (oldEventData.updated_at) update = update.eq('updated_at', oldEventData.updated_at);
+  const { data: updatedEventData, error: updateError } = await update
     .select(EVENT_COLUMNS)
     .single<EventRow>();
 
+  // No row matched: it was saved in the meantime
+  if (updateError?.code === 'PGRST116' && oldEventData.updated_at) {
+    const { data: current } = await supabase.from('events').select(EVENT_COLUMNS).eq('id', id).single<EventRow>();
+    if (current) throw new EditConflictError(mapEventRow(current));
+  }
   if (updateError || !updatedEventData) {
     console.error('Error updating event:', updateError);
     throw new Error(updateError?.message || 'Failed to update event');

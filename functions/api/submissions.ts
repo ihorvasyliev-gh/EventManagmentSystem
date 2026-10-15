@@ -6,11 +6,13 @@
  *          (also used after "Save & approve", when the event is already published).
  * decline: emails each submitter (with the reason, if given), deletes the submissions and
  *          their flyers from R2. The database logs each one as declined by the caller.
- * Emails are optional (see server/email.ts); the action works without them.
+ * Emails are optional (see server/email.ts); the action works without them. The reply says
+ * whether they are set up (`authorsEmailed`), so without them the app offers to write to the
+ * submitter from the admin's own mail instead.
  */
 import { json, fail, bearerToken, readJson } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
-import { type EmailEnv, sendEmail, appUrl } from '../../server/email.ts';
+import { type EmailEnv, sendEmail, appUrl, emailConfigured } from '../../server/email.ts';
 import { type FileBucket, deleteUnreferencedFiles } from '../../server/files.ts';
 import { approvedEmail, declinedEmail, type NotifiedEvent } from '../../server/notifications.ts';
 
@@ -67,9 +69,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     const rows = (await res.json()) as EventRow[];
     const site = appUrl(env, request);
     await notify(Promise.all(rows.filter(isSubmission).map((row) =>
-      sendEmail(env, { to: [row.submitter_email ?? ''], ...approvedEmail(row, site), replyTo: caller.email })
+      sendEmail(env, { to: [row.submitter_email ?? ''], ...approvedEmail(row, site, `${site}/?event=${row.id}`), replyTo: caller.email })
     )));
-    return json({ events: rows });
+    return json({ events: rows, authorsEmailed: emailConfigured(env) });
   }
 
   if (body?.action === 'decline') {
@@ -77,7 +79,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     const found = await serviceRest(cfg, `events?${idFilter}&status=eq.draft&select=${columns}`);
     if (!found.ok) return fail('The submissions could not be found. Please refresh and try again.', 502);
     const rows = (await found.json()) as EventRow[];
-    if (rows.length === 0) return json({ declined: [] });
+    if (rows.length === 0) return json({ declined: [], authorsEmailed: false });
 
     const attachments = await serviceRest(cfg, `event_attachments?event_id=in.(${rows.map((r) => r.id).join(',')})&select=url`);
     const attachmentUrls = attachments.ok ? ((await attachments.json()) as Array<{ url: string }>).map((a) => a.url) : [];
@@ -98,7 +100,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     await notify(Promise.all(rows.filter(isSubmission).map((row) =>
       sendEmail(env, { to: [row.submitter_email ?? ''], ...declinedEmail(row, reason), replyTo: caller.email })
     )));
-    return json({ declined: rows.map((r) => r.id) });
+    return json({ declined: rows.map((r) => r.id), authorsEmailed: emailConfigured(env) });
   }
 
   return fail('Invalid request.', 400);

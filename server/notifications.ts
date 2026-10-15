@@ -71,7 +71,8 @@ export const newSubmissionEmail = (ev: NotifiedEvent, appUrl: string) => ({
   ].join('\n')
 });
 
-export const approvedEmail = (ev: NotifiedEvent, appUrl: string) => ({
+/** `eventUrl`, when given, links straight to the event instead of the calendar */
+export const approvedEmail = (ev: NotifiedEvent, appUrl: string, eventUrl?: string) => ({
   subject: `Your event is on the CCP calendar: ${ev.title}`,
   text: [
     `Hi ${ev.submitter_name?.trim() || 'there'},`,
@@ -80,7 +81,7 @@ export const approvedEmail = (ev: NotifiedEvent, appUrl: string) => ({
     '',
     ...eventLines(ev),
     '',
-    `See the calendar: ${appUrl}`,
+    eventUrl ? `See it on the calendar: ${eventUrl}` : `See the calendar: ${appUrl}`,
     '',
     'Kind regards,'
   ].join('\n')

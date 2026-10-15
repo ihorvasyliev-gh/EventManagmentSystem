@@ -69,7 +69,10 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   const ACCENT = 1.4;
   const PAD_Y = density.cardPadY;
   const mainX = CARD_X + ACCENT + 4.6;
-  const FLYER_W = 30;
+  // When the flyers are printed large at the end, a smaller thumbnail will do: the card then
+  // stays about as tall as its text instead of the flyer
+  const FLYER_W = ctx.printFlyers ? 22 : 30;
+  const flyerMaxH = ctx.printFlyers ? density.flyerMaxH * 0.72 : density.flyerMaxH;
   const mainRight = CARD_X + CARD_W - 5 - (flyer ? FLYER_W + 5 : 0);
   const mainW = mainRight - mainX;
 
@@ -139,8 +142,8 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   if (flyer) {
     flyerW = FLYER_W;
     flyerH = flyerW / flyer.aspectRatio;
-    if (flyerH > density.flyerMaxH) {
-      flyerH = density.flyerMaxH;
+    if (flyerH > flyerMaxH) {
+      flyerH = flyerMaxH;
       flyerW = flyerH * flyer.aspectRatio;
     }
   }

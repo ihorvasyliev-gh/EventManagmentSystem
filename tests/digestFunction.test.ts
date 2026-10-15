@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequestPost, deleteOldDigests, DIGEST_KEEP_DAYS, type DigestBucket } from '../functions/api/digest.ts';
+import { onRequestPost, deleteOldDigests, digestListKey, DIGEST_KEEP_DAYS, type DigestBucket } from '../functions/api/digest.ts';
 import { onRequestGet as getIssues } from '../functions/api/digest-issues.ts';
 import { ISSUES_KEY, MAX_ISSUES, readIssues } from '../server/digestIssues.ts';
 import { mockFetch, authRoutes, env } from './support/mockFetch.ts';
@@ -164,4 +164,23 @@ test('looking up the last digest needs a signed-in user and a day', async () => 
   assert.equal((await getIssues({ request: askIssue('2026-10-19', ''), env: { ...env, BUCKET: bucket } })).status, 401);
   assert.equal((await getIssues({ request: askIssue('next-week'), env: { ...env, BUCKET: bucket } })).status, 400);
   assert.equal((await getIssues({ request: askIssue('2026-10-19', 'admin-token'), env: { ...env, BUCKET: bucket } })).status, 200);
+});
+
+test('the events as a list are kept beside the PDF, read back field by field; a broken list is skipped', async () => {
+  mockFetch(authRoutes);
+  const { bucket, contents } = digestBucket();
+  const list = { version: 1, period: '12 – 26 October 2026', entries: [{ day: 'Thursday 15 October', title: 'Coffee morning', extra: 'dropped' }] };
+  const res = await onRequestPost({ request: send(pdf, 'admin-token', { list: JSON.stringify(list) }), env: { ...env, BUCKET: bucket } });
+  const { url } = await res.json() as { url: string };
+  const stored = contents.get(digestListKey(url.slice('/api/file/'.length)));
+  assert.ok(stored instanceof Blob);
+  const saved = JSON.parse(await stored.text());
+  assert.equal(saved.entries[0].title, 'Coffee morning');
+  assert.equal('extra' in saved.entries[0], false);
+  assert.match(digestListKey(url.slice('/api/file/'.length)), /^digests\/[0-9a-f-]{36}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26\.json$/);
+
+  const before = contents.size;
+  assert.equal((await onRequestPost({ request: send(pdf, 'admin-token', { list: '{"version":2}' }), env: { ...env, BUCKET: bucket } })).status, 201);
+  assert.equal((await onRequestPost({ request: send(pdf, 'admin-token', { list: 'not json' }), env: { ...env, BUCKET: bucket } })).status, 201);
+  assert.equal(contents.size, before + 2, 'only the two PDFs');
 });

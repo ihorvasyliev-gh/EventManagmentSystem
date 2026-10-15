@@ -8,11 +8,14 @@
  *
  * Optional fields `issued` (YYYY-MM-DD) and `eventIds` (a JSON array) record which events the
  * digest carried, so next week's digest marks NEW only the events this one didn't have.
+ * An optional `list` (JSON, see utils/digestList.ts) is kept beside the PDF as <name>.json:
+ * the digest's page shows it as a list that reads well on a phone.
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
 import { contentMatchesType } from '../../server/files.ts';
 import { type IssueBucket, parseIssue, recordIssue } from '../../server/digestIssues.ts';
+import { parseDigestList } from '../../utils/digestList.ts';
 
 /** Listing as well as storing: old digests are found by their upload date */
 export interface DigestBucket extends IssueBucket {
@@ -38,6 +41,11 @@ export const DIGEST_PREFIX = 'digests/';
 export const DIGEST_KEEP_DAYS = 183;
 /** Flyers make a digest large; R2 and the Workers request limit allow far more */
 export const DIGEST_MAX_BYTES = 40 * 1024 * 1024;
+/** The events as a list: text only, far below this */
+const LIST_MAX_CHARS = 1024 * 1024;
+
+/** Where a digest's list is kept: beside its PDF, as .json */
+export const digestListKey = (pdfKey: string): string => `${pdfKey.replace(/\.pdf$/i, '')}.json`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -91,6 +99,22 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   } catch (err) {
     console.error('Storing the digest failed:', err);
     return fail('The digest could not be uploaded. Please try again.', 502);
+  }
+
+  // The events as a list for the page; without it the page shows the PDF alone
+  const listField = form.get('list');
+  if (typeof listField === 'string' && listField.length <= LIST_MAX_CHARS) {
+    let list = null;
+    try {
+      list = parseDigestList(JSON.parse(listField));
+    } catch { /* not stored */ }
+    if (list) {
+      try {
+        await env.BUCKET.put(digestListKey(key), new Blob([JSON.stringify(list)]), { httpMetadata: { contentType: 'application/json' } });
+      } catch (err) {
+        console.error('Storing the digest list failed:', err);
+      }
+    }
   }
 
   // Remember what this digest carried; a failure only means next week's marks everything NEW

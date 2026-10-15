@@ -3,13 +3,14 @@
  * under a shaded row per day.
  */
 import { isMultiDayEvent } from '../../date';
-import { type DigestEventGroup, monthShort } from '../../digestGrouping';
+import { type DigestEventGroup, monthShort, summarizeSeries } from '../../digestGrouping';
 import { toDate, clock, isAllDay } from '../../digestText.ts';
 import { getCategoryRgb } from '../../../constants/categoryColors';
 import { createGoogleCalendarUrl, createOutlookWebUrl, createGoogleMapsUrl } from '../links';
 import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE } from '../theme';
 import type { Block, DigestContext } from './context';
 import { otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
+import { seriesDates } from './seriesDates';
 
 const columns = (M: number) => ({
   time: M + 3,
@@ -53,15 +54,18 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, dayKey: 
   font('regular', 7.3);
   const venueLines = fitLines(txt(ev.location), venueW, 3);
 
-  // "Also on" table under the row, across the event and venue columns
-  const otherDates = otherDatesOf(group);
+  // "Also on" table under the row, across the event and venue columns (a long series summed up)
+  const series = summarizeSeries(group);
+  const seriesLayout = series ? seriesDates(ctx, series, COL.category - 3 - COL.event, 6.6) : null;
+  const otherDates = series ? [] : otherDatesOf(group);
   const A_ROW = 3.9;
   const A_BTN_FS = 5;
   font('semibold', 6.6);
   const aDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3;
   font('regular', 6.6);
   const aTimeW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.time))) + 3;
-  const alsoH = otherDates.length ? 1.5 + 3 + otherDates.length * A_ROW : 0;
+  const alsoRows = seriesLayout ? seriesLayout.rows : otherDates.length;
+  const alsoH = alsoRows ? 1.5 + 3 + alsoRows * A_ROW : 0;
 
   const TL = 3.7;
   let contentH = titleLines.length * TL;
@@ -121,13 +125,14 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, dayKey: 
       }
 
       // Also on
-      if (otherDates.length) {
+      if (alsoRows) {
         const left = COL.event;
         const right = COL.category - 3;
         let ay = y + mainH + 1.5 + 2.4;
         font('bold', 5.8);
         color(BRAND);
-        spaced('ALSO ON', left, ay, 0.3);
+        const labelW = spaced('ALSO ON', left, ay, 0.3);
+        seriesLayout?.draw(left, ay, left + labelW + 2, ay + A_ROW, A_ROW);
         const timeX = left + aDateW;
         const placeX = timeX + aTimeW;
         const placeW = right - rowButtonsWidth(ctx, A_BTN_FS) - 2 - placeX - 3.4;

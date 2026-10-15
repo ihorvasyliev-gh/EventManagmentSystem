@@ -5,6 +5,7 @@ import {
   formatAlsoOnDates,
   formatOccurrenceLabel,
   formatGroupOccurrence,
+  summarizeSeries,
 } from '../utils/digestGrouping.ts';
 import type { Event } from '../types.ts';
 
@@ -78,4 +79,73 @@ test('"Also on" names the place when a series moves between venues', () => {
   ]);
   assert.equal(formatAlsoOnDates(group, '; '), 'Thu 1 Oct, 18:00 at Mahon Community Centre; Fri 2 Oct');
   assert.equal(formatGroupOccurrence(group.occurrences[1], group.event, 10), 'Thu 1 Oct, 18:00 at Mahon Com…');
+});
+
+/** Instances of event `id` on the given [month, day] dates of 2026 at `hour` */
+const seriesOf = (dates: Array<[number, number]>, hour = 12, extra: Partial<Event> = {}): Event[] =>
+  dates.map(([m, d]) => makeEvent('s', new Date(2026, m, d, hour, 30), { location: 'Outreach Office', ...extra }));
+
+/** Every 7th day from 15 Oct 2026, `count` times, leaving out the given week indexes */
+const thursdays = (count: number, skip: number[] = []): Array<[number, number]> =>
+  Array.from({ length: count }, (_, i) => i)
+    .filter((i) => !skip.includes(i))
+    .map((i) => {
+      const d = new Date(2026, 9, 15 + 7 * i);
+      return [d.getMonth(), d.getDate()];
+    });
+
+test('a series with up to 3 other dates is still listed date by date', () => {
+  const [group] = groupDigestOccurrences(seriesOf(thursdays(4), 12, { recurrence: { type: 'weekly' } }));
+  assert.equal(summarizeSeries(group), null);
+  assert.equal(formatAlsoOnDates(group, ', '), 'Thu 22 Oct, Thu 29 Oct, Thu 5 Nov');
+});
+
+test('a long weekly series is summed up, without "until" while it carries on', () => {
+  const [group] = groupDigestOccurrences(seriesOf(thursdays(10), 12, { recurrence: { type: 'weekly' } }));
+  assert.equal(formatAlsoOnDates(group), 'every Thursday: 22, 29 Oct · 5, 12, 19, 26 Nov · 3, 10, 17 Dec');
+});
+
+test('a series that ends in the period says until when, and names a skipped week', () => {
+  const recurrence = { type: 'weekly' as const, endDate: new Date(2026, 11, 3) };
+  const [group] = groupDigestOccurrences(seriesOf(thursdays(8, [5]), 12, { recurrence }));
+  assert.equal(summarizeSeries(group)?.pattern, 'every Thursday until 3 Dec, except 19 Nov');
+});
+
+test('picked dates with no later date say until when', () => {
+  const dates = thursdays(6);
+  const customDates = dates.map(([m, d]) => new Date(2026, m, d));
+  const [group] = groupDigestOccurrences(seriesOf(dates, 12, { recurrence: { type: 'custom', customDates } }));
+  assert.equal(summarizeSeries(group)?.pattern, 'every Thursday until 19 Nov');
+  const [ongoing] = groupDigestOccurrences(seriesOf(dates, 12, {
+    recurrence: { type: 'custom', customDates: [...customDates, new Date(2027, 0, 7)] }
+  }));
+  assert.equal(summarizeSeries(ongoing)?.pattern, 'every Thursday');
+});
+
+test('days in a row become a range, and several weekdays read as one pattern', () => {
+  const weekdays: Array<[number, number]> = [];
+  for (let d = 2; d <= 20; d++) if (new Date(2026, 10, d).getDay() % 6) weekdays.push([10, d]);
+  const [group] = groupDigestOccurrences(seriesOf(weekdays));
+  assert.equal(formatAlsoOnDates(group), 'every weekday: 3–6, 9–13, 16–20 Nov');
+
+  const tueThu: Array<[number, number]> = [[9, 13], [9, 15], [9, 20], [9, 22], [9, 27], [9, 29]];
+  const [twice] = groupDigestOccurrences(seriesOf(tueThu));
+  assert.equal(summarizeSeries(twice)?.pattern, 'every Tuesday and Thursday');
+});
+
+test('every other week, and dates with no pattern', () => {
+  const [fortnightly] = groupDigestOccurrences(seriesOf(thursdays(10).filter((_, i) => i % 2 === 0)));
+  assert.equal(formatAlsoOnDates(fortnightly), 'every other Thursday: 29 Oct · 12, 26 Nov · 10 Dec');
+  const [irregular] = groupDigestOccurrences(seriesOf([[9, 1], [9, 3], [9, 9], [9, 20], [9, 22], [9, 30]]));
+  assert.equal(formatAlsoOnDates(irregular), '3, 9, 20, 22, 30 Oct');
+});
+
+test('a long series lists other venues apart and flags a different time', () => {
+  const events = seriesOf(thursdays(8));
+  events[3].location = 'Mahon Library';
+  events[4].location = 'Mahon Library';
+  events[5].date = new Date(2026, 10, 19, 18, 0);
+  const [group] = groupDigestOccurrences(events);
+  assert.deepEqual(summarizeSeries(group)?.venues.map((v) => v.place), ['', 'Mahon Library']);
+  assert.equal(formatAlsoOnDates(group), 'every Thursday: 22, 29 Oct · 19 (18:00), 26 Nov · 3 Dec; at Mahon Library: 5, 12 Nov');
 });

@@ -3,7 +3,7 @@
  * other dates and the flyer), with the day's date in a tile beside it.
  */
 import { isMultiDayEvent } from '../../date';
-import { type DigestEventGroup, monthShort, monthShortUpper } from '../../digestGrouping';
+import { type DigestEventGroup, monthShort, monthShortUpper, summarizeSeries } from '../../digestGrouping';
 import { toAbsoluteHttpUrl, toDate, WEEKDAYS_LONG, clock, startOfLocalDay, isAllDay } from '../../digestText.ts';
 import { getCategoryRgb } from '../../../constants/categoryColors';
 import { createGoogleMapsUrl } from '../links';
@@ -12,6 +12,7 @@ import { BRAND, INK, BODY, MUTED, BORDER, BG, WHITE, PLACE, BRAND_TINT, BRAND_TI
 import type { Block, DigestContext } from './context';
 import { relativeDayLabel } from './headings';
 import { calendarLinks, otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
+import { seriesDates } from './seriesDates';
 import { eventContacts, formatContact } from '../../contacts';
 
 const TILE_H = 15;
@@ -79,17 +80,23 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   const DESC_LH = 3.85;
 
   // "Also on": one row per other date with its time, its venue when it differs (links to
-  // Google Maps) and small screen-only buttons adding that date to Outlook / Google
-  const otherDates = otherDatesOf(group);
+  // Google Maps) and small screen-only buttons adding that date to Outlook / Google. A long
+  // series is summed up instead: "every Thursday" and its dates by month, without the buttons
+  const series = summarizeSeries(group);
+  const seriesLayout = series ? seriesDates(ctx, series, mainW - 5, 7) : null;
+  const otherDates = series ? [] : otherDatesOf(group);
   const ALSO_LABEL_H = 3.4;
   const ALSO_ROW_H = 4.8;
+  const SERIES_ROW_H = 4.2;
   const ALSO_PAD = 1.8;
   const ALSO_BTN_FS = 5.4;
   font('semibold', 7);
   const alsoDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3.5;
   font('medium', 7);
   const alsoTimeW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.time))) + 3.5;
-  const alsoH = otherDates.length ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1 : 0;
+  const alsoH = seriesLayout ? ALSO_LABEL_H + ALSO_PAD * 2 + seriesLayout.rows * SERIES_ROW_H - 1
+    : otherDates.length ? ALSO_LABEL_H + ALSO_PAD * 2 + otherDates.length * ALSO_ROW_H - 1
+    : 0;
 
   // Contacts: one line each ("Sarah Murphy · sarah@…"), the emails linked
   const contacts = eventContacts(ev).map((c) => txt(formatContact(c))).filter(Boolean);
@@ -110,7 +117,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   if (venueLines.length) contentH += 2.2 + venueLines.length * VENUE_LH;
   if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
   if (contacts.length) contentH += 2.4 + 3.3 + (contacts.length - 1) * CONTACT_LH;
-  if (otherDates.length) contentH += 3 + alsoH;
+  if (alsoH) contentH += 3 + alsoH;
 
   const BTN_H = 4.6;
 
@@ -222,7 +229,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
       }
 
       // Also on
-      if (otherDates.length) {
+      if (alsoH) {
         const top = cy + 3;
         const boxW = mainRight - mainX;
         const left = mainX + 2.5;
@@ -232,7 +239,8 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
         leaf(mainX, top, boxW, alsoH, 2.5, 'FD');
         font('bold', 6.3);
         color(BRAND);
-        spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
+        const labelW = spaced('ALSO ON', left, top + ALSO_PAD + 2.3, 0.3);
+        seriesLayout?.draw(left, top + ALSO_PAD + 2.3, left + labelW + 2.5, top + ALSO_PAD + ALSO_LABEL_H + 3.2, SERIES_ROW_H);
         const timeX = left + alsoDateW;
         const placeX = timeX + alsoTimeW;
         const placeW = right - rowButtonsWidth(ctx, ALSO_BTN_FS) - 2.5 - placeX - 3.6;

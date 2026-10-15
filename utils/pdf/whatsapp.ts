@@ -68,7 +68,7 @@ export const generateWhatsAppSummary = (
     text += `⏰ ${timeStr} | ${titleStr}\n`;
     const alsoOn = cleanWa(formatAlsoOnDates(group, '; '));
     if (alsoOn) {
-      text += `🔁 Also on: ${alsoOn}\n`;
+      text += `🔁 Also on ${alsoOn}\n`;
     }
     if (ev.location) {
       const cleanLoc = cleanWa(ev.location);

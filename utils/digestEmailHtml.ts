@@ -7,7 +7,7 @@
  */
 import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
-import { formatAlsoOnDates, monthShort } from './digestGrouping.ts';
+import { formatAlsoOnDates, formatSeriesDates, summarizeSeries, monthShort } from './digestGrouping.ts';
 import {
   digestGroupsFor, formatPeriodShort, toAbsoluteHttpUrl, toDate, clock, isAllDay, WEEKDAYS_LONG
 } from './digestText.ts';
@@ -87,7 +87,11 @@ ${p(`Opens on your phone or computer. For each event you'll see the description,
     const end = toDate(ev.endDate);
     const cat = hex(getCategoryRgb(ev.category).accent);
     const venue = ev.location?.trim().replace(/\s+/g, ' ');
-    const alsoOn = formatAlsoOnDates(group, ', ');
+    // A long series: "every Thursday" in bold, then its dates by month
+    const series = summarizeSeries(group);
+    const alsoOn = series
+      ? `${series.pattern ? `<strong style="color:${INK};">${esc(series.pattern)}</strong>: ` : ''}${esc(formatSeriesDates(series.venues))}`
+      : esc(formatAlsoOnDates(group, ', '));
     return `
 <tr>
   <td style="padding:14px 0;border-top:1px solid ${BORDER};">
@@ -104,7 +108,7 @@ ${p(`Opens on your phone or computer. For each event you'll see the description,
           <div style="font-size:13px;line-height:18px;color:${INK};font-weight:bold;">${esc(whenOf(start, end))}<span style="color:${BORDER};font-weight:normal;">&nbsp; | &nbsp;</span><span style="color:${cat};font-size:11px;letter-spacing:1px;text-transform:uppercase;">&#9679; ${esc(ev.category || 'Event')}</span></div>
           <div style="margin-top:3px;font-size:17px;line-height:22px;font-weight:bold;color:${INK};">${esc(ev.title.trim() || 'Untitled event')}</div>
           ${venue ? `<div style="margin-top:4px;font-size:13px;line-height:18px;"><a href="${esc(mapsUrl(venue))}" target="_blank" style="color:${PLACE};text-decoration:none;">&#128205; ${esc(venue)}</a></div>` : ''}
-          ${alsoOn ? `<div style="margin-top:4px;font-size:12px;line-height:17px;color:${MUTED};">Also on ${esc(alsoOn)}</div>` : ''}
+          ${alsoOn ? `<div style="margin-top:4px;font-size:12px;line-height:17px;color:${MUTED};">Also on ${alsoOn}</div>` : ''}
         </td>
       </tr>
     </table>

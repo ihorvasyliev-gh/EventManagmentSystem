@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin';
+
 /** @type {import('tailwindcss').Config} */
 
 // Colours, type and corners follow corkcitypartnership.ie: raspberry #B90B4F, green #609C5C,
@@ -132,5 +134,10 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // short: screens no taller than a 1280×720 laptop's window (with short:lg: the month grid's
+    // rows are lower there, so today's week stays on screen). A variant rather than a screen: a
+    // raw screen would switch off the min-[…] breakpoints used across the app
+    plugin(({ addVariant }) => addVariant('short', '@media (max-height: 820px)')),
+  ],
 };

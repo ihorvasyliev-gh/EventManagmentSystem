@@ -11,11 +11,12 @@ interface MobileDayPanelProps {
   /** Admins: start a new event on this day */
   onAdd?: () => void;
   onClose: () => void;
+  panelRef?: React.Ref<HTMLDivElement>;
 }
 
 /** Phones: the tapped day's events, in cards under the month grid */
-const MobileDayPanel: React.FC<MobileDayPanelProps> = ({ day, events, onEventClick, onAdd, onClose }) => (
-  <div className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 animate-fade-in">
+const MobileDayPanel: React.FC<MobileDayPanelProps> = ({ day, events, onEventClick, onAdd, onClose, panelRef }) => (
+  <div ref={panelRef} className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 animate-fade-in">
     <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-700">
       <div className="flex items-center gap-2">
         <span className="text-sm font-bold text-slate-900 dark:text-white">
@@ -30,7 +31,7 @@ const MobileDayPanel: React.FC<MobileDayPanelProps> = ({ day, events, onEventCli
           <button
             type="button"
             onClick={onAdd}
-            className="px-2 py-1 rounded-lg text-xs font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 transition-colors"
+            className="px-3 py-2 rounded-lg text-xs font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 hover:bg-brand-100 transition-colors"
           >
             + Add
           </button>

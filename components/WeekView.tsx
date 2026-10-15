@@ -208,19 +208,19 @@ const WeekView: React.FC<WeekViewProps> = ({
                 }`}
                 aria-label={`${group.day.toLocaleDateString(APP_LOCALE, { weekday: 'long', month: 'short', day: 'numeric' })}, ${count} events`}
               >
-                <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
+                <span className="text-[11px] uppercase font-bold tracking-wider opacity-80">
                   <span className="sm:hidden">{dayName}</span>
                   <span className="hidden sm:inline">{group.day.toLocaleDateString(APP_LOCALE, { weekday: 'short' })}</span>
                 </span>
                 <span className="text-sm font-extrabold">{group.day.getDate()}</span>
-                <div className="h-1.5 flex items-center justify-center gap-0.5 mt-0.5">
-                  {count > 0 && (
+                {/* A dot in each event's category colour (up to three), as in the month grid */}
+                <div className="h-1.5 flex items-center justify-center gap-0.5 mt-0.5" aria-hidden="true">
+                  {group.events.slice(0, 3).map((ev, i) => (
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isSelected ? 'bg-white' : 'bg-brand-500 dark:bg-brand-400'
-                      }`}
+                      key={ev.instanceKey ?? `${ev.id}-${i}`}
+                      className={`w-1.5 h-1.5 rounded-full ${getCategoryDotColor(ev.category)} ${isSelected ? 'ring-1 ring-white' : ''}`}
                     />
-                  )}
+                  ))}
                 </div>
               </button>
             );
@@ -254,7 +254,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                 </span>
                 {/* Not on the narrowest phones, where it pushed "Add" out; the day strip above marks today too */}
                 {isSameDay(activeMobileGroup.day, today) && (
-                  <span className="hidden min-[360px]:inline px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
+                  <span className="hidden min-[360px]:inline px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
                     Today
                   </span>
                 )}
@@ -307,7 +307,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="flex items-center gap-1 flex-wrap min-w-0 max-w-full">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
                           {event.category || 'Event'}
                         </span>
                         <PendingBadge event={event} />
@@ -370,7 +370,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     {group.day.getDate()}
                   </span>
                   {isToday && (
-                    <span className="hidden xl:inline text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-brand-500 text-white">
+                    <span className="hidden xl:inline text-[11px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-brand-500 text-white">
                       Today
                     </span>
                   )}
@@ -417,10 +417,10 @@ const WeekView: React.FC<WeekViewProps> = ({
                         {/* Category & Time */}
                         <div className="flex items-center justify-between gap-1 flex-wrap">
                           {/* Short names: the full ones were cut to "Enterprise & Em…" in these narrow columns */}
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
+                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
                             {shortCategoryLabel(event.category)}
                           </span>
-                          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
                             <Clock className="w-2.5 h-2.5 text-slate-400" />
                             {timeText}
                           </span>
@@ -434,7 +434,7 @@ const WeekView: React.FC<WeekViewProps> = ({
 
                         {/* Location */}
                         {event.location && (
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
                             <MapPin className="w-2.5 h-2.5 flex-shrink-0 text-slate-400" />
                             <span className="truncate">{event.location}</span>
                           </div>

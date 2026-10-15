@@ -3,6 +3,9 @@
  * "Click here for details" button to the PDF and the events as date-tile rows, like the PDF. A
  * mailto: link can only carry plain text, so the app copies this to the clipboard and it is pasted
  * into the new email. Built from tables with inline styles, which Outlook, Gmail and Apple Mail all keep.
+ * A pasted email keeps no <style> block, so there are no media queries: everything stacks (logo
+ * over the title, category over the event name) and nothing sits side by side that would squeeze
+ * on a phone, with only the date tile a fixed width.
  * Plain words for every reader: no "digest", "PDF" or "download" when there is a link.
  */
 import type { Event } from '../types.ts';
@@ -20,7 +23,11 @@ const INK = '#222222';
 const BODY = '#424242';
 const MUTED = '#737373';
 const BORDER = '#E6E6E6';
+const SOFT = '#F6F6F6';
 const FONT = "Lato, 'Segoe UI', Arial, Helvetica, sans-serif";
+
+/** Side padding: room on a desktop without wasting a phone's narrow screen */
+const SIDE = 24;
 
 /** Most events listed in the email; the rest are counted ("…and 4 more in the PDF") */
 const LIST_LIMIT = 40;
@@ -85,7 +92,9 @@ ${p(`Opens on your phone or computer. For each event you'll see the description,
     const ev = group.event;
     const start = toDate(ev.date) || startDate;
     const end = toDate(ev.endDate);
-    const cat = hex(getCategoryRgb(ev.category).accent);
+    const { accent, tint: tintRgb } = getCategoryRgb(ev.category);
+    const cat = hex(accent);
+    const tint = hex(tintRgb);
     const venue = ev.location?.trim().replace(/\s+/g, ' ');
     // A long series: "every Thursday" in bold, then its dates by month
     const series = summarizeSeries(group);
@@ -94,21 +103,22 @@ ${p(`Opens on your phone or computer. For each event you'll see the description,
       : esc(formatAlsoOnDates(group, ', '));
     return `
 <tr>
-  <td style="padding:14px 0;border-top:1px solid ${BORDER};">
+  <td style="padding:16px 0;border-top:1px solid ${BORDER};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
-        <td width="56" valign="top" style="width:56px;padding-right:16px;">
-          <table role="presentation" width="56" cellpadding="0" cellspacing="0" border="0" style="width:56px;border:1px solid ${BORDER};border-radius:10px 0 10px 0;text-align:center;">
-            <tr><td style="padding:7px 0 0;font-family:${FONT};font-size:10px;font-weight:bold;letter-spacing:1px;color:${MUTED};">${WEEKDAYS_LONG[start.getDay()].slice(0, 3).toUpperCase()}</td></tr>
-            <tr><td style="font-family:${FONT};font-size:22px;line-height:26px;font-weight:bold;color:${INK};">${start.getDate()}</td></tr>
-            <tr><td style="padding:0 0 7px;font-family:${FONT};font-size:10px;font-weight:bold;letter-spacing:1px;color:${MUTED};">${monthShort(start).toUpperCase()}</td></tr>
+        <td width="56" valign="top" style="width:56px;padding-right:14px;">
+          <table role="presentation" width="56" cellpadding="0" cellspacing="0" border="0" bgcolor="${tint}" style="width:56px;background:${tint};border-radius:10px 0 10px 0;text-align:center;">
+            <tr><td style="padding:8px 0 0;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${WEEKDAYS_LONG[start.getDay()].slice(0, 3).toUpperCase()}</td></tr>
+            <tr><td style="font-family:${FONT};font-size:24px;line-height:28px;font-weight:bold;color:${INK};">${start.getDate()}</td></tr>
+            <tr><td style="padding:0 0 8px;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${monthShort(start).toUpperCase()}</td></tr>
           </table>
         </td>
         <td valign="top" style="font-family:${FONT};">
-          <div style="font-size:13px;line-height:18px;color:${INK};font-weight:bold;">${esc(whenOf(start, end))}<span style="color:${BORDER};font-weight:normal;">&nbsp; | &nbsp;</span><span style="color:${cat};font-size:11px;letter-spacing:1px;text-transform:uppercase;">&#9679; ${esc(ev.category || 'Event')}</span></div>
+          <div style="font-size:11px;line-height:15px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:${cat};">${esc(ev.category || 'Event')}</div>
           <div style="margin-top:3px;font-size:17px;line-height:22px;font-weight:bold;color:${INK};">${esc(ev.title.trim() || 'Untitled event')}</div>
-          ${venue ? `<div style="margin-top:4px;font-size:13px;line-height:18px;"><a href="${esc(mapsUrl(venue))}" target="_blank" style="color:${PLACE};text-decoration:none;">&#128205; ${esc(venue)}</a></div>` : ''}
-          ${alsoOn ? `<div style="margin-top:4px;font-size:12px;line-height:17px;color:${MUTED};">Also on ${alsoOn}</div>` : ''}
+          <div style="margin-top:5px;font-size:14px;line-height:19px;font-weight:bold;color:${BODY};">${esc(whenOf(start, end))}</div>
+          ${venue ? `<div style="margin-top:3px;font-size:14px;line-height:19px;"><a href="${esc(mapsUrl(venue))}" target="_blank" style="color:${PLACE};text-decoration:none;">&#128205;&nbsp;${esc(venue)}</a></div>` : ''}
+          ${alsoOn ? `<div style="margin-top:5px;font-size:12px;line-height:17px;color:${MUTED};">Also on ${alsoOn}</div>` : ''}
         </td>
       </tr>
     </table>
@@ -127,38 +137,42 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
   <tr>
     <td style="padding:0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td width="72%" height="5" bgcolor="${BRAND}" style="height:5px;line-height:5px;font-size:0;background:${BRAND};">&nbsp;</td>
-        <td width="28%" height="5" bgcolor="${GREEN}" style="height:5px;line-height:5px;font-size:0;background:${GREEN};">&nbsp;</td>
+        <td width="72%" height="6" bgcolor="${BRAND}" style="height:6px;line-height:6px;font-size:0;background:${BRAND};">&nbsp;</td>
+        <td width="28%" height="6" bgcolor="${GREEN}" style="height:6px;line-height:6px;font-size:0;background:${GREEN};">&nbsp;</td>
       </tr></table>
     </td>
   </tr>
   <tr>
-    <td style="padding:26px 32px 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td valign="middle">${logo ? `<img src="${esc(logo)}" width="190" height="45" alt="Cork City Partnership" style="display:block;border:0;width:190px;max-width:100%;height:auto;">` : ''}</td>
-        <td valign="middle" align="right" style="padding-left:12px;font-family:${FONT};text-align:right;">
-          <div style="font-size:11px;line-height:16px;font-weight:bold;letter-spacing:1px;color:${BRAND};">UPCOMING EVENTS</div>
-          <div style="font-size:14px;line-height:20px;color:${INK};">${period}</div>
-        </td>
-      </tr></table>
+    <td style="padding:24px ${SIDE}px 0;">
+      ${logo ? `<img src="${esc(logo)}" width="190" height="45" alt="Cork City Partnership" style="display:block;border:0;width:190px;max-width:100%;height:auto;">` : ''}
     </td>
   </tr>
   <tr>
-    <td style="padding:22px 32px 8px;">
+    <td style="padding:20px ${SIDE}px 0;font-family:${FONT};">
+      <div style="font-size:11px;line-height:16px;font-weight:bold;letter-spacing:2px;color:${BRAND};">UPCOMING EVENTS</div>
+      <div style="margin-top:2px;font-size:22px;line-height:28px;font-weight:bold;color:${INK};">${period}</div>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:18px ${SIDE}px 8px;">
       ${p('Dear Board Members and Colleagues,')}
       ${intro}
       ${button}
       ${list}
     </td>
   </tr>
-  <tr>
-    <td style="padding:10px 32px 26px;">
-      ${submitUrl ? p(`Running an event? <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next update.`, 'margin:0;') : ''}
+  ${submitUrl ? `<tr>
+    <td style="padding:8px ${SIDE}px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td bgcolor="${SOFT}" style="background:${SOFT};border-radius:8px;padding:14px 16px;font-family:${FONT};font-size:14px;line-height:21px;color:${BODY};">
+          <strong style="color:${INK};">Running an event?</strong> <a href="${esc(submitUrl)}" target="_blank" style="color:${BRAND};font-weight:bold;">Send it in</a> (no login needed) and it will be in the next update.
+        </td>
+      </tr></table>
     </td>
-  </tr>
+  </tr>` : ''}
   <tr>
-    <td style="padding:14px 32px;border-top:1px solid ${BORDER};font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};">
-      Cork City Partnership CLG &nbsp;·&nbsp; <span style="color:${PLACE};">Education | Employment | Empowerment</span>
+    <td style="padding:14px ${SIDE}px;border-top:1px solid ${BORDER};font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};">
+      ${nowrap('Cork City Partnership CLG &nbsp;·')}&nbsp; <span style="color:${PLACE};">${nowrap('Education | Employment | Empowerment')}</span>
     </td>
   </tr>
 </table>

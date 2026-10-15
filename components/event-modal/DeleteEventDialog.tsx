@@ -46,7 +46,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting
               >
                 <div className="font-semibold text-red-600 dark:text-red-400">Delete entire series</div>
                 <div className="text-xs text-red-500 dark:text-red-400 mt-1">
-                  Remove all occurrences of this event
+                  Remove all occurrences of this event (you can undo it straight after)
                 </div>
               </button>
             </div>
@@ -54,7 +54,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Are you sure you want to delete "{event.title}"? This action cannot be undone.
+              Delete "{event.title}"? You can undo it straight after, and restore it later from the change log.
             </p>
             <div className="flex gap-3">
               <button

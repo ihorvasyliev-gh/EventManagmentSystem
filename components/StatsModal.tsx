@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart3, Check, Copy } from 'lucide-react';
+import { BarChart3, Check, Copy, FileSpreadsheet, Loader2 } from 'lucide-react';
 import ModalShell from './ModalShell';
 import { type Event } from '../types';
-import { computePeriodStats, statsSummaryText } from '../utils/eventStats';
+import { computePeriodStats, periodOccurrences, statsSummaryText } from '../utils/eventStats';
+import { exportStatsToExcel, STATS_NOTE } from '../utils/statsExcel';
+import { downloadBlob } from '../utils/export';
+import { useToast } from '../contexts/ToastContext';
 import { formatLocalDate } from '../utils/date';
 import { getCategoryDotColor } from './WeekView';
 
@@ -83,6 +86,8 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
   const [customFrom, setCustomFrom] = useState(() => formatLocalDate(periodRange('this-quarter', now).start));
   const [customTo, setCustomTo] = useState(() => formatLocalDate(periodRange('this-quarter', now).end));
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const { showToast } = useToast();
 
   const range = useMemo(() => {
     if (period !== 'custom') return periodRange(period, now);
@@ -109,6 +114,22 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
     }
   };
 
+  // The same figures with every venue, and each date held, for the Board to sort and filter
+  const downloadExcel = async () => {
+    if (!range) return;
+    setDownloading(true);
+    try {
+      const all = computePeriodStats(events, recurrenceExceptions, range.start, range.end, Number.POSITIVE_INFINITY);
+      const blob = await exportStatsToExcel(all, periodLabel, periodOccurrences(events, recurrenceExceptions, range.start, range.end));
+      downloadBlob(blob, `ccp-statistics-${formatLocalDate(range.start)}-to-${formatLocalDate(range.end)}.xlsx`);
+    } catch (err) {
+      console.error('Statistics export failed:', err);
+      showToast('The spreadsheet could not be made. Please try again.', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const maxCategory = Math.max(0, ...(stats?.byCategory.map((c) => c.occurrences) ?? []));
   const maxMonth = Math.max(0, ...(stats?.byMonth.map((m) => m.occurrences) ?? []));
   const maxVenue = Math.max(0, ...(stats?.topVenues.map((v) => v.occurrences) ?? []));
@@ -126,9 +147,13 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
           <button type="button" onClick={onClose} className="cta h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
             Close
           </button>
-          <button type="button" onClick={copySummary} disabled={!stats} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
+          <button type="button" onClick={copySummary} disabled={!stats} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60">
             {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             {copied ? 'Copied' : 'Copy as text'}
+          </button>
+          <button type="button" onClick={() => void downloadExcel()} disabled={!stats || downloading} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            {downloading ? 'Preparing…' : 'Download Excel'}
           </button>
         </div>
       }
@@ -215,9 +240,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
                 )}
               </>
             )}
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Published events only. A repeating or multi-date event counts once per date; deleted dates are left out.
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{STATS_NOTE}</p>
           </>
         )}
       </div>

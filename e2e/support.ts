@@ -99,6 +99,17 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
       const row = state.events.find((e) => e.id === id);
       return json(route, single ? row : [row]);
     }
+    if (req.method() === 'POST') {
+      // An event put back (Undo, or Restore in the change log): the same id can't come back twice
+      const body = JSON.parse(req.postData() || '{}');
+      const rows = (Array.isArray(body) ? body : [body]) as EventRow[];
+      if (rows.some((r) => state.events.some((e) => e.id === r.id))) {
+        return json(route, { code: '23505', message: 'duplicate key value violates unique constraint "events_pkey"' }, 409);
+      }
+      state.events = [...state.events, ...rows];
+      rows.forEach((r) => state.writes.push({ method: 'POST', id: r.id, body: r }));
+      return json(route, single ? rows[0] : rows, 201);
+    }
     if (req.method() === 'DELETE' && id) {
       state.events = state.events.filter((e) => e.id !== id);
       state.writes.push({ method: 'DELETE', id, body: null });

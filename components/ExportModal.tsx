@@ -15,20 +15,33 @@ const FEED_NAME = 'CCP Events';
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** The events shown now (after search and filters) */
   events: Event[];
+  /** Every event, when search or filters are on: the export can take all of them instead */
+  allEvents?: Event[];
   onOpenFortnightlyBulletin?: () => void;
 }
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOpenFortnightlyBulletin }) => {
+// Published events only (strictly excluding drafts and pending submissions)
+const publishedOnly = (list: Event[]) => list.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
+
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allEvents, onOpenFortnightlyBulletin }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'subscribe'>('export');
   const [exportFormat, setExportFormat] = useState<'ical' | 'excel'>('ical');
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
   // Subscribe to some categories only (none ticked = everything)
   const [feedCategories, setFeedCategories] = useState<string[]>([]);
+  // With search or filters on, the export says so and can take everything instead
+  const [scope, setScope] = useState<'shown' | 'all'>('shown');
   const { showToast } = useToast();
 
   if (!isOpen) return null;
+
+  const shown = publishedOnly(events);
+  const everything = allEvents ? publishedOnly(allEvents) : null;
+  const toExport = everything && scope === 'all' ? everything : shown;
+  const plural = (n: number) => `${n} published ${n === 1 ? 'event' : 'events'}`;
 
   // Build the subscription URL based on current origin
   const feedPath = '/api/calendar';
@@ -62,9 +75,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
   const handleExport = async () => {
     setExporting(true);
     try {
-      // Export published events only (strictly excluding drafts and pending submissions)
-      const publishedOnly = events.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
-      const eventsWithRelated = await getEventsWithRelated(publishedOnly);
+      const eventsWithRelated = await getEventsWithRelated(toExport);
       const recurringIds = eventsWithRelated
         .filter(e => e.recurrence && e.recurrence.type !== 'none')
         .map(e => e.id);
@@ -114,7 +125,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
         <button
           type="button"
           onClick={handleExport}
-          disabled={exporting}
+          disabled={exporting || toExport.length === 0}
           className="cta inline-flex justify-center items-center gap-2 rounded px-5 py-2.5 bg-brand-600 text-white hover:bg-brand-700 shadow-sm disabled:opacity-50 transition-colors"
         >
           {exporting ? (
@@ -228,9 +239,35 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, onOp
             </button>
           )}
 
+          {everything && (
+            <fieldset className="p-4 rounded-leaf-sm border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30">
+              <legend className="sr-only">Which events</legend>
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Your search or filters are on</p>
+              <div className="mt-2 space-y-1.5">
+                {([
+                  ['shown', `Only the ${plural(shown.length)} that ${shown.length === 1 ? 'matches' : 'match'}`],
+                  ['all', `All ${plural(everything.length)}`]
+                ] as const).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2.5 text-sm text-slate-800 dark:text-slate-200 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="export-scope"
+                      value={value}
+                      checked={scope === value}
+                      onChange={() => setScope(value)}
+                      disabled={exporting}
+                      className="w-4 h-4 accent-brand-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <fieldset className="space-y-3">
             <legend className="eyebrow w-full mb-3">
-              Export published events as
+              Export {plural(toExport.length)} as
             </legend>
             {formatOption('ical', <Calendar className="h-5 w-5 text-cat-enterprise-500 dark:text-cat-enterprise-400" />, 'Calendar file (.ics)', 'Import into Outlook, Google Calendar or Apple Calendar')}
             {formatOption('excel', <FileSpreadsheet className="h-5 w-5 text-ccp-green-500 dark:text-ccp-green-400" />, 'Excel spreadsheet (.xlsx)', 'Every event with dates, venues, posters and contacts')}

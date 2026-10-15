@@ -18,6 +18,17 @@ export interface PeriodStats {
 const MONTH = new Intl.DateTimeFormat('en-IE', { month: 'short', year: 'numeric' });
 const venueKey = (v: string) => v.trim().toLowerCase();
 
+/** Every date of a published event between `start` and `end` (inclusive), in order */
+export const periodOccurrences = (
+  events: Event[],
+  exceptions: Map<string, Date[]> | undefined,
+  start: Date,
+  end: Date
+): Event[] =>
+  expandRecurringEvents(events.filter((e) => e.status === 'published'), start, end, exceptions)
+    .filter((o) => o.date >= start && o.date <= end)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
 /** Published events between `start` and `end` (inclusive), counted for a Board report */
 export const computePeriodStats = (
   events: Event[],
@@ -26,9 +37,7 @@ export const computePeriodStats = (
   end: Date,
   topVenueCount = 8
 ): PeriodStats => {
-  const published = events.filter((e) => e.status === 'published');
-  const occurrences = expandRecurringEvents(published, start, end, exceptions)
-    .filter((o) => o.date >= start && o.date <= end);
+  const occurrences = periodOccurrences(events, exceptions, start, end);
 
   const categories = new Map<string, { occurrences: number; ids: Set<string> }>();
   const months = new Map<string, { label: string; occurrences: number }>();

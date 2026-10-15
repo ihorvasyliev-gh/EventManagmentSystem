@@ -101,7 +101,7 @@ const AppContent: React.FC = () => {
 
   const { pendingSubmissions, handleApproveSubmission, handleRejectSubmission, handleApproveAllSubmissions } =
     useSubmissionActions({ isAdmin, events, setEvents, syncAfterChange, showToast });
-  const { handleDeleteInstance, handleDeleteEvent, forgetExceptions } = useEventActions({
+  const { handleDeleteInstance, handleDeleteEvent, restoreDeletedEvent, forgetExceptions } = useEventActions({
     user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, showToast, modal
   });
 
@@ -365,6 +365,7 @@ const AppContent: React.FC = () => {
             isOpen={isExportModalOpen}
             onClose={() => setIsExportModalOpen(false)}
             events={filteredEvents}
+            allEvents={hasActiveFilters ? events : undefined}
             onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
           />
         </Suspense>
@@ -389,6 +390,7 @@ const AppContent: React.FC = () => {
             onClose={() => setIsChangeLogOpen(false)}
             events={events}
             onOpenEvent={openEvent}
+            onRestore={(deleted) => restoreDeletedEvent(deleted, { checkFiles: true })}
             newSince={changeLogNewSince}
           />
         </Suspense>

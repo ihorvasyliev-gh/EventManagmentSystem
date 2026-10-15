@@ -1,15 +1,21 @@
 import { useCallback } from 'react';
 import type React from 'react';
 import { type Event, type User } from '../types';
-import { deleteEvent, deleteRecurrenceInstance, saveCustomSchedule } from '../services/eventService';
+import {
+  deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, restoreEvent, removeDeletedEventFiles, dropMissingFiles,
+  type DeletedEvent
+} from '../services/eventService';
 import { cacheExceptions } from '../utils/eventsCache';
 import { isSameDay } from '../utils/date';
 import { isRecurringEvent } from '../utils/recurrence';
 import { materializeCustomSchedule } from '../utils/multiDateUtils';
-import type { ToastType } from '../contexts/ToastContext';
+import type { ToastType, ToastOptions } from '../contexts/ToastContext';
 import type { EventModalControls } from './useEventModal';
 
-export type ShowToast = (message: string, type?: ToastType, duration?: number) => void;
+/** How long a deletion can be undone from its toast */
+const UNDO_MS = 10_000;
+
+export type ShowToast = (message: string, type?: ToastType, duration?: number, options?: ToastOptions) => void;
 
 interface EventActionsOptions {
   user: User | null;
@@ -65,7 +71,7 @@ export const useEventActions = ({
           await saveCustomSchedule(eventId, schedule, user.id, user.fullName, instanceDate);
           showToast('Removed from the event', 'success');
         } else {
-          await deleteEvent(eventId);
+          void removeDeletedEventFiles(await deleteEvent(eventId));
           showToast('That was the last date, so the event was deleted', 'success');
         }
       } catch (error) {
@@ -117,6 +123,37 @@ export const useEventActions = ({
     }
   }, [user, showToast, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, forgetExceptions]);
 
+  /**
+   * Puts a deleted event back (Undo, or Restore in the change log) and onto the calendar.
+   * True when it worked; the toast says why not. From the change log its files may be gone.
+   */
+  const restoreDeletedEvent = useCallback(async (deleted: DeletedEvent, options?: { checkFiles?: boolean }): Promise<boolean> => {
+    if (!user) return false;
+    try {
+      const { deleted: copy, lostFiles } = options?.checkFiles ? await dropMissingFiles(deleted) : { deleted, lostFiles: 0 };
+      const { event, deletedDates } = await restoreEvent(copy);
+      setEvents((prev) => [...prev.filter((e) => e.id !== event.id), event]);
+      if (deletedDates.length) {
+        setRecurrenceExceptions((prev) => {
+          const next = new Map(prev);
+          next.set(event.id, deletedDates);
+          cacheExceptions(next);
+          return next;
+        });
+      }
+      showToast(
+        lostFiles
+          ? `"${event.title}" is back on the calendar, without its flyer or files (they were removed after it was deleted)`
+          : `"${event.title}" is back on the calendar`,
+        lostFiles ? 'warning' : 'success'
+      );
+      return true;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'The event could not be restored', 'error');
+      return false;
+    }
+  }, [user, setEvents, setRecurrenceExceptions, showToast]);
+
   const handleDeleteEvent = useCallback(async (id: string) => {
     if (!user) return;
 
@@ -132,16 +169,22 @@ export const useEventActions = ({
     // Close modal if it's open for this event
     if (selectedEvent?.id === id) closeModal();
 
+    let deleted: DeletedEvent;
     try {
-      await deleteEvent(id);
-      showToast('Event deleted successfully', 'success');
-      if (isRecurringEvent(eventToDelete)) forgetExceptions(id);
+      deleted = await deleteEvent(id);
     } catch (e) {
       console.error("Error deleting event", e);
       setEvents((prev) => [...prev, eventToDelete]);
       showToast('Failed to delete event', 'error');
+      return;
     }
-  }, [user, events, setEvents, selectedEvent, closeModal, forgetExceptions, showToast]);
+    if (isRecurringEvent(eventToDelete)) forgetExceptions(id);
+    // A while to undo; after that its flyer and attachments are removed from storage
+    showToast('Event deleted successfully', 'success', UNDO_MS, {
+      action: { label: 'Undo', onClick: () => void restoreDeletedEvent(deleted) },
+      onExpire: () => void removeDeletedEventFiles(deleted)
+    });
+  }, [user, events, setEvents, selectedEvent, closeModal, forgetExceptions, showToast, restoreDeletedEvent]);
 
-  return { handleDeleteInstance, handleDeleteEvent, forgetExceptions };
+  return { handleDeleteInstance, handleDeleteEvent, restoreDeletedEvent, forgetExceptions };
 };

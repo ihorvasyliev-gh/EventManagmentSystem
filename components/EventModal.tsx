@@ -190,7 +190,8 @@ const EventModal: React.FC<EventModalProps> = ({
 
         {/* Modal Panel - Full Screen on Mobile. Centred from sm up, never taller than the window
             (a phone held sideways is sm wide but only ~375px tall) */}
-        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[min(90vh,calc(100dvh-2rem))] border-t sm:border border-white/20 animate-scale-in bg-white dark-panel`}>
+        {/* Wider with a poster, which then stands beside the details */}
+        <div ref={modalPanelRef} className={`relative flex flex-col rounded-none sm:rounded-leaf text-left overflow-hidden shadow-xl transform transition-all sm:max-w-2xl ${event?.posterUrl ? 'md:max-w-4xl' : ''} w-full h-[100dvh] sm:h-auto sm:max-h-[min(90vh,calc(100dvh-2rem))] border-t sm:border border-white/20 animate-scale-in bg-white dark-panel`}>
 
           {/* Header */}
           <div className="px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 shrink-0 z-10 bg-white dark:bg-slate-900">

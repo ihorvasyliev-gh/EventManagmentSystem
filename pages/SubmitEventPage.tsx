@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { MapPin, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { submitEvent, saveEventChanges, getPublishedEventsForSubmitters, type SubmissionData } from '../services/submissionService';
 import { type User as AuthUser, UserRole, type Event, type EventStatus } from '../types';
 import MultiDatePicker from '../components/MultiDatePicker';
@@ -8,6 +8,7 @@ import {
   type TimeSlot, type ScheduleState, formatTimeRange, compareByStartTime, getSlotsForDate, readScheduleFromEvent, materializeCustomSchedule
 } from '../utils/multiDateUtils';
 import { useEventSchedule } from '../hooks/useEventSchedule';
+import { useToday } from '../hooks/useToday';
 import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 import { EVENT_CATEGORIES, type EventCategoryName } from '../constants/categories';
@@ -82,6 +83,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   onBackToLogin, currentUser, events = [], initialDate, template, editing, editingExceptions, publishOnSave, onSaved
 }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
+  const today = useToday();
 
   // No date is picked up front, except the day an admin opened the form from
   const defaultDate = useMemo(() => {
@@ -199,6 +201,8 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   // Status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
+  // Sending was tried with something missing: the button says how much is left to fix
+  const [attempted, setAttempted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<SubmissionSummary | null>(null);
   // Staff see what they entered before it is sent; admins publish straight away
@@ -314,23 +318,38 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     return next;
   };
 
+  /** Scrolls to the first field with a problem, in the order they appear; false if there is none */
+  const goToFirstError = (found: Partial<Record<FieldName, string>>): boolean => {
+    const order: FieldName[] = [
+      'title', 'dates', 'repeat', 'location', 'description', 'poster', 'name', 'email',
+      ...extraContacts.flatMap((_, i) => [contactErrorKey(i, 'name'), contactErrorKey(i, 'email')])
+    ];
+    const firstInvalid = order.find((f) => found[f]);
+    if (!firstInvalid) return false;
+    const el = document.getElementById(`field-${firstInvalid}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el && 'focus' in el) (el as HTMLElement).focus({ preventScroll: true });
+    return true;
+  };
+
+  // Enter in a one-line field doesn't send a half-filled form (or publish it, for admins);
+  // on a phone the keyboard's Go key just closes the keyboard
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    const target = e.target;
+    if (e.key !== 'Enter' || e.nativeEvent.defaultPrevented || !(target instanceof HTMLInputElement)) return;
+    if (['checkbox', 'radio', 'button', 'submit', 'file'].includes(target.type)) return;
+    e.preventDefault();
+    if (window.matchMedia?.('(pointer: coarse)').matches) target.blur();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
 
     const found = validate();
     setErrors(found);
-    const order: FieldName[] = [
-      'title', 'dates', 'repeat', 'location', 'description', 'poster', 'name', 'email',
-      ...extraContacts.flatMap((_, i) => [contactErrorKey(i, 'name'), contactErrorKey(i, 'email')])
-    ];
-    const firstInvalid = order.find((f) => found[f]);
-    if (firstInvalid) {
-      const el = document.getElementById(`field-${firstInvalid}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (el && 'focus' in el) (el as HTMLElement).focus({ preventScroll: true });
-      return;
-    }
+    setAttempted(true);
+    if (goToFirstError(found)) return;
 
     // Admins publish, and changes to an event are saved, without the review screen
     if (isAdmin || editing) {
@@ -463,6 +482,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     scheduleControls.reset(scheduleFromDraft(null, defaultDate));
     setRepeat(NO_REPEAT);
     setErrors({});
+    setAttempted(false);
     setSubmitError(null);
   };
 
@@ -527,6 +547,22 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     return distinct.length > 2 ? `${distinct.slice(0, 2).join(' · ')} +${distinct.length - 2} more` : distinct.join(' · ');
   })();
   const descLength = description.trim().length;
+  // A new event on a day that has already gone is usually a slip in the calendar
+  const pastDates = editing ? [] : sortedDates.filter((d) => d < today);
+  const pastLabel = pastDates.length > 2
+    ? `${pastDates.slice(0, 2).map(fmtChipDate).join(', ')} and ${pastDates.length - 2} more`
+    : pastDates.map(fmtChipDate).join(' and ');
+  const errorCount = attempted ? Object.values(errors).filter(Boolean).length : 0;
+  const errorSummary = errorCount > 0 && (
+    <button
+      type="button"
+      onClick={() => goToFirstError(errors)}
+      className="inline-flex items-center gap-1.5 min-h-[32px] text-sm font-semibold text-red-600 dark:text-red-400 hover:underline underline-offset-2"
+    >
+      <AlertCircle className="w-4 h-4 shrink-0" />
+      {errorCount === 1 ? '1 field to fix' : `${errorCount} fields to fix`} · Show
+    </button>
+  );
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900">
@@ -548,7 +584,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
               <RestoredDraftNotice onStartFresh={handleDiscardDraft} onDismiss={() => setShowDraftNotice(false)} />
             )}
 
-            <form id={SUBMIT_FORM_ID} onSubmit={handleSubmit} noValidate className="space-y-4 sm:space-y-5">
+            <form id={SUBMIT_FORM_ID} onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate className="space-y-4 sm:space-y-5">
               {/* 1. What */}
               <Section step={1} title="What’s the event?">
                 <div>
@@ -596,6 +632,16 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
                     error={errors.dates}
                   />
                 </div>
+
+                {pastDates.length > 0 && (
+                  <p role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs font-semibold text-amber-900 dark:text-amber-200">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
+                    <span>
+                      {pastLabel} {pastDates.length === 1 ? 'has' : 'have'} already passed. Is that the right{' '}
+                      {pastDates.length === 1 ? 'date' : 'dates'}?
+                    </span>
+                  </p>
+                )}
 
                 <RepeatPicker
                   value={repeat}
@@ -735,13 +781,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
 
               {/* Desktop / tablet submit */}
               <div className="hidden sm:flex items-center justify-between gap-4 pt-1">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                {errorSummary || <p className="text-sm text-slate-500 dark:text-slate-400">
                   {editing
                     ? ((setsStatus ? status : editing.status) === 'published'
                       ? 'Your changes go on the calendar straight away.'
                       : 'It stays in the review queue, with your changes.')
                     : isAdmin ? 'Published to the calendar immediately.' : 'Sent to Elizabeth for review before it’s published.'}
-                </p>
+                </p>}
                 <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} />
               </div>
             </form>
@@ -764,6 +810,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
 
       {/* Phone: submit bar always within thumb reach */}
       <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {errorSummary && <div className="-mt-1 mb-1.5 flex justify-center">{errorSummary}</div>}
         <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} full />
       </div>
     </div>

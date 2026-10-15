@@ -79,6 +79,31 @@ test('when the server refuses a submission, the reason is shown and the details 
   await expect(page.getByRole('button', { name: 'Send for review' }).last()).toBeEnabled();
 });
 
+test('Enter in a field doesn’t send the form, the button says what is left to fix, and a past date gets a heads-up', async ({ page }) => {
+  await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));
+  await page.goto('/submit');
+  await page.getByLabel('Event name').fill('Coffee morning');
+  await page.getByLabel('Event name').press('Enter');
+  await expect(page.locator('#err-location')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /to fix/ })).toHaveCount(0);
+
+  // Sending with the rest empty: dates, venue, description, name and email
+  await page.getByRole('button', { name: 'Check & submit' }).last().click();
+  await expect(page.locator('#field-dates')).toBeFocused();
+  await page.locator('#field-location').fill('Mahon');
+  await page.getByRole('button', { name: '4 fields to fix · Show' }).click();
+  await expect(page.locator('#field-dates')).toBeFocused();
+
+  // A day that has gone: it can still be picked, with a heads-up
+  await page.getByRole('button', { name: 'Previous month' }).click();
+  const now = new Date();
+  const past = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+  await page.getByRole('button', { name: past.toDateString() }).click();
+  await expect(page.getByText(/has already passed\. Is that the right date\?/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '3 fields to fix · Show' })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test('a weekly event: one date, “Every week” under the calendar, and a last date', async ({ page }) => {
   let submitted: Record<string, unknown> | null = null;
   await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));

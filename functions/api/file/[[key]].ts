@@ -34,6 +34,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   if (!key) {
     return new Response("File key missing.", { status: 400 });
   }
+  // The app's own records (which events each digest carried) are not files to hand out
+  if (key.startsWith('meta/')) return new Response("File not found", { status: 404 });
 
   try {
     const object = await env.BUCKET.get(key);
@@ -79,6 +81,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, params, env
 
   const key = keyOf(params);
   if (!key) return fail('File key missing.', 400);
+  if (key.startsWith('meta/')) return fail('File not found.', 404);
   const bucket: FileBucket = env.BUCKET;
   const deleted = await deleteUnreferencedFiles(bucket, cfg, [`/api/file/${key}`]);
   return json({ deleted: deleted.length > 0 });

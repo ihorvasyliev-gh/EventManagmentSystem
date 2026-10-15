@@ -8,6 +8,8 @@ import {
   summarizeSeries,
   newSince,
   isNewEvent,
+  digestNewEvents,
+  digestWeekStart,
 } from '../utils/digestGrouping.ts';
 import type { Event } from '../types.ts';
 
@@ -152,15 +154,43 @@ test('a long series lists other venues apart and flags a different time', () => 
   assert.equal(formatAlsoOnDates(group), 'every Thursday: 22, 29 Oct · 19 (18:00), 26 Nov · 3 Dec; at Mahon Library: 5, 12 Nov');
 });
 
-test('events added in the two weeks before the digest is issued are new', () => {
+test('without last week\'s digest to go by, events added in the week before are new', () => {
   const issued = new Date(2026, 9, 15, 11, 40);
   const since = newSince(issued);
-  assert.deepEqual([since.getFullYear(), since.getMonth(), since.getDate(), since.getHours()], [2026, 9, 1, 0]);
+  assert.deepEqual([since.getFullYear(), since.getMonth(), since.getDate(), since.getHours()], [2026, 9, 8, 0]);
   const added = (d: Date) => ({ createdAt: d });
-  assert.equal(isNewEvent(added(new Date(2026, 9, 1, 0, 0)), since, issued), true, 'on the first day');
+  assert.equal(isNewEvent(added(new Date(2026, 9, 8, 0, 0)), since, issued), true, 'on the first day');
   assert.equal(isNewEvent(added(new Date(2026, 9, 15, 9)), since, issued), true, 'that morning');
-  assert.equal(isNewEvent(added(new Date(2026, 8, 30, 23, 59)), since, issued), false, 'the day before');
+  assert.equal(isNewEvent(added(new Date(2026, 9, 7, 23, 59)), since, issued), false, 'the day before');
   // An event loaded without its creation time gets its own date instead: not new
   assert.equal(isNewEvent(added(new Date(2026, 10, 4, 11)), since, issued), false, 'in the future');
   assert.equal(isNewEvent({ createdAt: new Date(NaN) }, since, issued), false);
+});
+
+test('NEW marks what last week\'s digest didn\'t have; the first digest marks everything', () => {
+  const groups = groupDigestOccurrences([
+    makeEvent('dinner', new Date(2026, 9, 22, 12, 30)),
+    makeEvent('dance', new Date(2026, 9, 25, 15)),
+    makeEvent('fair', new Date(2026, 10, 4, 10))
+  ]);
+  const first = digestNewEvents(groups, null);
+  assert.equal(first.since, null);
+  assert.deepEqual([...first.newIds].sort(), ['dance', 'dinner', 'fair']);
+
+  // Sent on 16 Oct with the dinner and the dance (the fair was beyond its two weeks)
+  const next = digestNewEvents(groups, { issued: new Date(2026, 9, 16, 0, 0), ids: ['dinner', 'dance', 'gone'] });
+  assert.deepEqual([next.since!.getMonth(), next.since!.getDate()], [9, 16]);
+  assert.deepEqual([...next.newIds], ['fair']);
+
+  // Not known: added in the last week (all made on 1 January here)
+  assert.equal(digestNewEvents(groups, undefined, new Date(2026, 9, 23)).newIds.size, 0);
+});
+
+test('a digest compares itself with the last one shared before its week began (Monday)', () => {
+  const day = (d: Date) => [d.getMonth(), d.getDate(), d.getHours()];
+  assert.deepEqual(day(digestWeekStart(new Date(2026, 9, 15, 16, 20))), [9, 12, 0], 'Thursday');
+  assert.deepEqual(day(digestWeekStart(new Date(2026, 9, 16, 9))), [9, 12, 0], 'Friday, same week');
+  assert.deepEqual(day(digestWeekStart(new Date(2026, 9, 18, 23))), [9, 12, 0], 'Sunday');
+  assert.deepEqual(day(digestWeekStart(new Date(2026, 9, 19, 0, 30))), [9, 19, 0], 'Monday starts a new week');
+  assert.deepEqual(day(digestWeekStart(new Date(2026, 10, 1))), [9, 26, 0], 'across a month');
 });

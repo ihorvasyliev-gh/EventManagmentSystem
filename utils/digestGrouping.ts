@@ -295,10 +295,17 @@ export const formatAlsoOnDates = (group: DigestEventGroup, separator = '  ·  ')
 export const monthShort = (d: Date): string => MONTHS_SHORT[d.getMonth()];
 export const monthShortUpper = (d: Date): string => MONTHS_SHORT[d.getMonth()].toUpperCase();
 
-/** Events added in the last two weeks are marked NEW in the digest (it goes out every fortnight) */
-export const NEW_FOR_DAYS = 14;
+/**
+ * The digest goes out every week and marks NEW the events last week's digest didn't have (see
+ * DigestPreviousIssue). Only when that can't be looked up: events added in the last week.
+ */
+export const NEW_FOR_DAYS = 7;
 
-/** The day from which an event counts as new: two weeks before the day the digest is issued */
+/** Monday of the week `day` falls in: the digest compares itself with the last one shared before it */
+export const digestWeekStart = (day: Date): Date =>
+  new Date(day.getFullYear(), day.getMonth(), day.getDate() - ((day.getDay() + 6) % 7));
+
+/** The day from which an event counts as new (fallback rule): a week before the day the digest is issued */
 export const newSince = (issued: Date): Date =>
   new Date(issued.getFullYear(), issued.getMonth(), issued.getDate() - NEW_FOR_DAYS);
 
@@ -306,4 +313,32 @@ export const newSince = (issued: Date): Date =>
 export const isNewEvent = (ev: Pick<Event, 'createdAt'>, since: Date, now: Date = new Date()): boolean => {
   const t = toTime(ev.createdAt);
   return !isNaN(t) && t >= since.getTime() && t <= now.getTime();
+};
+
+/** The last digest shared before this week: its day and the ids of the events it carried */
+export interface DigestPreviousIssue {
+  issued: Date;
+  ids: string[];
+}
+
+/**
+ * The events the digest marks NEW, and the day the label counts from ("New since 16 Oct"):
+ * - after an earlier digest: the events it didn't have
+ * - null, the first digest: all of them (label "New", no day)
+ * - undefined, unknown (the lookup failed): the fallback rule, events added in the last week
+ */
+export const digestNewEvents = (
+  groups: DigestEventGroup[],
+  previous: DigestPreviousIssue | null | undefined,
+  now: Date = new Date()
+): { since: Date | null; newIds: Set<string> } => {
+  if (previous === undefined) {
+    const since = newSince(now);
+    return { since, newIds: new Set(groups.filter((g) => isNewEvent(g.event, since, now)).map((g) => g.event.id)) };
+  }
+  const had = new Set(previous?.ids ?? []);
+  return {
+    since: previous && new Date(previous.issued.getFullYear(), previous.issued.getMonth(), previous.issued.getDate()),
+    newIds: new Set(groups.filter((g) => !had.has(g.event.id)).map((g) => g.event.id))
+  };
 };

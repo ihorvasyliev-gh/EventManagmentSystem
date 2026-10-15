@@ -6,11 +6,12 @@ import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
-import { shareDigestPdf } from '../services/digestService';
+import { shareDigestPdf, fetchPreviousDigestIssue } from '../services/digestService';
 import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
-import { calculatePresetDateRange, type DateRangePreset } from '../utils/date';
+import { calculatePresetDateRange, formatLocalDate, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { groupDigestOccurrences, formatAlsoOnDates } from '../utils/digestGrouping';
+import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart } from '../utils/digestGrouping';
+import type { DigestPreviousIssue } from '../utils/pdf/digest/context';
 import { useToast } from '../contexts/ToastContext';
 import { getCategoryDotColor } from './WeekView';
 import ModalShell from './ModalShell';
@@ -143,9 +144,22 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [linkCopied, setLinkCopied] = useState(false);
   const [showList, setShowList] = useState(true);
 
+  /**
+   * The last digest shared before this week: the PDF marks NEW what it didn't have, so a digest
+   * made earlier in the same week (by anyone) doesn't take the marks away. null: none shared yet;
+   * undefined: it couldn't be looked up, and the PDF falls back to "added in the last week".
+   */
+  const previousIssue = useRef<Promise<DigestPreviousIssue | null | undefined>>(Promise.resolve(undefined));
+
   // Always start from the default fortnight when the dialog opens
   useEffect(() => {
     if (isOpen) {
+      previousIssue.current = fetchPreviousDigestIssue(formatLocalDate(digestWeekStart(new Date())))
+        .then((issue) => issue && { issued: new Date(`${issue.issued}T00:00:00`), ids: issue.ids })
+        .catch((err) => {
+          console.warn('Looking up the last digest failed:', err);
+          return undefined;
+        });
       setActivePreset('2weeks');
       const range = calculatePresetDateRange('2weeks', { events });
       setStartDateStr(range.startDateStr);
@@ -191,11 +205,13 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const dayCount = rangeValid ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0;
 
   const pdfOptions = { startDate, endDate, format, printableFlyers: printFlyers };
+  const makePdf = async (output: 'save' | 'blob') =>
+    generateEventsDigestPDF(periodEvents, { ...pdfOptions, output, previousIssue: await previousIssue.current });
 
   const handleDownloadPDF = async () => {
     setBusy('download');
     try {
-      await generateEventsDigestPDF(periodEvents, pdfOptions);
+      await makePdf('save');
       showToast('Digest PDF downloaded', 'success');
     } catch (err) {
       console.error('Failed to generate PDF:', err);
@@ -210,7 +226,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     const previewWindow = window.open('', '_blank');
     setBusy('preview');
     try {
-      const blob = await generateEventsDigestPDF(periodEvents, { ...pdfOptions, output: 'blob' });
+      const blob = await makePdf('blob');
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       if (previewWindow) {
@@ -242,9 +258,13 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     if (shared.current?.key === key) return shared.current.link;
     const remembered = rememberedDigestLink(key);
     const link = remembered ? Promise.resolve(remembered) : (async () => {
-      const blob = await generateEventsDigestPDF(periodEvents, { ...pdfOptions, output: 'blob' });
+      const blob = await makePdf('blob');
       if (!blob) throw new Error('the PDF could not be made');
-      const result = await shareDigestPdf(blob, digestFileName(startDate, endDate));
+      // Recorded with it: the events it carries, so next week's digest marks NEW only the rest
+      const result = await shareDigestPdf(blob, digestFileName(startDate, endDate), {
+        issued: formatLocalDate(new Date()),
+        ids: groups.map((g) => g.event.id)
+      });
       rememberDigestLink(key, result);
       return result.url;
     })();

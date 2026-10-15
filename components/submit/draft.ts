@@ -32,7 +32,8 @@ export const saveSubmitter = (name: string, email: string) => {
 
 export interface SavedDraft {
   title: string;
-  category: EventCategoryName;
+  /** '' while none is picked */
+  category: EventCategoryName | '';
   dates: string[];
   /** Times used on every day (older drafts have one `startTime`/`endTime` instead) */
   sharedTimes?: TimeSlot[];

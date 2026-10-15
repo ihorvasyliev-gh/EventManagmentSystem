@@ -37,7 +37,7 @@ test('an admin approves a submission from the inbox', async ({ page }) => {
   await page.route('**/api/submissions', async (route) => {
     body = route.request().postDataJSON();
     const row = events().find((e) => e.id === DRAFT)!;
-    await route.fulfill({ json: { events: [{ ...row, status: 'published' }] } });
+    await route.fulfill({ json: { events: [{ ...row, status: 'published' }], authorsEmailed: true } });
   });
   await signIn(page);
   await page.getByText('1 submission is waiting for review').click();
@@ -45,6 +45,9 @@ test('an admin approves a submission from the inbox', async ({ page }) => {
   await expect(page.getByText('Event "Coffee morning" approved and published!')).toBeVisible();
   expect(body).toEqual({ action: 'approve', ids: [DRAFT] });
   await expect(page.getByText('1 submission is waiting for review')).toBeHidden();
+  // The server emailed the submitter, so there is nothing more to do
+  await expect(page.getByRole('list', { name: 'Just reviewed' })).toContainText(/Approved “Coffee morning”\. \w+ has been emailed\./);
+  await expect(page.getByRole('link', { name: /^Email / })).toHaveCount(0);
 });
 
 test('deleting one date of a weekly event keeps the rest', async ({ page }) => {

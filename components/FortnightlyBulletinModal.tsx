@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2
+  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2, MoreHorizontal
 } from 'lucide-react';
 import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { shareDigestPdf, fetchPreviousDigestIssue } from '../services/digestService';
+import { buildDigestList } from '../utils/digestList';
 import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
 import { calculatePresetDateRange, formatLocalDate, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
@@ -141,6 +142,16 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [printFlyers, setPrintFlyers] = useState(() => readPref(FLYERS_KEY) !== 'off');
   const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [moreOpen]);
   const [linkCopied, setLinkCopied] = useState(false);
   const [showList, setShowList] = useState(true);
 
@@ -261,10 +272,12 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       const blob = await makePdf('blob');
       if (!blob) throw new Error('the PDF could not be made');
       // Recorded with it: the events it carries, so next week's digest marks NEW only the rest
+      // and the same events as a list, which its page shows for reading on a phone
+      const list = buildDigestList(periodEvents, { startDate, endDate, previousIssue: await previousIssue.current });
       const result = await shareDigestPdf(blob, digestFileName(startDate, endDate), {
         issued: formatLocalDate(new Date()),
         ids: groups.map((g) => g.event.id)
-      });
+      }, list);
       rememberDigestLink(key, result);
       return result.url;
     })();
@@ -371,67 +384,104 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
 
   const disabled = !rangeValid || busy !== null;
 
-  const footer = (
-    <div className={`grid ${canShare ? 'grid-cols-2' : 'grid-cols-1'} sm:flex sm:items-center gap-2`}>
+  // Admins mostly send the email (on Fridays): it is the main button, the rest are secondary.
+  // On phones those wait in a "More" menu, so the footer is one row instead of three.
+  const secondary = 'cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50';
+  const primary = 'cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50';
+  const downloadIcon = busy === 'download' ? spinner : <Download className="w-4 h-4 shrink-0" />;
+  const downloadLabel = busy === 'download' ? 'Generating…' : 'Download PDF';
+  const previewIcon = busy === 'preview' ? spinner : <Eye className="w-4 h-4 shrink-0" />;
+  const whatsAppIcon = busy === 'whatsapp' ? spinner : copied ? <Check className="w-4 h-4 shrink-0" /> : <MessageSquare className="w-4 h-4 shrink-0 text-ccp-green-600 dark:text-ccp-green-400" />;
+  const linkIcon = busy === 'link' ? spinner : linkCopied ? <Check className="w-4 h-4 shrink-0" /> : <Link2 className="w-4 h-4 shrink-0" />;
+  const moreItems = [
+    { key: 'whatsapp', label: copied ? 'Copied!' : 'Copy WhatsApp text', icon: whatsAppIcon, onClick: handleCopyWhatsApp, off: disabled },
+    { key: 'link', label: linkCopied ? 'Copied!' : 'Copy link', icon: linkIcon, onClick: handleCopyLink, off: disabled || !shareable },
+    { key: 'download', label: downloadLabel, icon: downloadIcon, onClick: handleDownloadPDF, off: disabled },
+    { key: 'preview', label: 'Preview', icon: previewIcon, onClick: handlePreviewPDF, off: disabled }
+  ];
+
+  const footer = canShare ? (
+    <div className="flex items-center gap-2">
+      <div ref={moreRef} className="relative sm:hidden">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
+          className={`${secondary} h-11 px-4`}
+        >
+          <MoreHorizontal className="w-4 h-4 shrink-0" aria-hidden="true" />
+          More
+        </button>
+        {moreOpen && (
+          <div role="menu" aria-label="More ways to share" className="absolute bottom-full left-0 mb-2 w-64 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl animate-scale-in origin-bottom-left">
+            {moreItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="menuitem"
+                disabled={item.off}
+                onClick={() => { setMoreOpen(false); void item.onClick(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounded-lg text-sm font-medium text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button
         type="button"
-        onClick={handleDownloadPDF}
+        onClick={handleCopyWhatsApp}
         disabled={disabled}
-        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap col-span-full sm:order-5 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition-colors disabled:opacity-50"
+        title="Copies a plain-text summary for WhatsApp groups, with a link to the PDF"
+        className={`${secondary} hidden sm:inline-flex`}
       >
-        {busy === 'download' ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
-        {busy === 'download' ? 'Generating…' : 'Download PDF'}
+        {whatsAppIcon}
+        {copied ? 'Copied!' : 'WhatsApp'}
       </button>
       <button
         type="button"
-        onClick={handlePreviewPDF}
-        disabled={disabled}
-        className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-4 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-brand-600 dark:text-brand-300 bg-white dark:bg-transparent border border-brand-600 dark:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors disabled:opacity-50"
+        onClick={handleCopyLink}
+        disabled={disabled || !shareable}
+        aria-label="Copy link"
+        title="Uploads this PDF and copies a link to it that anyone can open for six months"
+        className={`${secondary} hidden sm:inline-flex`}
       >
-        {busy === 'preview' ? <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Eye className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
+        {linkIcon}
+        {/* The dialog's row only fits "Link" beside the others */}
+        {linkCopied ? 'Copied!' : 'Link'}
+      </button>
+      <button type="button" onClick={handlePreviewPDF} disabled={disabled} className={`${secondary} hidden sm:inline-flex`}>
+        {previewIcon}
         Preview
       </button>
-      {canShare && (
-        <button
-          type="button"
-          onClick={handleEmail}
-          disabled={disabled}
-          title="Copies a formatted email with a link to the PDF and opens a new email: paste it in, the recipients are filled in"
-          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
-        >
-          {busy === 'email' ? spinner : <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
-          Email
-        </button>
-      )}
-      {canShare && (
-        <button
-          type="button"
-          onClick={handleCopyLink}
-          disabled={disabled || !shareable}
-          aria-label="Copy link"
-          title="Uploads this PDF and copies a link to it that anyone can open for six months"
-          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
-        >
-          {busy === 'link' ? spinner : linkCopied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <Link2 className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
-          {/* From sm up the dialog's row only fits "Link" beside the other four */}
-          <span className="sm:hidden">{linkCopied ? 'Copied!' : 'Copy link'}</span>
-          <span className="hidden sm:inline">Link</span>
-        </button>
-      )}
-      {canShare && (
-        <button
-          type="button"
-          onClick={handleCopyWhatsApp}
-          disabled={disabled}
-          title="Copies a plain-text summary for WhatsApp groups, with a link to the PDF"
-          className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-white bg-ccp-green-600 hover:bg-ccp-green-700 border border-ccp-green-600 hover:border-ccp-green-700 transition-colors disabled:opacity-50"
-        >
-          {/* Under 400px the small buttons are words only: with icons "WhatsApp" didn't fit */}
-          {busy === 'whatsapp' ? spinner : copied ? <Check className="hidden min-[400px]:block w-4 h-4 shrink-0" /> : <MessageSquare className="hidden min-[400px]:block w-4 h-4 shrink-0" />}
-          {copied ? 'Copied!' : 'WhatsApp'}
-        </button>
-      )}
-      <div className="hidden sm:block sm:order-3 flex-1" />
+      <button type="button" onClick={handleDownloadPDF} disabled={disabled} className={`${secondary} hidden sm:inline-flex`}>
+        {downloadIcon}
+        {downloadLabel}
+      </button>
+      <button
+        type="button"
+        onClick={handleEmail}
+        disabled={disabled}
+        title="Copies a formatted email with a link to the PDF and opens a new email: paste it in, the recipients are filled in"
+        className={`${primary} h-11 sm:h-auto flex-1 sm:flex-none sm:ml-auto`}
+      >
+        {busy === 'email' ? spinner : <Mail className="w-4 h-4 shrink-0" />}
+        Email
+      </button>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 sm:flex sm:items-center sm:justify-end gap-2">
+      <button type="button" onClick={handleDownloadPDF} disabled={disabled} className={`${primary} sm:order-2`}>
+        {downloadIcon}
+        {downloadLabel}
+      </button>
+      <button type="button" onClick={handlePreviewPDF} disabled={disabled} className={`${secondary} sm:order-1`}>
+        {previewIcon}
+        Preview
+      </button>
     </div>
   );
 

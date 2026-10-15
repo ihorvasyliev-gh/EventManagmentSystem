@@ -22,7 +22,7 @@ export const clickableProps = (onActivate: () => void) => ({
 /** Drafts are seen only by admins and the person who submitted them: say plainly that they aren't published yet */
 export const PendingBadge: React.FC<{ event: Event }> = ({ event }) =>
   event.status === 'draft' ? (
-    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+    <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
       Pending review
     </span>
   ) : null;
@@ -62,7 +62,7 @@ export const DayEventCard: React.FC<DayEventCardProps> = ({ event, onOpen, class
     <div {...clickableProps(onOpen)} className={className}>
       <div className="flex items-center justify-between gap-1 flex-wrap">
         <span className="flex items-center gap-1 flex-wrap">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
             {event.category || 'Event'}
           </span>
           <PendingBadge event={event} />

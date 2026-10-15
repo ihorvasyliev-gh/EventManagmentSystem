@@ -12,7 +12,11 @@ import { DIGEST_EMAIL_TO, DIGEST_EMAIL_CC } from '../constants/digestRecipients.
  * Links inside a PDF or an email must be absolute: a site-relative poster URL ("/api/file/…")
  * would open as a file on the reader's computer. Returns null when no web link can be made.
  */
-export const toAbsoluteHttpUrl = (url: string | undefined, base = typeof window !== 'undefined' ? window.location.origin : ''): string | null => {
+// (globalThis, not window: the server's functions share this file and have no window)
+export const toAbsoluteHttpUrl = (
+  url: string | undefined,
+  base = (globalThis as { location?: { origin?: string } }).location?.origin ?? ''
+): string | null => {
   if (!url) return null;
   try {
     const abs = new URL(url, base || undefined);

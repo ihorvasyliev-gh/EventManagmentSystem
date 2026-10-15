@@ -22,6 +22,7 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
   await expectAccessible(page);
 
   await page.getByLabel('Event name').fill('Coffee morning');
+  await page.locator('#field-category').getByText('Community & Family', { exact: true }).click();
   await page.getByRole('button', { name: 'Next month' }).click();
   const now = new Date();
   await page.getByRole('button', { name: new Date(now.getFullYear(), now.getMonth() + 1, 15).toDateString() }).click();
@@ -51,6 +52,7 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
   expect(submitted).not.toBeNull();
   expect(submitted!.event).toMatchObject({
     title: 'Coffee morning',
+    category: 'Community & Family',
     location: 'Mahon Community Centre',
     submitter_name: 'Sam Staff',
     submitter_email: 'sam@partnershipcork.ie',
@@ -66,6 +68,7 @@ test('when the server refuses a submission, the reason is shown and the details 
   await page.route('**/api/submit', (route) => route.fulfill({ status: 413, json: { error: 'The flyer is too large (max 15 MB).' } }));
   await page.goto('/submit');
   await page.getByLabel('Event name').fill('Coffee morning');
+  await page.locator('#field-category').getByText('Community & Family', { exact: true }).click();
   await page.getByRole('button', { name: 'Next month' }).click();
   const now = new Date();
   await page.getByRole('button', { name: new Date(now.getFullYear(), now.getMonth() + 1, 15).toDateString() }).click();
@@ -87,9 +90,12 @@ test('Enter in a field doesn’t send the form, the button says what is left to 
   await expect(page.locator('#err-location')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /to fix/ })).toHaveCount(0);
 
-  // Sending with the rest empty: dates, venue, description, name and email
+  // Sending with the rest empty: category, dates, venue, description, name and email
   await page.getByRole('button', { name: 'Check & submit' }).last().click();
-  await expect(page.locator('#field-dates')).toBeFocused();
+  await expect(page.locator('#field-category')).toBeFocused();
+  await expect(page.locator('#err-category')).toHaveText('Pick the category that fits best.');
+  await page.locator('#field-category').getByText('Community & Family', { exact: true }).click();
+  await expect(page.locator('#err-category')).toHaveCount(0);
   await page.locator('#field-location').fill('Mahon');
   await page.getByRole('button', { name: '4 fields to fix · Show' }).click();
   await expect(page.locator('#field-dates')).toBeFocused();
@@ -115,6 +121,7 @@ test('a weekly event: one date, “Every week” under the calendar, and a last 
 
   await page.goto('/submit');
   await page.getByLabel('Event name').fill('Parent and toddler group');
+  await page.locator('#field-category').getByText('Community & Family', { exact: true }).click();
   await page.getByRole('button', { name: 'Next month' }).click();
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() + 1, 15);
@@ -159,4 +166,15 @@ test('a weekly event: one date, “Every week” under the calendar, and a last 
   const until = new Date(String(submitted!.recurrence_end_date));
   expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([last.getFullYear(), last.getMonth(), 1]);
   expect(new Date(String(submitted!.date)).getDate()).toBe(15);
+});
+
+test('the login page leads to the form without signing in, near the top on a phone too', async ({ page }) => {
+  await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  const submit = page.getByRole('button', { name: /^Submit an event/ });
+  await expect(submit).toBeInViewport();
+  await expectAccessible(page);
+  await submit.click();
+  await expect(page.getByRole('heading', { name: 'Submit an upcoming event' })).toBeVisible();
 });

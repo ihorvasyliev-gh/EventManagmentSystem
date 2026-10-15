@@ -3,7 +3,7 @@
  * URL: POST /api/submit   multipart: event (JSON), poster (image, optional), turnstileToken
  *
  * Anyone can submit (no account needed): the event is saved as a draft for review. Signed-in
- * admins can publish straight away. The flyer and the event are saved in one request, so an
+ * admins can publish straight away, or keep their own event as a draft to publish later. The flyer and the event are saved in one request, so an
  * event never arrives without the flyer that was sent with it. Everyone but admins is limited
  * to SUBMIT_LIMIT submissions per network (server/rateLimit.ts).
  *
@@ -77,7 +77,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   const checked = checkSubmission(input);
   if ('error' in checked) return fail(checked.error, 400);
-  const publish = caller?.role === 'admin' && input.publish === true;
+  const isAdmin = caller?.role === 'admin';
+  // Admins publish straight away, or keep their own event as a draft to publish later
+  const publish = isAdmin && input.publish === true;
 
   let posterUrl: string | null = null;
   // Admins duplicating an event keep its poster (one already stored here, or an older https one)
@@ -97,7 +99,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     poster_url: posterUrl,
     status: publish ? 'published' : 'draft',
     creator_id: caller?.id ?? null,
-    tags: [publish ? 'admin-created' : 'staff-submission']
+    tags: [isAdmin ? 'admin-created' : 'staff-submission']
   };
   const insert = (body: object) => serviceRest(cfg, 'events?select=id', {
     method: 'POST',
@@ -119,7 +121,8 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   const [saved] = (await res.json()) as Array<{ id: string }>;
 
-  if (!publish) {
+  // A submission waiting for review (not an admin's own draft) is announced to the admins
+  if (!publish && !isAdmin) {
     const notify = adminEmails(env, cfg).then((to) => {
       const email = newSubmissionEmail(checked.row, appUrl(env, request));
       return sendEmail(env, { to, ...email, replyTo: checked.row.submitter_email ?? undefined });

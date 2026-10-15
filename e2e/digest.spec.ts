@@ -19,6 +19,8 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
       isPdf: body.includes('Content-Type: application/pdf') && body.includes('%PDF'),
       // What it carries, for next week's NEW marks
       recordsEvents: body.includes('name="issued"') && /name="eventIds"\r\n\r\n\["10000000-0000-0000-0000-000000000001"\]/.test(body)
+        // and the same events as a list, for the digest's page
+        && /name="list"\r\n\r\n\{"version":1,.*"title":"Coffee morning"/.test(body)
     });
     await route.fulfill({ status: 201, json: { url: LINK, expiresAt: new Date(Date.now() + 183 * 86400000).toISOString() } });
   });
@@ -162,6 +164,40 @@ test('anyone with the link sees the digest drawn on its page, links working, wit
   await expect(download).toHaveAttribute('href', `/api/file/digests/${id}.pdf?download=1`);
   await expect(download).toHaveAttribute('download', 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf');
   await expectAccessible(page);
+});
+
+test('on a phone the digest opens as a list of its events; the PDF loads only when asked for', async ({ page }) => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000-CCP-Upcoming-Events-2026-10-12-to-2026-10-26';
+  let pdfRequested = false;
+  await page.route(`**/api/file/digests/${id}.pdf*`, (route) => {
+    pdfRequested = true;
+    return route.fulfill({ status: 200, contentType: 'application/pdf', body: tinyPdf() });
+  });
+  await page.route(`**/api/file/digests/${id}.json`, (route) => route.fulfill({ json: {
+    version: 1,
+    period: '12 – 26 October 2026',
+    entries: [
+      { day: 'Thursday 15 October', title: 'Coffee morning', category: 'Community & Family', time: '10:00 – 11:30', where: 'Mahon Community Centre',
+        also: 'Thu 22 Oct', description: 'Tea and chats.', contacts: [{ name: 'Sam Staff', email: 'sam@partnershipcork.ie' }], isNew: true },
+      { day: 'Friday 16 October', title: 'Job fair', category: 'Enterprise & Employment', time: '09:00 – 13:00', where: 'City Hall', also: '', description: '', contacts: [], isNew: false }
+    ]
+  } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/digest/${id}`);
+  await expect(page.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true');
+  const thursday = page.getByRole('region', { name: 'Thursday 15 October' });
+  await expect(thursday.getByRole('heading', { name: 'Coffee morning' })).toBeVisible();
+  await expect(thursday).toContainText('Also on Thu 22 Oct');
+  await expect(thursday.getByText('New', { exact: true })).toBeVisible();
+  await expect(thursday.getByRole('link', { name: 'sam@partnershipcork.ie' })).toHaveAttribute('href', /^mailto:sam@partnershipcork\.ie/);
+  await expect(page.getByRole('region', { name: 'Friday 16 October' }).getByRole('heading', { name: 'Job fair' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
+  await expectAccessible(page);
+  expect(pdfRequested).toBe(false);
+
+  await page.getByRole('tab', { name: 'PDF' }).click();
+  await expect(page.getByRole('group', { name: 'Page 1 of 1' }).locator('canvas')).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Coffee morning' })).toHaveCount(0);
 });
 
 test('an expired digest link says so', async ({ page }) => {

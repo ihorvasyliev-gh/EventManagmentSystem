@@ -74,7 +74,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, placeholder = "S
         </button>
       ) : (
         // Not from 1024 to 1279px: the field is at its narrowest there and the hint covered the placeholder
-        <kbd className="hidden sm:flex lg:hidden xl:flex absolute inset-y-0 right-0 mr-3 my-auto h-5 items-center px-1.5 rounded border border-slate-200 dark:border-slate-600 text-[10px] font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
+        <kbd className="hidden sm:flex lg:hidden xl:flex absolute inset-y-0 right-0 mr-3 my-auto h-5 items-center px-1.5 rounded border border-slate-200 dark:border-slate-600 text-xs font-semibold text-slate-500 dark:text-slate-400 pointer-events-none">
           /
         </kbd>
       )}

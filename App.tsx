@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from
 import Navbar from './components/Navbar';
 import CalendarView from './components/CalendarView';
 import LoginPage from './pages/LoginPage';
-import SearchBar, { SEARCH_INPUT_ID } from './components/SearchBar';
-import EventFiltersComponent from './components/EventFilters';
+import SearchBar from './components/SearchBar';
+import EventFiltersComponent, { type Submitter } from './components/EventFilters';
 import ErrorBoundary from './components/ErrorBoundary';
 import CategoryPills from './components/CategoryPills';
 import SubmissionsBanner from './components/SubmissionsBanner';
@@ -44,6 +44,7 @@ const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
 const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'));
 const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
 const ChangeLogModal = lazyWithReload(() => import('./components/ChangeLogModal'));
+const MyEventsModal = lazyWithReload(() => import('./components/MyEventsModal'));
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -79,6 +80,13 @@ const AppContent: React.FC = () => {
   const [isStaffOpen, setIsStaffOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isMyEventsOpen, setIsMyEventsOpen] = useState(false);
+  // The logo and the Calendar tab: back to today, at the top
+  const [todayRequest, setTodayRequest] = useState(0);
+  const goHome = useCallback(() => {
+    setTodayRequest((n) => n + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
   // Admins: the change log, and how many staff edits came in since it was last opened
   const changeLog = useChangeLogBadge(isAdmin, events);
   const [changeLogNewSince, setChangeLogNewSince] = useState<Date | null>(null);
@@ -93,7 +101,7 @@ const AppContent: React.FC = () => {
 
   const { pendingSubmissions, handleApproveSubmission, handleRejectSubmission, handleApproveAllSubmissions } =
     useSubmissionActions({ isAdmin, events, setEvents, syncAfterChange, showToast });
-  const { handleDeleteInstance, handleDeleteEvent, forgetExceptions } = useEventActions({
+  const { handleDeleteInstance, handleDeleteEvent, restoreDeletedEvent, forgetExceptions } = useEventActions({
     user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, showToast, modal
   });
 
@@ -145,6 +153,17 @@ const AppContent: React.FC = () => {
     () => (hasActiveFilters ? filterEvents(events, {}, user?.role, user?.id, user?.email).length : 0),
     [hasActiveFilters, events, user?.role, user?.id, user?.email]
   );
+  // Search and filters that cut across dates (words, place, status, who sent it) show their
+  // results as one list over every date; a category or a date filter keeps the calendar, moved to
+  // that period. The banner switches between the two.
+  const crossDateFilters = Boolean(
+    searchQuery.trim() || filters.status || filters.location || filters.submitterEmail || filters.creatorId || filters.tags?.length
+  );
+  const [listChoice, setListChoice] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!hasActiveFilters) setListChoice(null);
+  }, [hasActiveFilters]);
+  const showResults = hasActiveFilters && (listChoice ?? crossDateFilters);
   const clearAllFilters = useCallback(() => {
     setSearchQuery('');
     setFilters({});
@@ -156,12 +175,15 @@ const AppContent: React.FC = () => {
       .sort((a, b) => a.localeCompare(b));
   }, [events]);
 
-  const availableSubmitterEmails = useMemo(() => {
-    const emails = new Set<string>();
+  // Who sent events in, by name (the address when no name was given)
+  const availableSubmitters = useMemo<Submitter[]>(() => {
+    const byEmail = new Map<string, Submitter>();
     events.forEach(e => {
-      if (e.submitterEmail?.trim()) emails.add(e.submitterEmail.trim());
+      const email = e.submitterEmail?.trim();
+      if (!email || byEmail.has(email.toLowerCase())) return;
+      byEmail.set(email.toLowerCase(), { email, name: e.submitterName?.trim() || email });
     });
-    return Array.from(emails).sort((a, b) => a.localeCompare(b));
+    return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [events]);
 
   // Signing in on a phone: the login form sits low on the page, and the calendar would open
@@ -225,6 +247,9 @@ const AppContent: React.FC = () => {
         onOpenSubmitEvent={submitPage.open}
         onExportClick={openExport}
         onRefresh={() => refreshEvents(true)}
+        onHomeClick={goHome}
+        onOpenMyEvents={isAdmin ? undefined : () => setIsMyEventsOpen(true)}
+        hasTabBar={hasTabBar}
         loadingEvents={loadingEvents}
         isRefreshing={isRefreshing}
         pendingSubmissionsCount={pendingSubmissions.length}
@@ -237,40 +262,55 @@ const AppContent: React.FC = () => {
         onChangePassword={() => setIsChangePasswordOpen(true)}
       />
 
-      <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+      <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 lg:py-6">
         {isAdmin && pendingSubmissions.length > 0 && (
           <SubmissionsBanner submissions={pendingSubmissions} onOpen={openInbox} />
         )}
 
-        {/* Search, categories and Filters: one row from 1024px; below that the categories get their own row */}
-        <div className="mb-4 flex flex-wrap lg:flex-nowrap items-center gap-2">
+        {/* Search, categories and Filters: one row from 1024px; below that the categories get their
+            own row, and on phones they are picked in Filters */}
+        <div className="mb-3 sm:mb-4 flex flex-wrap lg:flex-nowrap items-center gap-2">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
-          <CategoryPills
-            className="order-last w-full lg:order-none lg:w-auto"
-            selected={filters.category}
-            onSelect={(category) => setFilters(prev => ({ ...prev, category }))}
-          />
+          {!isMobile && (
+            <CategoryPills
+              className="order-last w-full lg:order-none lg:w-auto"
+              selected={filters.category}
+              onSelect={(category) => setFilters(prev => ({ ...prev, category }))}
+            />
+          )}
           <EventFiltersComponent
             filters={filters}
             onFiltersChange={setFilters}
             availableLocations={availableLocations}
-            availableSubmitterEmails={availableSubmitterEmails}
+            availableSubmitters={availableSubmitters}
+            resultCount={filteredEvents.length}
+            showCategory={isMobile}
           />
         </div>
 
         {hasActiveFilters && !loadingEvents && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/30 px-4 py-2.5 text-sm text-brand-800 dark:text-brand-200" role="status">
-            <span>
+          <div className="mb-3 sm:mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 dark:border-brand-900/60 bg-brand-50/60 dark:bg-brand-950/30 px-3 sm:px-4 py-2 text-xs sm:text-sm text-brand-800 dark:text-brand-200" role="status">
+            <span className="min-w-0">
               Showing <strong>{filteredEvents.length}</strong> of {unfilteredCount} events
               {searchQuery.trim() && <> matching “{searchQuery.trim()}”</>}
+              {filters.category && isMobile && <> in {filters.category}</>}
             </span>
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline"
-            >
-              Clear all
-            </button>
+            <span className="shrink-0 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setListChoice(!showResults)}
+                className="text-xs font-semibold underline underline-offset-2 hover:no-underline"
+              >
+                {showResults ? 'Show on calendar' : 'Show as list'}
+              </button>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-xs font-semibold underline underline-offset-2 hover:no-underline"
+              >
+                Clear all
+              </button>
+            </span>
           </div>
         )}
 
@@ -293,6 +333,8 @@ const AppContent: React.FC = () => {
             onClearFilters={clearAllFilters}
             dateRange={filters.dateRange}
             location={filters.location}
+            showResults={showResults}
+            todayRequest={todayRequest}
           />
         )}
       </main>
@@ -323,6 +365,7 @@ const AppContent: React.FC = () => {
             isOpen={isExportModalOpen}
             onClose={() => setIsExportModalOpen(false)}
             events={filteredEvents}
+            allEvents={hasActiveFilters ? events : undefined}
             onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
           />
         </Suspense>
@@ -347,7 +390,22 @@ const AppContent: React.FC = () => {
             onClose={() => setIsChangeLogOpen(false)}
             events={events}
             onOpenEvent={openEvent}
+            onRestore={(deleted) => restoreDeletedEvent(deleted, { checkFiles: true })}
             newSince={changeLogNewSince}
+          />
+        </Suspense>
+      )}
+
+      {isMyEventsOpen && !isAdmin && (
+        <Suspense fallback={null}>
+          <MyEventsModal
+            isOpen={isMyEventsOpen}
+            onClose={() => setIsMyEventsOpen(false)}
+            events={events}
+            user={user}
+            recurrenceExceptions={recurrenceExceptions}
+            onOpenEvent={openEvent}
+            onSubmitEvent={submitPage.open}
           />
         </Suspense>
       )}
@@ -405,17 +463,15 @@ const AppContent: React.FC = () => {
 
       {hasTabBar && (
         <BottomNavigation
-          onHomeClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          onHomeClick={goHome}
           onCreateClick={submitPage.open}
           createLabel={isAdmin ? 'New event' : 'Submit'}
           onInboxClick={isAdmin ? openInbox : undefined}
           inboxCount={pendingSubmissions.length}
-          onSearchClick={() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            document.getElementById(SEARCH_INPUT_ID)?.focus();
-          }}
+          onMyEventsClick={isAdmin ? undefined : () => setIsMyEventsOpen(true)}
           onDigestClick={() => setIsBulletinModalOpen(true)}
-          onExportClick={openExport}
+          onChangeLogClick={isAdmin ? openChangeLog : undefined}
+          changeLogCount={changeLog.count}
         />
       )}
     </div>

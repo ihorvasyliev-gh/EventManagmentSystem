@@ -1,24 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, FileText } from 'lucide-react';
+import { AlertCircle, Download, FileText, List, Clock, MapPin, Mail, Repeat } from 'lucide-react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import ThemeToggle from '../components/ThemeToggle';
 import { loadPdfJs } from '../utils/posterFile';
 import { digestFromPagePath } from '../utils/digestLinks';
+import { parseDigestList, type DigestList, type DigestListEntry } from '../utils/digestList';
+import { getCategoryDotColor } from '../components/WeekView';
+import type { EventCategory } from '../types';
 
-type ViewState = 'loading' | 'ready' | 'missing' | 'error';
+type ViewState = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+type Tab = 'list' | 'pdf';
 
 const MAX_PAGE_WIDTH = 880;
 const pageWidth = () => Math.max(280, Math.min(MAX_PAGE_WIDTH, window.innerWidth - 24));
 
 /**
- * A shared digest (/digest/<id>-<name>): the PDF's pages drawn here with pdf.js, its links kept
- * clickable, and a download button. Phone email apps open links in a built-in browser that can't
+ * A shared digest (/digest/<id>-<name>): its events as a list (when it was shared with one; the
+ * first view on phones), the PDF's pages drawn here with pdf.js with its links kept clickable,
+ * and a download button. Phone email apps open links in a built-in browser that can't
  * show or save a PDF (a black screen), and desktop PDF extensions render it badly; a page works
  * everywhere. Anyone with the link can open it, for as long as the file is kept (six months).
  */
 const DigestViewPage: React.FC = () => {
   const digest = useMemo(() => digestFromPagePath(window.location.pathname), []);
-  const [state, setState] = useState<ViewState>(digest ? 'loading' : 'missing');
+  const [state, setState] = useState<ViewState>(digest ? 'idle' : 'missing');
+  // The list stored beside the PDF; digests shared before it existed have only the PDF
+  const [list, setList] = useState<DigestList | null | undefined>(digest ? undefined : null);
+  const [tab, setTab] = useState<Tab>(() => (window.innerWidth < 768 ? 'list' : 'pdf'));
+  const showing: Tab | null = list === undefined ? null : list ? tab : 'pdf';
   const [width, setWidth] = useState(pageWidth);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
@@ -43,6 +52,20 @@ const DigestViewPage: React.FC = () => {
 
   useEffect(() => {
     if (!digest) return;
+    let cancelled = false;
+    fetch(digest.fileUrl.replace(/\.pdf$/i, '.json'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => !cancelled && setList(parseDigestList(data)))
+      .catch(() => !cancelled && setList(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [digest]);
+
+  // The PDF is fetched once it is first shown (a phone reading the list needn't download it)
+  const wantsPdf = showing === 'pdf' || state !== 'idle';
+  useEffect(() => {
+    if (!digest || !wantsPdf) return;
     let cancelled = false;
     let task: PDFDocumentLoadingTask | null = null;
     (async () => {
@@ -69,7 +92,7 @@ const DigestViewPage: React.FC = () => {
       cancelled = true;
       void task?.destroy();
     };
-  }, [digest]);
+  }, [digest, wantsPdf]);
 
   // Each page as a canvas at the screen's pixel density, with its links laid over it
   useEffect(() => {
@@ -124,7 +147,10 @@ const DigestViewPage: React.FC = () => {
     };
   }, [doc, width]);
 
-  const download = digest && state !== 'missing' && (
+  // Waiting for the list, or for the PDF once it is wanted
+  const view: ViewState = state === 'idle' && (showing === null || wantsPdf) ? 'loading' : state;
+
+  const download = digest && view !== 'missing' && (
     <a
       href={`${digest.fileUrl}?download=1`}
       download={digest.fileName}
@@ -132,6 +158,25 @@ const DigestViewPage: React.FC = () => {
     >
       <Download className="w-4 h-4 shrink-0" /> Download PDF
     </a>
+  );
+
+  const tabButton = (value: Tab, label: string, icon: React.ReactNode) => (
+    <button
+      type="button"
+      role="tab"
+      id={`tab-${value}`}
+      aria-selected={showing === value}
+      aria-controls={`panel-${value}`}
+      onClick={() => setTab(value)}
+      className={`cta inline-flex items-center gap-1.5 px-4 h-10 rounded !text-xs tracking-[0.1em] transition-colors ${
+        showing === value
+          ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 
   return (
@@ -158,38 +203,133 @@ const DigestViewPage: React.FC = () => {
           {digest?.period && <p className="text-xs text-slate-600 dark:text-slate-400">{digest.period}</p>}
         </div>
 
-        {state === 'loading' && (
+        {list && view !== 'missing' && (
+          <div role="tablist" aria-label="Show the digest as" className="mb-4 sm:mb-6 mx-auto w-max flex gap-1 p-1 rounded-md bg-slate-200/70 dark:bg-slate-800">
+            {tabButton('list', 'List', <List className="w-4 h-4" />)}
+            {tabButton('pdf', 'PDF', <FileText className="w-4 h-4" />)}
+          </div>
+        )}
+
+        {view === 'loading' && (
           <div className="flex flex-col items-center gap-3 py-24 text-sm text-slate-600 dark:text-slate-400" role="status">
             <span className="w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
             Opening the digest…
           </div>
         )}
 
-        {(state === 'missing' || state === 'error') && (
+        {(view === 'missing' || (view === 'error' && showing === 'pdf')) && (
           <div className="max-w-md mx-auto mt-12 p-6 rounded-leaf bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center" role="alert">
-            {state === 'missing'
+            {view === 'missing'
               ? <FileText className="w-8 h-8 mx-auto text-slate-400" />
               : <AlertCircle className="w-8 h-8 mx-auto text-red-500" />}
             <h2 className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
-              {state === 'missing' ? 'This digest is no longer available' : 'The digest could not be shown here'}
+              {view === 'missing' ? 'This digest is no longer available' : 'The digest could not be shown here'}
             </h2>
             <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-300">
-              {state === 'missing'
+              {view === 'missing'
                 ? 'Links to a digest work for six months. Ask the person who sent it for the latest one.'
                 : 'Download it instead to open it in your PDF app.'}
             </p>
-            {state === 'error' && <div className="mt-4">{download}</div>}
+            {view === 'error' && <div className="mt-4">{download}</div>}
           </div>
         )}
 
-        <div ref={pagesRef} className={state === 'ready' ? 'flex flex-col gap-4 sm:gap-6' : 'hidden'} />
+        {list && showing === 'list' && view !== 'missing' && (
+          <div id="panel-list" role="tabpanel" aria-labelledby="tab-list">
+            <DigestListView list={list} />
+          </div>
+        )}
 
-        {state === 'ready' && (
+        <div
+          ref={pagesRef}
+          {...(list ? { id: 'panel-pdf', role: 'tabpanel', 'aria-labelledby': 'tab-pdf' } : {})}
+          className={view === 'ready' && showing === 'pdf' ? 'flex flex-col gap-4 sm:gap-6' : 'hidden'}
+        />
+
+        {view === 'ready' && showing === 'pdf' && (
           <p className="mt-6 text-center text-xs text-slate-600 dark:text-slate-400">
             Download doesn’t start in your email app? Open this page in your browser.
           </p>
         )}
       </main>
+    </div>
+  );
+};
+
+/** The digest's events by day, in plain text: easy to read and to tap on a phone */
+const DigestListView: React.FC<{ list: DigestList }> = ({ list }) => {
+  const days: Array<{ day: string; entries: DigestListEntry[] }> = [];
+  list.entries.forEach((entry) => {
+    const last = days[days.length - 1];
+    if (last?.day === entry.day) last.entries.push(entry);
+    else days.push({ day: entry.day, entries: [entry] });
+  });
+  if (days.length === 0) {
+    return <p className="py-16 text-center text-sm text-slate-600 dark:text-slate-400">No events in this digest.</p>;
+  }
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      {days.map(({ day, entries }) => (
+        <section key={day} aria-label={day}>
+          <h2 className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-300">{day}</h2>
+          <ul className="space-y-3">
+            {entries.map((entry, i) => (
+              <li key={i} className="p-4 rounded-leaf-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(entry.category as EventCategory)}`} aria-hidden="true" />
+                  <span className="truncate">{entry.category}</span>
+                  {entry.isNew && (
+                    <span className="ml-auto shrink-0 px-1.5 py-0.5 rounded bg-brand-600 text-white tracking-[0.1em]">New</span>
+                  )}
+                </div>
+                <h3 className="mt-1.5 text-base font-semibold leading-snug text-slate-900 dark:text-white [overflow-wrap:anywhere]">{entry.title}</h3>
+                <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+                  {entry.time && (
+                    <p className="flex items-start gap-2"><Clock className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />{entry.time}</p>
+                  )}
+                  {entry.where && (
+                    <p className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.where)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-brand-700 dark:hover:text-brand-300 hover:underline [overflow-wrap:anywhere]"
+                      >
+                        {entry.where}
+                      </a>
+                    </p>
+                  )}
+                  {entry.also && (
+                    <p className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                      <Repeat className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
+                      <span>Also on {entry.also}</span>
+                    </p>
+                  )}
+                </div>
+                {entry.description && (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300 whitespace-pre-line [overflow-wrap:anywhere]">{entry.description}</p>
+                )}
+                {entry.contacts.length > 0 && (
+                  <ul className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 space-y-1 text-sm">
+                    {entry.contacts.map((c, j) => (
+                      <li key={j} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {c.name && <span className="font-medium text-slate-700 dark:text-slate-200">{c.name}</span>}
+                        {c.email && (
+                          <a href={`mailto:${c.email}?subject=${encodeURIComponent(entry.title)}`} className="inline-flex items-center gap-1 text-brand-700 dark:text-brand-300 hover:underline [overflow-wrap:anywhere]">
+                            <Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                            {c.email}
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 };

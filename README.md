@@ -19,17 +19,18 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 | | |
 |---|---|
 | 📝 **Staff submissions** | A public `/submit` form. Staff don't need an account to send in an event with its flyer (an image, or a PDF: the page they pick becomes the poster image). Each network can send up to 30 events in 15 minutes, and an optional Cloudflare Turnstile check keeps bots out. |
-| 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once. A declined submission can carry a reason. Updates arrive in real time. |
+| 📥 **Review inbox** | Admins approve, edit or decline submissions, one at a time or all at once (*Approve all* always asks first). A declined submission can carry a reason. After each decision the inbox says whether the submitter was emailed; when the server sends no emails, an *Email Sam* link opens the same message in the admin's own mail. Updates arrive in real time. |
 | ✉️ **Emails (optional)** | Admins hear about new submissions; submitters hear when their event is approved or declined (with the reason). |
 | 📑 **Events Digest PDF** | A branded A4 digest for the Board and staff, in two layouts: *Executive cards* and *Compact table*. Events that last week's digest didn't have are marked *New*, every flyer can follow at the end large enough to print and pin up, and the viewer's sidebar lists every event as a bookmark. |
-| 📲 **WhatsApp, email & a link** | Admins copy an emoji-friendly WhatsApp version of the digest, or open a ready-to-send covering email for the Board that lists every event. Both carry a link to the digest PDF (uploaded once, open to anyone with the link for six months), so nothing needs attaching. |
-| 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. |
+| 📲 **WhatsApp, email & a link** | Admins open a ready-to-send covering email for the Board that lists every event (the main button), or copy an emoji-friendly WhatsApp version. Both carry a link to the digest's page (uploaded once, open to anyone with the link for six months), which shows the events as an easy-to-read list on a phone, with the PDF a tab away. Nothing needs attaching. |
+| 📅 **Calendar views** | Month, week and agenda views, built for both desktop and mobile. Agenda is one list from today on that loads more as you scroll. Staff have **My events**: what they sent in, and whether it is published yet. |
 | 🔁 **Recurring & multi-date events** | Hand-picked dates, each with its own time if needed, or a repeat: under the date picker the event form offers *every week*, *every 2 weeks* and *every month*, with an optional last date (older daily and yearly series still work). You can delete a single occurrence. |
-| ✏️ **One event form** | Events are created and edited in the same full-screen form, by everyone: admins edit any event (and set it to *Published* or *Draft*), signed-in staff the ones they sent in (signed in, or naming their email as the contact) without changing whether it's published. Every change is saved through `/api/edit-event` and logged field by field; admins see staff changes in the **Change log**, with a count of new ones. |
+| ✏️ **One event form** | Events are created and edited in the same full-screen form, by everyone: admins edit any event (and set it to *Published* or *Draft*; a new event saved as a draft stays off the calendar), signed-in staff the ones they sent in (signed in, or naming their email as the contact) without changing whether it's published. A new event needs a category. Every change is saved through `/api/edit-event` and logged field by field; admins see staff changes in the **Change log**, with a count of new ones, and can search it by event name or person. |
 | 👥 **Staff accounts** | Admins add staff and reset forgotten passwords: the person gets a temporary password and chooses their own at the next sign-in. Everyone can change their password from the account menu. |
-| 📊 **Statistics** | Events, dates and venues per period, by category and month, ready to paste into a Board report. |
-| 🔍 **Search & filters** | Filter by text, category, location, submitter, status or date range. |
-| 📤 **Export & subscribe** | Download as `.ics` or `.xlsx`, or subscribe to a live ICS feed from Outlook, Google or Apple Calendar, for all events or chosen categories. |
+| 🗑️ **Undo & restore** | A deleted event can be put back with *Undo* for 10 seconds, and later with *Restore* under **Deleted** in the change log (with its flyer and files while they are still stored). |
+| 📊 **Statistics** | Events, dates and venues per period, by category and month, ready to paste into a Board report or download as an Excel workbook (a summary and every date held). |
+| 🔍 **Search & filters** | Filter by text, category, location, submitter, status (including *Pending review*) or date range. A search shows its results as one list across every date; a date filter moves the calendar to its period. |
+| 📤 **Export & subscribe** | Download as `.ics` or `.xlsx` (with a search or filters on, just the matching events or all of them), or subscribe to a live ICS feed from Outlook, Google or Apple Calendar, for all events or chosen categories. |
 | 🎨 **Cork City Partnership look** | Colours, Lato type, buttons and leaf-shaped boxes follow [corkcitypartnership.ie](https://corkcitypartnership.ie/), in light and dark mode, on screen and in the PDF. |
 | 🌙 **Comfort features** | Dark mode, keyboard shortcuts (`/` `←` `→` `T` `C` `E` `Esc`), pull-to-refresh and offline caching. |
 
@@ -50,7 +51,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
 
    Both layouts mark **New** the events that the last digest shared before this week (from its Monday) didn't carry, so a digest shared earlier the same week doesn't take the marks away; the very first digest marks everything New. Each share records the day and its events' ids in R2 (`meta/digest-issues.json`, never served as a file); if that can't be read, events added in the last week are marked instead. **Flyers to print at the end** (on by default, remembered per device) adds pages with every flyer four to a page, about A6 each, captioned with the event and the page of its card; on the cards, *Flyer · p. 5* under the thumbnail links there. The PDF's bookmarks list each event under its month or week, and the flyer pages.
 
-   **Preview** opens the PDF in a new tab and **Download PDF** saves it; staff see only these two. Admins also get **Email**, **WhatsApp** and **Link**: the PDF is uploaded to R2 (`/api/digest`, kept six months; the link opens its page `/digest/…`, which draws the PDF with pdf.js and has a download button, so it works in phone email apps' built-in browsers) and its link goes into a formatted covering email in plain words (logo, a “Click here for details” button, every event, no sign-off so your email signature follows) that is copied to paste into the new email your email app opens with the subject filled in, into the group-chat text, or on its own to the clipboard. The same digest (same day, period, layout, flyer pages and events) reuses its link; any change to the events makes a new one. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
+   **Preview** opens the PDF in a new tab and **Download PDF** saves it; staff see only these two. Admins also get **Email**, **WhatsApp** and **Link**: the PDF is uploaded to R2 (`/api/digest`, kept six months; the link opens its page `/digest/…`, which lists the events in text that reads well on a phone and has the PDF a tab away, drawn with pdf.js with a download button, so it works in phone email apps' built-in browsers) and its link goes into a formatted covering email in plain words (logo, a “Click here for details” button, every event, no sign-off so your email signature follows) that is copied to paste into the new email your email app opens with the subject filled in, into the group-chat text, or on its own to the clipboard. The same digest (same day, period, layout, flyer pages and events) reuses its link; any change to the events makes a new one. The Outlook and Google buttons show on screen but are left out when the PDF is printed. Only approved events are included, and the dialog flags any submissions still pending for that period.
 
 Step-by-step instructions, including email templates, are in the [coordinator guide](docs/GUIDE_FOR_ELIZABETH.md).
 
@@ -73,7 +74,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `018_deleted_events_in_change_log.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `019_restore_deleted_events.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -117,7 +118,7 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Preview and download the Events Digest | ✅ | ✅ |
 | Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 
-Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to events (staff's own, or any for admins) through `/api/edit-event`, which checks who may change the event and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions. The database itself logs every deleted event (who deleted it, and what it was) in the change log, whichever way it was deleted, and nobody can change or remove history from the app.
+Row-level security enforces these rules in the database: staff read published events (and their own drafts) and write nothing directly: drafts go through `/api/submit`, and changes to events (staff's own, or any for admins) through `/api/edit-event`, which checks who may change the event and writes the change to its history. Without an account nobody can read or write anything; the public form and the calendar feed go through the Cloudflare functions. The database itself logs every deleted event (who deleted it, and what it was, with a copy to restore it from) in the change log, whichever way it was deleted, and nobody can change or remove history from the app.
 
 **Forgotten password:** the person emails the contact on the login page (*Forgot your password?* fills in the email). An admin opens **account menu → Staff accounts → Reset password** and passes on the temporary password shown; at their next sign-in they choose a new one.
 
@@ -147,9 +148,9 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
 | `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
 | `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
-| `/api/digest` | `POST` | admins | Uploads the digest PDF under `digests/` and returns its link (kept six months; older digests are deleted); records which events it carried |
+| `/api/digest` | `POST` | admins | Uploads the digest PDF under `digests/`, with its events as a list for the digest's page, and returns its link (kept six months; older digests are deleted); records which events it carried |
 | `/api/digest-issues?before=YYYY-MM-DD` | `GET` | signed in | The last digest shared before that day (its day and event ids), for the *New* marks |
-| `/api/submissions` | `POST` | admins | Approve (publish) or decline (delete) submissions |
+| `/api/submissions` | `POST` | admins | Approve (publish) or decline (delete) submissions; says whether the submitters were emailed |
 | `/api/staff` | `GET` / `POST` | admins | List accounts / create a staff account |
 | `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |
 | `/api/client-error` | `POST` | anyone | Error reports from browsers (stored in `client_errors`) |

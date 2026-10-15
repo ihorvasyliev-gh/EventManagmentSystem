@@ -21,7 +21,8 @@ export const getEvents = async (): Promise<Event[]> => {
 export const fetchEventDetails = async (eventId: string): Promise<{ attachments: Attachment[]; history: EventHistoryEntry[] }> => {
   const [attachmentsRes, historyRes] = await Promise.all([
     supabase.from('event_attachments').select('*').eq('event_id', eventId).order('uploaded_at', { ascending: true }),
-    supabase.from('event_history').select('*').eq('event_id', eventId).order('timestamp', { ascending: true })
+    // (not a deleted entry's copy of the event, kept for restoring it: migration 019)
+    supabase.from('event_history').select('id,event_id,user_id,user_name,action,changes,timestamp').eq('event_id', eventId).order('timestamp', { ascending: true })
   ]);
   return {
     attachments: ((attachmentsRes.data || []) as AttachmentRow[]).map(mapAttachmentRow),
@@ -229,18 +230,38 @@ export const clearRecurrenceExceptions = async (eventId: string): Promise<void> 
   if (error) console.error('Error clearing recurrence exceptions:', error);
 };
 
-/** Deletes an event (the whole series) and then its poster and attachments from R2 */
-export const deleteEvent = async (id: string): Promise<void> => {
-  const { data: eventData, error: fetchError } = await supabase
-    .from('events')
-    .select('id, poster_url')
-    .eq('id', id)
-    .single<{ id: string; poster_url: string | null }>();
+/** What a deleted event was, as stored: enough to put it back (Undo, or Restore in the change log) */
+export interface DeletedEvent {
+  row: Record<string, unknown>;
+  attachments: Array<Record<string, unknown>>;
+  deletedDates: Array<Record<string, unknown>>;
+}
 
-  if (fetchError || !eventData) {
+/** The poster and attachments a deleted event leaves in R2 */
+export const deletedEventFiles = (deleted: DeletedEvent): string[] =>
+  [deleted.row.poster_url, ...deleted.attachments.map((a) => a.url)].filter((u): u is string => typeof u === 'string' && !!u);
+
+/** Removes a deleted event's files from R2, once it is no longer going to be undone */
+export const removeDeletedEventFiles = (deleted: DeletedEvent): Promise<void> => deleteStoredFiles(deletedEventFiles(deleted));
+
+/**
+ * Deletes an event (the whole series) and returns what it was. Its poster and attachments stay
+ * in R2 until `removeDeletedEventFiles`, so an Undo gets them back too.
+ */
+export const deleteEvent = async (id: string): Promise<DeletedEvent> => {
+  const { data: row, error: fetchError } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', id)
+    .single<Record<string, unknown>>();
+
+  if (fetchError || !row) {
     throw new Error('Event not found');
   }
-  const { data: attachments } = await supabase.from('event_attachments').select('url').eq('event_id', id);
+  const [{ data: attachments }, { data: deletedDates }] = await Promise.all([
+    supabase.from('event_attachments').select('*').eq('event_id', id),
+    supabase.from('recurrence_exceptions').select('*').eq('event_id', id)
+  ]);
 
   // Attachments and deleted dates go with it (on delete cascade); its history stays, and the
   // database adds who deleted it
@@ -254,5 +275,56 @@ export const deleteEvent = async (id: string): Promise<void> => {
     throw new Error(deleteError.message || 'Failed to delete event');
   }
 
-  void deleteStoredFiles([eventData.poster_url, ...(attachments || []).map((a: { url: string }) => a.url)]);
+  return { row, attachments: attachments ?? [], deletedDates: deletedDates ?? [] };
+};
+
+/**
+ * A deleted event's copy without the files no longer stored (they are removed a little after
+ * the event is deleted), and how many went. Restoring from the change log checks this first.
+ */
+export const dropMissingFiles = async (deleted: DeletedEvent): Promise<{ deleted: DeletedEvent; lostFiles: number }> => {
+  const stored = async (url: unknown): Promise<boolean> => {
+    if (typeof url !== 'string' || !url.startsWith('/api/file/')) return true;
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      void res.body?.cancel();
+      return res.status !== 404;
+    } catch {
+      return true;
+    }
+  };
+  const [poster, ...attachments] = await Promise.all([
+    stored(deleted.row.poster_url),
+    ...deleted.attachments.map((a) => stored(a.url))
+  ]);
+  const kept = deleted.attachments.filter((_, i) => attachments[i]);
+  return {
+    deleted: { ...deleted, row: poster ? deleted.row : { ...deleted.row, poster_url: null }, attachments: kept },
+    lostFiles: (poster ? 0 : 1) + deleted.attachments.length - kept.length
+  };
+};
+
+/**
+ * Puts a deleted event back as it was: the same id (so links to it work again), its files and
+ * its deleted dates. Its history keeps the deletion, and the database adds who restored it
+ * (migration 019). Admins only.
+ */
+export const restoreEvent = async (deleted: DeletedEvent): Promise<{ event: Event; deletedDates: Date[] }> => {
+  const { data, error } = await supabase.from('events').insert(deleted.row).select(EVENT_COLUMNS).single<EventRow>();
+  if (error || !data) {
+    console.error('Restoring the event failed:', error);
+    throw new Error(error?.code === '23505'
+      ? 'This event is already back on the calendar.'
+      : 'The event could not be restored. Please try again.');
+  }
+  const [attachmentsRes, datesRes] = await Promise.all([
+    deleted.attachments.length ? supabase.from('event_attachments').insert(deleted.attachments) : null,
+    deleted.deletedDates.length ? supabase.from('recurrence_exceptions').insert(deleted.deletedDates) : null
+  ]);
+  if (attachmentsRes?.error) console.error('Restoring the attachments failed:', attachmentsRes.error);
+  if (datesRes?.error) console.error('Restoring the deleted dates failed:', datesRes.error);
+  return {
+    event: mapEventRow(data),
+    deletedDates: datesRes?.error ? [] : deleted.deletedDates.map((d) => new Date(String(d.exception_date)))
+  };
 };

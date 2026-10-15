@@ -42,7 +42,7 @@ const DESCRIPTION_SOFT_LIMIT = 600;
 const DESCRIPTION_MAX = 2000;
 
 /** Form fields that can show an error (`contact-0-name` is the second contact's name) */
-type FieldName = 'title' | 'dates' | 'repeat' | 'location' | 'description' | 'name' | 'email' | 'poster' | `contact-${number}-${ContactField}`;
+type FieldName = 'title' | 'category' | 'dates' | 'repeat' | 'location' | 'description' | 'name' | 'email' | 'poster' | `contact-${number}-${ContactField}`;
 
 const contactErrorKey = (index: number, field: ContactField): FieldName => `${extraContactId(index)}-${field}` as FieldName;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -102,7 +102,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       const category = CATEGORIES.find((c) => c === source.category);
       return {
         title: source.title,
-        category: category ?? CATEGORIES[0],
+        category: category ?? '',
         dates: [],
         location: source.location,
         description: source.description,
@@ -115,10 +115,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   });
 
   const [title, setTitle] = useState(restoredDraft?.title ?? '');
-  // An event being changed keeps its category, even one an admin added (or none)
+  // An event being changed keeps its category, even one an admin added (or none). A new one
+  // starts with none picked, so it isn't sent off under the first category by mistake
   const [category, setCategory] = useState<string>(() => {
     if (editing) return editing.category ?? '';
-    return restoredDraft && CATEGORIES.includes(restoredDraft.category) ? restoredDraft.category : CATEGORIES[0];
+    return restoredDraft && CATEGORIES.some((c) => c === restoredDraft.category) ? restoredDraft.category : '';
   });
   const scheduleControls = useEventSchedule(() =>
     editing ? scheduleOfEvent(editing, editingExceptions) : scheduleFromDraft(restoredDraft, defaultDate)
@@ -134,10 +135,11 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     editing ? editing.submitterName ?? '' : (source && restoredDraft?.submitterName) || currentUser?.fullName || restoredDraft?.submitterName || readSavedSubmitter().name);
   const [submitterEmail, setSubmitterEmail] = useState(() =>
     editing ? editing.submitterEmail ?? '' : (source && restoredDraft?.submitterEmail) || currentUser?.email || restoredDraft?.submitterEmail || readSavedSubmitter().email);
-  // Admins editing: published or a draft (staff can't change it)
+  // Admins: published or a draft, for a new event too (to publish it later); staff can't set it
   const [status, setStatus] = useState<EventStatus>(() => (publishOnSave ? 'published' : editing?.status ?? 'published'));
-  const setsStatus = isAdmin && !!editing;
-  const publishesDraft = setsStatus && editing?.status === 'draft' && status === 'published';
+  const setsStatus = isAdmin;
+  const publishesDraft = setsStatus && !!editing && editing.status === 'draft' && status === 'published';
+  const savesDraft = isAdmin && !editing && status === 'draft';
   // The saved version the changes are made to; after a clash, the other person's (saving again replaces it)
   const [baseUpdatedAt, setBaseUpdatedAt] = useState(editing?.updatedAt);
   // More contact people (the person sending it in is the first)
@@ -220,7 +222,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   // Autosave the draft (text fields only — files can't be stored)
   const draftToSave: SavedDraft = {
     // (only a new event is kept as a draft, and its category is one of the list)
-    title, category: category as EventCategoryName, location, description,
+    title, category: category as EventCategoryName | '', location, description,
     dates: selectedDates.map((d) => d.toISOString()),
     sharedTimes,
     sameTime: sameTimeForAll, perDateTimes,
@@ -281,6 +283,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   const validate = (): Partial<Record<FieldName, string>> => {
     const next: Partial<Record<FieldName, string>> = {};
     if (!title.trim()) next.title = 'Please give the event a name.';
+    if (!editing && !category) next.category = 'Pick the category that fits best.';
     if (sortedDates.length === 0) next.dates = 'Pick at least one date in the calendar.';
     else {
       const timeError = scheduleControls.validateTimes();
@@ -321,7 +324,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   /** Scrolls to the first field with a problem, in the order they appear; false if there is none */
   const goToFirstError = (found: Partial<Record<FieldName, string>>): boolean => {
     const order: FieldName[] = [
-      'title', 'dates', 'repeat', 'location', 'description', 'poster', 'name', 'email',
+      'title', 'category', 'dates', 'repeat', 'location', 'description', 'poster', 'name', 'email',
       ...extraContacts.flatMap((_, i) => [contactErrorKey(i, 'name'), contactErrorKey(i, 'email')])
     ];
     const firstInvalid = order.find((f) => found[f]);
@@ -438,7 +441,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       await submitEvent({
         ...data,
         existingPosterUrl: !posterFile && posterPreview && posterPreview === templatePosterUrl ? templatePosterUrl : null,
-        publish: isAdmin,
+        publish: isAdmin && status === 'published',
         turnstileToken
       });
 
@@ -476,7 +479,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setCategory(CATEGORIES[0]);
+    setCategory('');
     setExtraContacts([]);
     poster.reset();
     scheduleControls.reset(scheduleFromDraft(null, defaultDate));
@@ -510,6 +513,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       <SubmitSuccess
         summary={submitted}
         isAdmin={isAdmin}
+        draft={savesDraft}
         signedIn={!!currentUser}
         onSubmitAnother={handleSubmitAnother}
         onBack={onBackToLogin}
@@ -605,7 +609,13 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
                   <FieldError id="err-title" message={errors.title} />
                 </div>
 
-                <CategoryPicker value={category} onChange={setCategory} extra={editing?.category} />
+                <CategoryPicker
+                  value={category}
+                  onChange={(value) => { setCategory(value); clearError('category'); }}
+                  extra={editing?.category}
+                  required={!editing}
+                  error={errors.category}
+                />
 
                 {setsStatus && <StatusPicker value={status} onChange={setStatus} />}
               </Section>
@@ -786,9 +796,10 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
                     ? ((setsStatus ? status : editing.status) === 'published'
                       ? 'Your changes go on the calendar straight away.'
                       : 'It stays in the review queue, with your changes.')
+                    : savesDraft ? 'Saved as a draft: not on the calendar until you publish it.'
                     : isAdmin ? 'Published to the calendar immediately.' : 'Sent to Elizabeth for review before it’s published.'}
                 </p>}
-                <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} />
+                <SubmitButton isAdmin={isAdmin} draft={savesDraft} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} />
               </div>
             </form>
           </div>
@@ -811,7 +822,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
       {/* Phone: submit bar always within thumb reach */}
       <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {errorSummary && <div className="-mt-1 mb-1.5 flex justify-center">{errorSummary}</div>}
-        <SubmitButton isAdmin={isAdmin} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} full />
+        <SubmitButton isAdmin={isAdmin} draft={savesDraft} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} full />
       </div>
     </div>
   );

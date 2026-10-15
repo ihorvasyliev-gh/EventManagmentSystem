@@ -255,11 +255,11 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, currentUserId 
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{account.email}</p>
                       <p className="mt-1 flex flex-wrap gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.12em] ${account.role === 'admin' ? 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-[0.12em] ${account.role === 'admin' ? 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
                           {account.role}
                         </span>
                         {account.mustChangePassword && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                          <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                             Has a temporary password
                           </span>
                         )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -9,6 +9,12 @@ interface NavbarProps {
   onAddEventClick: () => void;
   onExportClick?: () => void;
   onRefresh?: () => void;
+  /** The logo: back to today, at the top of the page */
+  onHomeClick?: () => void;
+  /** Staff: the events they sent in, and whether they are published yet */
+  onOpenMyEvents?: () => void;
+  /** The phone's tab bar is showing: the menu leaves out what the tab bar already has */
+  hasTabBar?: boolean;
   loadingEvents?: boolean;
   isRefreshing?: boolean;
   pendingSubmissionsCount?: number;
@@ -43,6 +49,9 @@ const Navbar: React.FC<NavbarProps> = ({
   onAddEventClick,
   onExportClick,
   onRefresh,
+  onHomeClick,
+  onOpenMyEvents,
+  hasTabBar = false,
   loadingEvents = false,
   isRefreshing = false,
   pendingSubmissionsCount = 0,
@@ -112,9 +121,9 @@ const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               className="flex items-center gap-2.5 min-w-0 rounded-xl -ml-1 pl-1 pr-2 py-1 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-              onClick={onRefresh}
-              title="Refresh events"
-              aria-label="CCP Calendar — refresh events"
+              onClick={onHomeClick}
+              title="Back to today"
+              aria-label="CCP Calendar — back to today"
             >
               <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shadow-2xs flex items-center justify-center shrink-0">
                 <img src="/assets/ccp-logo-v2.png" alt="" className="h-6 sm:h-7 w-auto object-contain" />
@@ -209,7 +218,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   </span>
                   <span className="hidden xl:flex flex-col items-start leading-tight max-w-[10rem]">
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-full">{user.fullName}</span>
-                    <span className="text-[10px] text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] font-bold">{user.role}</span>
+                    <span className="text-[11px] text-brand-600 dark:text-brand-300 uppercase tracking-[0.14em] font-bold">{user.role}</span>
                   </span>
                   <span className="sr-only xl:hidden">Account menu</span>
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -220,6 +229,11 @@ const Navbar: React.FC<NavbarProps> = ({
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
                     </div>
+                    {!isAdmin && onOpenMyEvents && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenMyEvents)} className={accountItem}>
+                        <CalendarCheck className="h-4 w-4 text-slate-400" /> My events
+                      </button>
+                    )}
                     {onChangePassword && (
                       <button type="button" role="menuitem" onClick={closeMenuAnd(onChangePassword)} className={accountItem}>
                         <KeyRound className="h-4 w-4 text-slate-400" /> Change password
@@ -262,7 +276,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 aria-controls="app-menu"
               >
                 {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-                {!isMenuOpen && isAdmin && changeLogCount > 0 && (
+                {!isMenuOpen && isAdmin && changeLogCount > 0 && !hasTabBar && (
                   <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-brand-600 ring-2 ring-white dark:ring-slate-900" aria-hidden="true" />
                 )}
               </button>
@@ -292,19 +306,20 @@ const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</span>
                 </span>
-                <span className="ml-auto shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.14em] bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300">
+                <span className="ml-auto shrink-0 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-[0.14em] bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300">
                   {user.role}
                 </span>
               </div>
 
               <div className="space-y-0.5">
-                {primaryAction && (
+                {/* New event, Inbox, My events, Digest and Change log are in the tab bar when it shows */}
+                {primaryAction && !hasTabBar && (
                   <button type="button" onClick={closeMenuAnd(primaryAction)} className={`${menuItem} cta md:hidden !text-white bg-brand-600 hover:!bg-brand-700 mb-1`}>
                     <PlusCircle className="h-5 w-5" />
                     <span>{isAdmin ? 'New event' : 'Submit an event'}</span>
                   </button>
                 )}
-                {isAdmin && onOpenSubmissions && (
+                {isAdmin && onOpenSubmissions && !hasTabBar && (
                   <button type="button" onClick={closeMenuAnd(onOpenSubmissions)} className={`${menuItem} md:hidden`}>
                     <Inbox className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Submissions inbox</span>
@@ -313,7 +328,13 @@ const Navbar: React.FC<NavbarProps> = ({
                     )}
                   </button>
                 )}
-                {onOpenFortnightlyBulletin && (
+                {!isAdmin && onOpenMyEvents && !hasTabBar && (
+                  <button type="button" onClick={closeMenuAnd(onOpenMyEvents)} className={menuItem}>
+                    <CalendarCheck className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">My events</span>
+                  </button>
+                )}
+                {onOpenFortnightlyBulletin && !hasTabBar && (
                   <button type="button" onClick={closeMenuAnd(onOpenFortnightlyBulletin)} className={menuItem}>
                     <FileText className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Events digest</span>
@@ -332,7 +353,7 @@ const Navbar: React.FC<NavbarProps> = ({
                     <span className="flex-1">Statistics</span>
                   </button>
                 )}
-                {isAdmin && onOpenChangeLog && (
+                {isAdmin && onOpenChangeLog && !hasTabBar && (
                   <button type="button" onClick={closeMenuAnd(onOpenChangeLog)} className={menuItem}>
                     <History className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Change log</span>

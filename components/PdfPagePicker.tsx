@@ -86,7 +86,7 @@ const PdfPagePicker: React.FC<PdfPagePickerProps> = ({ pdf, busy, onPick, onCanc
                   {src === null ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-6 h-6" />}
                 </span>
               )}
-              <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-slate-900/75 text-white text-[10px] font-semibold leading-none">
+              <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-slate-900/75 text-white text-xs font-semibold leading-none">
                 {page}
               </span>
               {rendering && (

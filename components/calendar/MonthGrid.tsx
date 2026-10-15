@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { type Event } from '../../types';
-import { getDaysInMonth, getFirstDayOfMonth, isSameDay } from '../../utils/date';
+import { isSameDay } from '../../utils/date';
 import MonthDayCell from './MonthDayCell';
 import MobileDayPanel from './MobileDayPanel';
 import { toDayKey } from './shared';
@@ -39,31 +39,56 @@ const MonthGrid: React.FC<MonthGridProps> = ({
   canAdd,
   onAddEventForDate
 }) => {
-  const daysInMonth = getDaysInMonth(currentDate);
-  const firstDay = getFirstDayOfMonth(currentDate);
-
+  // Whole weeks from Monday to Sunday: the first and last weeks are completed with the days of
+  // the months before and after, shown paler
   const calendarDays = useMemo(() => {
-    const days: Array<Date | null> = [];
-    const adjustedFirstDay = firstDay === 0 ? 6 : firstDay - 1;
-
-    for (let i = 0; i < adjustedFirstDay; i++) {
-      days.push(null);
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(currentDate.getFullYear(), currentDate.getMonth(), i));
-    }
-    // Complete the last week so the grid lines don't end raggedly
-    while (days.length % 7 !== 0) {
-      days.push(null);
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const leading = (first.getDay() + 6) % 7;
+    const trailing = (7 - last.getDay()) % 7;
+    const days: Date[] = [];
+    for (let i = 1 - leading; i <= last.getDate() + trailing; i++) {
+      days.push(new Date(year, month, i));
     }
     return days;
-  }, [currentDate, daysInMonth, firstDay]);
+  }, [currentDate]);
 
-  // The same function for every cell and render, so unchanged days skip re-rendering
+  // Phones: after a tap, bring the day's events (under the grid) into view
+  const panelRef = useRef<HTMLDivElement>(null);
+  const revealPanelRef = useRef(false);
   const toggleSelectedDay = useCallback(
-    (d: Date) => onSelectedDayChange((prev) => (prev && isSameDay(prev, d) ? null : d)),
+    (d: Date) => {
+      revealPanelRef.current = true;
+      onSelectedDayChange((prev) => (prev && isSameDay(prev, d) ? null : d));
+    },
     [onSelectedDayChange]
   );
+  useEffect(() => {
+    if (!revealPanelRef.current || !selectedDay) return;
+    revealPanelRef.current = false;
+    const panel = panelRef.current;
+    if (!panel) return;
+    // As much of the panel as fits between the navbar and the tab bar, from its top
+    const rect = panel.getBoundingClientRect();
+    const visibleBottom = window.innerHeight - 88;
+    const overflow = rect.top + Math.min(rect.height, visibleBottom - 72) - visibleBottom;
+    if (overflow <= 0) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    window.scrollBy({ top: overflow, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [selectedDay]);
+
+  // Large screens: when today's week is below the fold (late in the month on a laptop), scroll
+  // just enough to show it
+  const todayCellRef = useRef<HTMLDivElement>(null);
+  const showsToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth();
+  useEffect(() => {
+    if (isMobile || !showsToday) return;
+    const cell = todayCellRef.current;
+    if (!cell || cell.getBoundingClientRect().bottom <= window.innerHeight) return;
+    cell.scrollIntoView?.({ block: 'nearest' });
+  }, [isMobile, showsToday]);
 
   const selectedDayEvents = useMemo(
     () => (selectedDay ? eventsByDayKey.get(toDayKey(selectedDay)) || [] : []),
@@ -74,19 +99,23 @@ const MonthGrid: React.FC<MonthGridProps> = ({
     <>
       <div className="grid grid-cols-7 mb-2">
         {WEEKDAYS.map(day => (
-          <div key={day} className="text-center text-[9px] sm:text-[10px] 2xl:text-xs font-semibold text-slate-400 uppercase tracking-widest px-0.5">
+          <div key={day} className="text-center text-[11px] 2xl:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider sm:tracking-widest px-0.5">
             {day}
           </div>
         ))}
       </div>
       <div className="grid grid-cols-7 border-t border-l border-slate-100 dark:border-slate-800">
-        {calendarDays.map((day, idx) =>
-          day ? (
+        {calendarDays.map((day) => {
+          const isToday = isSameDay(day, today);
+          return (
             <MonthDayCell
               key={day.toISOString()}
+              cellRef={isToday ? todayCellRef : undefined}
               day={day}
               dayEvents={eventsByDayKey.get(toDayKey(day)) || NO_EVENTS}
-              isToday={isSameDay(day, today)}
+              isToday={isToday}
+              isPast={day < today}
+              isOutside={day.getMonth() !== currentDate.getMonth()}
               isMobile={isMobile}
               isSelected={isMobile && !!selectedDay && isSameDay(day, selectedDay)}
               canAdd={canAdd}
@@ -95,10 +124,8 @@ const MonthGrid: React.FC<MonthGridProps> = ({
               onSelect={toggleSelectedDay}
               onOpenDay={onOpenDay}
             />
-          ) : (
-            <div key={`empty-${idx}`} className="min-h-[3.25rem] sm:min-h-[6.5rem] lg:min-h-[8rem] bg-slate-50/50 dark:bg-slate-800/30 border-b border-r border-slate-100 dark:border-slate-800"></div>
-          )
-        )}
+          );
+        })}
       </div>
 
       {isMobile && !selectedDay && (
@@ -109,6 +136,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
 
       {isMobile && selectedDay && (
         <MobileDayPanel
+          panelRef={panelRef}
           day={selectedDay}
           events={selectedDayEvents}
           onEventClick={onEventClick}

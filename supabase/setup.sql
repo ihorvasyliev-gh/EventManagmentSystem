@@ -95,6 +95,8 @@ CREATE TABLE IF NOT EXISTS public.event_history (
   user_name TEXT NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('created', 'updated', 'deleted', 'status_changed')),
   changes JSONB,
+  -- A deleted event's copy (its row, attachments and deleted dates), to restore it
+  snapshot JSONB,
   timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -185,13 +187,18 @@ CREATE TRIGGER update_events_updated_at
   BEFORE UPDATE ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- "Created" history entry for every new event (also for submissions without an account)
+-- "Created" history entry for every new event (also for submissions without an account). An
+-- event put back after it was deleted (the same id) is logged as restored, by whoever did it.
 CREATE OR REPLACE FUNCTION public.create_event_history_entry()
 RETURNS TRIGGER AS $$
 DECLARE
   current_user_name TEXT;
 BEGIN
-  IF NEW.creator_id IS NOT NULL THEN
+  IF EXISTS (SELECT 1 FROM public.event_history WHERE event_id = NEW.id AND action = 'deleted') THEN
+    SELECT full_name INTO current_user_name FROM public.users WHERE id = auth.uid();
+    INSERT INTO public.event_history (event_id, user_id, user_name, action, changes)
+    VALUES (NEW.id, auth.uid(), COALESCE(current_user_name, 'Unknown'), 'created', '{"restored": true}'::jsonb);
+  ELSIF NEW.creator_id IS NOT NULL THEN
     SELECT full_name INTO current_user_name FROM public.users WHERE id = NEW.creator_id;
     INSERT INTO public.event_history (event_id, user_id, user_name, action)
     VALUES (NEW.id, NEW.creator_id, COALESCE(current_user_name, 'Unknown'), 'created');
@@ -233,7 +240,8 @@ CREATE TRIGGER on_event_history_insert
   FOR EACH ROW EXECUTE FUNCTION public.fill_event_history_entry();
 
 -- Deleting an event logs who did it and what the event was (written here, so every way of
--- deleting is logged)
+-- deleting is logged), with a copy of it to restore it from the change log. Written before the
+-- row goes, while its attachments and deleted dates are still there to copy.
 CREATE OR REPLACE FUNCTION public.log_event_deleted()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -248,6 +256,7 @@ DECLARE
   v_when TEXT;
   v_repeat TEXT;
   v_changes JSONB;
+  v_snapshot JSONB;
 BEGIN
   -- The Cloudflare functions delete with the service role key, naming the admin they act for
   -- (only that key can, so nobody else can put a name here)
@@ -294,15 +303,21 @@ BEGIN
     v_changes := v_changes || '{"declined": true}'::jsonb;
   END IF;
 
-  INSERT INTO public.event_history (event_id, event_title, user_id, user_name, action, changes)
-  VALUES (OLD.id, OLD.title, v_user_id, COALESCE(v_user_name, 'Supabase (not an app account)'), 'deleted', v_changes);
-  RETURN NULL;
+  v_snapshot := jsonb_build_object(
+    'event', to_jsonb(OLD),
+    'attachments', COALESCE((SELECT jsonb_agg(to_jsonb(a)) FROM public.event_attachments a WHERE a.event_id = OLD.id), '[]'::jsonb),
+    'deleted_dates', COALESCE((SELECT jsonb_agg(to_jsonb(x)) FROM public.recurrence_exceptions x WHERE x.event_id = OLD.id), '[]'::jsonb)
+  );
+
+  INSERT INTO public.event_history (event_id, event_title, user_id, user_name, action, changes, snapshot)
+  VALUES (OLD.id, OLD.title, v_user_id, COALESCE(v_user_name, 'Supabase (not an app account)'), 'deleted', v_changes, v_snapshot);
+  RETURN OLD;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS on_event_deleted ON public.events;
 CREATE TRIGGER on_event_deleted
-  AFTER DELETE ON public.events
+  BEFORE DELETE ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.log_event_deleted();
 
 -- A deleted or restored date of a repeating event counts as a change to the event: only the

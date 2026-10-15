@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 
@@ -7,7 +7,16 @@ const MIN_ERROR_DURATION = 10000;
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
-export interface Toast {
+/**
+ * A button in the toast (e.g. Undo), and what happens when the toast goes without it being
+ * pressed (timed out or dismissed)
+ */
+export interface ToastOptions {
+  action?: { label: string; onClick: () => void };
+  onExpire?: () => void;
+}
+
+export interface Toast extends ToastOptions {
   id: string;
   message: string;
   type: ToastType;
@@ -16,7 +25,7 @@ export interface Toast {
 
 interface ToastContextType {
   toasts: Toast[];
-  showToast: (message: string, type?: ToastType, duration?: number) => void;
+  showToast: (message: string, type?: ToastType, duration?: number, options?: ToastOptions) => void;
   removeToast: (id: string) => void;
 }
 
@@ -32,16 +41,29 @@ export const useToast = () => {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Toasts still up, to call onExpire once when one goes (whether it timed out or was closed)
+  const live = useRef(new Map<string, Toast>());
 
   const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
+    const toast = live.current.get(id);
+    live.current.delete(id);
+    setToasts(prev => prev.filter(t => t.id !== id));
+    toast?.onExpire?.();
   }, []);
 
-  const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
+  const runAction = useCallback((id: string) => {
+    const toast = live.current.get(id);
+    live.current.delete(id);
+    setToasts(prev => prev.filter(t => t.id !== id));
+    toast?.action?.onClick();
+  }, []);
+
+  const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000, options?: ToastOptions) => {
     const id = Math.random().toString(36).substr(2, 9);
     if (type === 'error' && duration > 0) duration = Math.max(duration, MIN_ERROR_DURATION);
-    const toast: Toast = { id, message, type, duration };
-    
+    const toast: Toast = { id, message, type, duration, ...options };
+    live.current.set(id, toast);
+
     setToasts(prev => [...prev, toast]);
 
     if (duration > 0) {
@@ -55,12 +77,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ toasts, showToast, removeToast }}>
       {children}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ToastContainer toasts={toasts} onRemove={removeToast} onAction={runAction} />
     </ToastContext.Provider>
   );
 };
 
-const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void }> = ({ toasts, onRemove }) => {
+const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void; onAction: (id: string) => void }> = ({ toasts, onRemove, onAction }) => {
   const getIcon = (type: ToastType) => {
     switch (type) {
       case 'success':
@@ -114,6 +136,15 @@ const ToastContainer: React.FC<{ toasts: Toast[]; onRemove: (id: string) => void
               </p>
             )}
           </div>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={() => onAction(toast.id)}
+              className="flex-shrink-0 -my-1 px-3 py-1 rounded border border-current text-xs font-bold uppercase tracking-[0.1em] hover:bg-white/60 dark:hover:bg-white/10"
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             onClick={() => onRemove(toast.id)}
             className="flex-shrink-0 text-gray-400 hover:text-gray-300 dark:text-slate-400 dark:hover:text-slate-300"

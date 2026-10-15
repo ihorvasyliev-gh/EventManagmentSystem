@@ -132,15 +132,15 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
         {/* Progress */}
         <ol className="flex items-center gap-2 text-xs font-semibold mb-5" aria-label="Progress">
           <li className="inline-flex items-center gap-1.5 text-ccp-green-600 dark:text-ccp-green-400">
-            <CheckCircle2 className="w-4 h-4" /> Details
+            <CheckCircle2 className="w-5 h-5" /> Details
           </li>
           <li className="h-px w-6 bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
           <li className="inline-flex items-center gap-1.5 text-brand-700 dark:text-brand-300" aria-current="step">
-            <span className="w-4 h-4 rounded-full bg-brand-600 text-white text-[10px] flex items-center justify-center">2</span> Check
+            <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-xs flex items-center justify-center">2</span> Check
           </li>
           <li className="h-px w-6 bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
-          <li className="inline-flex items-center gap-1.5 text-slate-400">
-            <span className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] flex items-center justify-center">3</span> Send
+          <li className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+            <span className="w-5 h-5 rounded-full border border-slate-300 dark:border-slate-600 text-xs flex items-center justify-center">3</span> Send
           </li>
         </ol>
 

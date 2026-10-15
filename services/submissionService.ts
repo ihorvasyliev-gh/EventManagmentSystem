@@ -107,15 +107,21 @@ export const getPendingSubmissions = async (): Promise<Event[]> => {
 };
 
 /** Publishes submissions */
-export const approveSubmissions = async (ids: string[]): Promise<Event[]> => {
-  const { events } = await callApi<{ events: EventRow[] }>('/api/submissions', { method: 'POST', body: { action: 'approve', ids } });
-  return events.map(row => mapEventRow(row));
+export const approveSubmissions = async (ids: string[]): Promise<{ events: Event[]; authorsEmailed: boolean }> => {
+  const { events, authorsEmailed } = await callApi<{ events: EventRow[]; authorsEmailed?: boolean }>('/api/submissions', { method: 'POST', body: { action: 'approve', ids } });
+  return { events: events.map(row => mapEventRow(row)), authorsEmailed: authorsEmailed === true };
 };
 
-/** Declines submissions: deletes them and their flyers */
-export const declineSubmissions = async (ids: string[]): Promise<string[]> => {
-  const { declined } = await callApi<{ declined: string[] }>('/api/submissions', { method: 'POST', body: { action: 'decline', ids } });
-  return declined;
+/**
+ * Declines submissions: deletes them and their flyers. The reason goes in the email to the
+ * submitter, when the server sends one (`authorsEmailed`).
+ */
+export const declineSubmissions = async (ids: string[], reason?: string): Promise<{ declined: string[]; authorsEmailed: boolean }> => {
+  const { declined, authorsEmailed } = await callApi<{ declined: string[]; authorsEmailed?: boolean }>('/api/submissions', {
+    method: 'POST',
+    body: { action: 'decline', ids, ...(reason?.trim() ? { reason: reason.trim() } : {}) }
+  });
+  return { declined, authorsEmailed: authorsEmailed === true };
 };
 
 /**

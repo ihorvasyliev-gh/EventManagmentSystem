@@ -1,5 +1,6 @@
 import { callApi } from './apiClient';
 import { digestPageUrl } from '../utils/digestLinks';
+import type { DigestList } from '../utils/digestList';
 
 /** A shared digest: a link anyone can open, until it expires (about six months) */
 export interface SharedDigest {
@@ -15,15 +16,17 @@ export interface DigestIssue {
 
 /**
  * Uploads the digest PDF (admins only) and returns the link to its page (which shows and downloads
- * it). `issue` records what it carried, for next week's NEW marks.
+ * it). `issue` records what it carried, for next week's NEW marks; `list` is its events as
+ * text, which the page shows as a list (easier on a phone than the PDF).
  */
-export const shareDigestPdf = async (pdf: Blob, fileName: string, issue?: DigestIssue): Promise<SharedDigest> => {
+export const shareDigestPdf = async (pdf: Blob, fileName: string, issue?: DigestIssue, list?: DigestList): Promise<SharedDigest> => {
   const form = new FormData();
   form.append('file', new File([pdf], fileName, { type: 'application/pdf' }));
   if (issue) {
     form.append('issued', issue.issued);
     form.append('eventIds', JSON.stringify(issue.ids));
   }
+  if (list) form.append('list', JSON.stringify(list));
   const { url, expiresAt } = await callApi<SharedDigest>('/api/digest', { method: 'POST', form });
   return { url: digestPageUrl(url, window.location.origin), expiresAt };
 };

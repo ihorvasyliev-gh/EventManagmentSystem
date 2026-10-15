@@ -322,6 +322,8 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
         {calendarDays.map((cell, idx) => {
           const isSelected = selectedKeys.has(cell.key);
           const isToday = cell.key === todayKey;
+          // Days already gone stay pickable (an event can be added after the fact) but look spent
+          const isPast = cell.key < todayKey;
 
           return (
             <button
@@ -331,6 +333,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
               onClick={() => handleToggleDate(cell.date)}
               aria-label={`${cell.date.toDateString()}${isSelected ? ', selected' : ''}`}
               aria-pressed={isSelected}
+              title={isPast && !isSelected ? 'This date has passed' : undefined}
               className={`
                 relative w-full h-11 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-all
                 flex items-center justify-center touch-manipulation
@@ -341,6 +344,8 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
                       (isToday ? ' ring-2 ring-brand-300 dark:ring-brand-400 ring-offset-1' : '')
                     : isToday
                     ? 'border-2 border-brand-500 text-brand-600 dark:text-brand-400 font-bold bg-brand-50/60 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/40'
+                    : isPast
+                    ? 'text-slate-400 dark:text-slate-500 font-normal bg-slate-50/60 dark:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/50'
                     : cell.inMonth
                     ? 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60'
                     // Days of the next/previous month can be picked too, so they stay readable

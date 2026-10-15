@@ -110,6 +110,19 @@ test('signed-in admins publish straight away and skip the bot check', async () =
   assert.ok(!calls.some((c) => c.url.startsWith('https://api.resend.com/')), 'no "new submission" email for a published event');
 });
 
+test('an admin can keep a new event as a draft to publish later, with no "new submission" email', async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  const calls = mockFetch(dbRoutes(inserted));
+  const res = await onRequestPost({
+    request: send({ event: { ...event, publish: false }, auth: 'admin-token' }),
+    env: { ...env, RESEND_API_KEY: 'k', NOTIFY_FROM: 'CCP <c@x.ie>' }
+  });
+  assert.equal(res.status, 201);
+  assert.equal(inserted[0].status, 'draft');
+  assert.deepEqual(inserted[0].tags, ['admin-created']);
+  assert.ok(!calls.some((c) => c.url.startsWith('https://api.resend.com/')));
+});
+
 test('staff with an account can only send drafts', async () => {
   const inserted: Array<Record<string, unknown>> = [];
   mockFetch(dbRoutes(inserted));

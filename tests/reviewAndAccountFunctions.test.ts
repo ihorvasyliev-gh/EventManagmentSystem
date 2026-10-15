@@ -33,6 +33,9 @@ test('approving publishes the submission and emails the submitter', async () => 
   assert.deepEqual(mail.to, ['sam@x.ie']);
   assert.match(mail.subject, /on the CCP calendar/);
   assert.equal(mail.reply_to, 'admin@x.ie');
+  // A link straight to the event, and the app learns the submitter was told
+  assert.ok(mail.text.includes(`https://app.test/?event=${ID}`));
+  assert.equal((await res.json()).authorsEmailed, true);
 });
 
 test('declining emails the reason, deletes the draft and its flyer', async () => {
@@ -48,7 +51,9 @@ test('declining emails the reason, deletes the draft and its flyer', async () =>
   const bucket = fakeBucket();
   const res = await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID], reason: 'Not a CCP event' }), env: { ...mailEnv, BUCKET: bucket } });
   assert.equal(res.status, 200);
-  assert.deepEqual((await res.json()).declined, [ID]);
+  const reply = await res.json();
+  assert.deepEqual(reply.declined, [ID]);
+  assert.equal(reply.authorsEmailed, true);
   const del = calls.find((c) => c.method === 'DELETE' && c.url.includes('/rest/v1/events?'));
   assert.ok(del?.url.includes('status=eq.draft'), 'only drafts are deleted');
   // The database logs the deletion as declined by this admin
@@ -69,7 +74,9 @@ test('a flyer another event still uses is kept when a submission is declined', a
     ({ url }) => (url.includes('select=id&url=eq.') ? json([]) : undefined)
   ]);
   const bucket = fakeBucket();
-  await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID] }), env: { ...env, BUCKET: bucket } });
+  const res = await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID] }), env: { ...env, BUCKET: bucket } });
+  // No email set up: the app offers to write from the admin's own mail instead
+  assert.equal((await res.json()).authorsEmailed, false);
   assert.deepEqual(bucket.deleted, []);
 });
 

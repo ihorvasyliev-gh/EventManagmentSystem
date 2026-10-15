@@ -35,7 +35,7 @@ test('an admin opens an event, adds it to a calendar, edits it in the event form
   await page.getByText('Enterprise breakfast (moved)').first().click();
   await page.getByRole('dialog', { name: 'Event Details' }).getByRole('button', { name: 'Delete' }).click();
   const confirm = page.getByRole('alertdialog', { name: 'Delete Event' });
-  await expect(confirm).toContainText('cannot be undone');
+  await expect(confirm).toContainText('You can undo it');
   await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText('Event deleted successfully')).toBeVisible();
   expect(backend.writes.some((w) => w.method === 'DELETE' && w.id === ID)).toBe(true);

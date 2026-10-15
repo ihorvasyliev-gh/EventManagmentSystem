@@ -111,7 +111,7 @@ const EventHistory: React.FC<EventHistoryProps> = ({ history }) => {
                 <User className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                 <span className="text-sm font-medium text-gray-900 dark:text-white">{entry.userName}</span>
                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {historyActionText(entry.action)} this event
+                  {entry.action === 'created' && entry.changes && 'restored' in entry.changes ? 'restored' : historyActionText(entry.action)} this event
                 </span>
               </div>
               <ChangeList changes={entry.changes} />

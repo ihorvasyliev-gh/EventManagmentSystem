@@ -36,9 +36,15 @@ test('an admin signs in, sees the calendar and declines a submission', async ({ 
 
   await page.getByText('1 submission is waiting for review').click();
   await page.getByRole('button', { name: 'Decline' }).click();
+  await page.getByLabel(/Reason for Sam/).fill('It is already on the calendar');
   await page.getByRole('button', { name: 'Yes, decline' }).click();
   await expect(page.getByText('Submission declined')).toBeVisible();
-  expect(declined).toEqual({ action: 'decline', ids: ['10000000-0000-0000-0000-000000000002'] });
+  expect(declined).toEqual({ action: 'decline', ids: ['10000000-0000-0000-0000-000000000002'], reason: 'It is already on the calendar' });
+  // The server sends no emails here, so the inbox offers to write to Sam from the admin's own mail
+  const email = page.getByRole('link', { name: 'Email Sam' });
+  await expect(email).toHaveAttribute('href', /^mailto:sam@partnershipcork\.ie\?subject=About%20the%20event%20you%20submitted/);
+  await expect(email).toHaveAttribute('href', /It%20is%20already%20on%20the%20calendar/);
+  await expectAccessible(page);
   await assertNoCsp();
 });
 

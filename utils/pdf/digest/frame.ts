@@ -72,7 +72,7 @@ export const drawStats = (ctx: DigestContext) => {
     { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: BRAND },
     { value: String(eventDays.size), label: eventDays.size === 1 ? 'Day with events' : 'Days with events', accent: GREEN },
     // What the last digest didn't have: the events marked NEW
-    { value: String(newIds.size), label: `New since ${newSince.getDate()} ${monthShort(newSince)}`, accent: GREEN_DARK }
+    { value: String(newIds.size), label: newSince ? `New since ${newSince.getDate()} ${monthShort(newSince)}` : 'New', accent: GREEN_DARK }
   ];
   const widths = stats.map((s) => {
     font('bold', 15);

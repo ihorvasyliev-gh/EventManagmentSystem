@@ -5,13 +5,17 @@
  * The PDF is kept in R2 under digests/ and served by /api/file/<key>, so anyone with the link
  * can open it (Board members have no accounts; the key holds a random UUID, so it can't be
  * guessed). Links work for six months: each new digest deletes the ones older than that.
+ *
+ * Optional fields `issued` (YYYY-MM-DD) and `eventIds` (a JSON array) record which events the
+ * digest carried, so next week's digest marks NEW only the events this one didn't have.
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
-import { type FileBucket, contentMatchesType } from '../../server/files.ts';
+import { contentMatchesType } from '../../server/files.ts';
+import { type IssueBucket, parseIssue, recordIssue } from '../../server/digestIssues.ts';
 
 /** Listing as well as storing: old digests are found by their upload date */
-export interface DigestBucket extends FileBucket {
+export interface DigestBucket extends IssueBucket {
   list(options: { prefix: string; cursor?: string }): Promise<{
     objects: Array<{ key: string; uploaded: Date }>;
     truncated: boolean;
@@ -67,12 +71,13 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   const declared = Number(request.headers.get('content-length') || 0);
   if (declared > DIGEST_MAX_BYTES + 64 * 1024) return fail('The digest PDF is too large to share as a link.', 413);
 
-  let file: File | string | null;
+  let form: FormData;
   try {
-    file = (await request.formData()).get('file');
+    form = await request.formData();
   } catch {
     return fail('Invalid request.', 400);
   }
+  const file = form.get('file');
   if (!file || typeof file === 'string') return fail('No PDF found in the request.', 400);
   if ((file.type || '').toLowerCase() !== 'application/pdf' || !(await contentMatchesType(file, 'application/pdf'))) {
     return fail('The digest must be a PDF.', 415);
@@ -86,6 +91,21 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   } catch (err) {
     console.error('Storing the digest failed:', err);
     return fail('The digest could not be uploaded. Please try again.', 502);
+  }
+
+  // Remember what this digest carried; a failure only means next week's marks everything NEW
+  const eventIds = form.get('eventIds');
+  let ids: unknown = null;
+  try {
+    ids = typeof eventIds === 'string' ? JSON.parse(eventIds) : null;
+  } catch { /* not recorded */ }
+  const issue = parseIssue(form.get('issued'), ids);
+  if (issue) {
+    try {
+      await recordIssue(env.BUCKET, issue);
+    } catch (err) {
+      console.error('Recording the digest issue failed:', err);
+    }
   }
 
   // Tidy up after answering; a failure here only leaves old files for next time

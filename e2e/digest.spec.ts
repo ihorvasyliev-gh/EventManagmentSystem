@@ -11,10 +11,15 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
     events: [eventRow({ id: '10000000-0000-0000-0000-000000000001', title: 'Coffee morning', date: daysFromNow(2), end_date: daysFromNow(2, 12) })]
   });
   await mockEditEvent(page, backend);
-  const uploads: Array<{ type: string | undefined; isPdf: boolean }> = [];
+  const uploads: Array<{ type: string | undefined; isPdf: boolean; recordsEvents: boolean }> = [];
   await page.route('**/api/digest', async (route) => {
     const body = route.request().postDataBuffer()?.toString('latin1') ?? '';
-    uploads.push({ type: route.request().headers()['content-type']?.split(';')[0], isPdf: body.includes('Content-Type: application/pdf') && body.includes('%PDF') });
+    uploads.push({
+      type: route.request().headers()['content-type']?.split(';')[0],
+      isPdf: body.includes('Content-Type: application/pdf') && body.includes('%PDF'),
+      // What it carries, for next week's NEW marks
+      recordsEvents: body.includes('name="issued"') && /name="eventIds"\r\n\r\n\["10000000-0000-0000-0000-000000000001"\]/.test(body)
+    });
     await route.fulfill({ status: 201, json: { url: LINK, expiresAt: new Date(Date.now() + 183 * 86400000).toISOString() } });
   });
   await signIn(page);
@@ -24,7 +29,7 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
   await dialog.getByRole('button', { name: 'Copy link' }).click();
   await expect(page.getByText('Link copied — anyone with it can open this PDF for six months')).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:4173${PAGE}`);
-  expect(uploads).toEqual([{ type: 'multipart/form-data', isPdf: true }]);
+  expect(uploads).toEqual([{ type: 'multipart/form-data', isPdf: true, recordsEvents: true }]);
 
   await dialog.getByRole('button', { name: /WhatsApp/ }).click();
   await expect(page.getByText('WhatsApp summary copied — paste it into the group chat')).toBeVisible();

@@ -8,7 +8,7 @@ import type { createScreenOnlyLayer } from '../../pdfScreenOnly.ts';
 import type { LayoutBlock } from '../../pdfLayout.ts';
 import { type Event } from '../../../types';
 import { isMultiDayEvent } from '../../date';
-import { groupDigestOccurrences, isNewEvent, newSince, type DigestEventGroup } from '../../digestGrouping';
+import { groupDigestOccurrences, digestNewEvents, type DigestEventGroup, type DigestPreviousIssue } from '../../digestGrouping';
 import { toDate, startOfLocalDay } from '../../digestText.ts';
 import type { createPdfKit } from '../kit';
 import type { LoadedPdfFlyer } from '../images';
@@ -22,7 +22,15 @@ export interface BulletinOptions {
   output?: 'save' | 'blob';
   /** Pages at the end with each flyer large enough to read and pin up (default on) */
   printableFlyers?: boolean;
+  /**
+   * The last digest shared before this week: NEW marks the events it didn't have. null when
+   * none was shared yet (everything is NEW); left out when it couldn't be looked up (NEW then
+   * marks events added in the last week).
+   */
+  previousIssue?: DigestPreviousIssue | null;
 }
+
+export type { DigestPreviousIssue };
 
 export type PdfKit = ReturnType<typeof createPdfKit>;
 export type ScreenOnly = ReturnType<typeof createScreenOnlyLayer>;
@@ -90,8 +98,8 @@ export interface DigestData {
    * and the events are headed by month rather than by week
    */
   longPeriod: boolean;
-  /** Events added since this day are marked NEW (two weeks before the issue day) */
-  newSince: Date;
+  /** NEW is relative to this day (the last digest, or the fallback rule's start); null: the first digest, all NEW */
+  newSince: Date | null;
   /** Ids of the events added since then */
   newIds: Set<string>;
   /** Days of the period that have something on (multi-day events cover every day they span) */
@@ -146,8 +154,7 @@ export const collectDigestData = (events: Event[], options: BulletinOptions): Di
     return addDays(e, 6 - dow);
   })();
   const gridRows = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86400000 + 1) / 7;
-  const since = newSince(today);
-  const newIds = new Set(groups.filter((g) => isNewEvent(g.event, since)).map((g) => g.event.id));
+  const { since, newIds } = digestNewEvents(groups, options.previousIssue);
 
   return {
     periodStart, periodEnd, isExecutive, today, inPeriod, groups, longPeriod: gridRows > 6, newSince: since, newIds, eventsByDay,

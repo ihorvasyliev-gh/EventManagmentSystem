@@ -285,7 +285,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   };
 
   /**
-   * New email in the email app, no recipient. A mailto: link only carries plain text, so the
+   * New email in the email app, addressed to the digest recipients. A mailto: link only carries plain text, so the
    * formatted email (logo, a button to the PDF, the events) goes to the clipboard and is pasted
    * in, and the email opens with just the subject. Without the clipboard the plain text goes in.
    */
@@ -376,7 +376,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           type="button"
           onClick={handleEmail}
           disabled={disabled}
-          title="Copies a formatted email with a link to the PDF and opens a new email: paste it in and add the recipients"
+          title="Copies a formatted email with a link to the PDF and opens a new email: paste it in, the recipients are filled in"
           className="cta !text-xs tracking-[0.06em] sm:tracking-[0.1em] whitespace-nowrap sm:order-2 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent border border-slate-300 dark:border-slate-600 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
         >
           {busy === 'email' ? spinner : <Mail className="hidden min-[400px]:block w-4 h-4 shrink-0" />}

@@ -1,6 +1,7 @@
 import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
 import { groupDigestOccurrences, formatAlsoOnDates, type DigestEventGroup, monthShort } from './digestGrouping.ts';
+import { DIGEST_EMAIL_TO, DIGEST_EMAIL_CC } from '../constants/digestRecipients.ts';
 
 /**
  * Plain-text parts of the Events Digest (the covering email) and the date / link helpers the
@@ -161,12 +162,20 @@ export const generateDigestEmail = (
  */
 export const MAILTO_MAX_LENGTH = 2000;
 
-/** mailto: link with no recipient, the subject and the text (line breaks as CRLF, RFC 6068) */
+/** Addresses for a mailto: link, comma-separated, the "@" kept as is (RFC 6068) */
+const addressList = (addresses: string[]): string =>
+  addresses.map((a) => encodeURIComponent(a).replace(/%40/g, '@')).join(',');
+
+/** Start of a digest mailto: link, the recipients filled in: "mailto:to?cc=…&" */
+const mailtoStart = (): string =>
+  `mailto:${addressList(DIGEST_EMAIL_TO)}?` + (DIGEST_EMAIL_CC.length ? `cc=${addressList(DIGEST_EMAIL_CC)}&` : '');
+
+/** mailto: link with the digest recipients, the subject and the text (line breaks as CRLF, RFC 6068) */
 const toMailto = ({ subject, body }: DigestEmail): string =>
-  `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`;
+  `${mailtoStart()}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`;
 
 /**
- * Link that opens a new email with the subject and text filled in and no recipient. A mailto:
+ * Link that opens a new email to the digest recipients with the subject and text filled in. A mailto:
  * link can't carry a file: the text links to the uploaded PDF (`pdfUrl`), or the PDF is attached
  * by hand. When the full list makes the link too long, fewer events are named and the rest
  * counted ("…and 6 more events in the attached PDF").
@@ -189,6 +198,6 @@ export const generateDigestMailto = (
   return link;
 };
 
-/** New email with only the subject filled in: the formatted text is pasted in from the clipboard */
+/** New email with the recipients and subject filled in: the formatted text is pasted in from the clipboard */
 export const generateDigestMailtoSubject = (startDate: Date, endDate: Date): string =>
-  `mailto:?subject=${encodeURIComponent(digestEmailSubject(startDate, endDate))}`;
+  `${mailtoStart()}subject=${encodeURIComponent(digestEmailSubject(startDate, endDate))}`;

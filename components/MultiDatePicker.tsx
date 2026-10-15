@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock, Plus } from 'lucide-react';
+import React, { useState, useMemo, useId } from 'react';
+import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock, Plus, AlertCircle } from 'lucide-react';
 import { TimePickerInput } from './TimePickerInput';
 import {
   WEEKDAY_LABELS,
@@ -57,6 +57,8 @@ interface SlotFieldsProps {
 /** Start and end of one session, with a remove button when the day has more than one */
 const SlotFields: React.FC<SlotFieldsProps> = ({ slot, onChange, onRemove, disabled, compact }) => {
   const endBeforeStart = !!slot.start && !!slot.end && slot.end < slot.start;
+  // The labels name their fields (and a tap on one opens its times)
+  const id = useId();
   const labelClass = compact
     ? 'block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1'
     : 'block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1';
@@ -65,12 +67,13 @@ const SlotFields: React.FC<SlotFieldsProps> = ({ slot, onChange, onRemove, disab
       <div className="flex items-end gap-2">
         <div className={`grid flex-1 gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 sm:gap-3'}`}>
           <div>
-            <label className={labelClass}>{compact ? 'Start' : 'Start Time'}</label>
-            <TimePickerInput value={slot.start} onChange={(v) => onChange({ start: v })} disabled={disabled} placeholder="09:00" />
+            <label htmlFor={`${id}-start`} className={labelClass}>{compact ? 'Start' : 'Start Time'}</label>
+            <TimePickerInput id={`${id}-start`} value={slot.start} onChange={(v) => onChange({ start: v })} disabled={disabled} placeholder="09:00" />
           </div>
           <div>
-            <label className={labelClass}>{compact ? 'End' : 'End Time'}</label>
+            <label htmlFor={`${id}-end`} className={labelClass}>{compact ? 'End' : 'End Time'}</label>
             <TimePickerInput
+              id={`${id}-end`}
               value={slot.end}
               onChange={(v) => onChange({ end: v })}
               referenceStartTime={slot.start}
@@ -539,10 +542,10 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
 
       {/* Optional Error Message */}
       {error && (
-        <div className="pt-1 text-xs font-medium text-rose-500 dark:text-rose-400 flex items-center gap-1.5">
-          <span>⚠️</span>
-          <span>{error}</span>
-        </div>
+        <p className="pt-1 text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {error}
+        </p>
       )}
     </div>
   );

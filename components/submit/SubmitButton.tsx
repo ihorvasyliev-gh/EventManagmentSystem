@@ -4,10 +4,11 @@ import { Save, Send } from 'lucide-react';
 export const SUBMIT_FORM_ID = 'submit-event-form';
 
 /**
- * "Check & submit" (staff), "Publish event" (admins), or for changes to an event "Save changes"
- * ("Save & publish" when an admin publishes a draft); `full` for the phone's bottom bar
+ * "Check & submit" (staff), "Publish event" or "Save as draft" (admins), or for changes to an
+ * event "Save changes" ("Save & publish" when an admin publishes a draft); `full` for the phone's
+ * bottom bar
  */
-const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; editing?: 'save' | 'publish'; full?: boolean }> = ({ isAdmin, isSubmitting, editing, full }) => (
+const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; editing?: 'save' | 'publish'; draft?: boolean; full?: boolean }> = ({ isAdmin, isSubmitting, editing, draft, full }) => (
   <button
     type="submit"
     form={SUBMIT_FORM_ID}
@@ -17,12 +18,12 @@ const SubmitButton: React.FC<{ isAdmin: boolean; isSubmitting: boolean; editing?
     {isSubmitting ? (
       <>
         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        {editing ? 'Saving…' : isAdmin ? 'Publishing…' : 'Sending…'}
+        {editing || draft ? 'Saving…' : isAdmin ? 'Publishing…' : 'Sending…'}
       </>
     ) : (
       <>
-        {editing ? <Save className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-        {editing === 'publish' ? 'Save & publish' : editing ? 'Save changes' : isAdmin ? 'Publish event' : 'Check & submit'}
+        {editing || draft ? <Save className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+        {editing === 'publish' ? 'Save & publish' : editing ? 'Save changes' : draft ? 'Save as draft' : isAdmin ? 'Publish event' : 'Check & submit'}
       </>
     )}
   </button>

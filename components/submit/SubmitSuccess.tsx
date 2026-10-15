@@ -8,14 +8,18 @@ interface SubmitSuccessProps {
   summary: SubmissionSummary;
   /** Admins publish straight away; staff wait for review */
   isAdmin: boolean;
+  /** An admin kept the new event as a draft, to publish later */
+  draft?: boolean;
   signedIn: boolean;
   onSubmitAnother: () => void;
   onBack?: () => void;
 }
 
 /** After sending: what was sent and what happens next */
-const SubmitSuccess: React.FC<SubmitSuccessProps> = ({ summary, isAdmin, signedIn, onSubmitAnother, onBack }) => {
-  const steps: Array<[string, string, 'done' | 'current' | 'next']> = isAdmin
+const SubmitSuccess: React.FC<SubmitSuccessProps> = ({ summary, isAdmin, draft = false, signedIn, onSubmitAnother, onBack }) => {
+  const steps: Array<[string, string, 'done' | 'current' | 'next']> = isAdmin && draft
+    ? [['Saved as a draft', 'Only admins can see it', 'done'], ['Published', 'From the Submissions inbox, or by setting its status to Published', 'next']]
+    : isAdmin
     ? [['Published', 'Live on the calendar now', 'done'], ['Upcoming Events Digest', 'Included in the next issue', 'next']]
     : [
         ['Sent', 'We have your event', 'done'],
@@ -34,10 +38,12 @@ const SubmitSuccess: React.FC<SubmitSuccessProps> = ({ summary, isAdmin, signedI
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white">
-            {isAdmin ? 'Event published' : 'Thank you — event sent!'}
+            {isAdmin ? (draft ? 'Draft saved' : 'Event published') : 'Thank you — event sent!'}
           </h1>
           <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-300">
-            {isAdmin
+            {isAdmin && draft
+              ? 'It is not on the calendar yet. Publish it when it is ready, from the Submissions inbox or the event itself.'
+              : isAdmin
               ? 'It is live on the calendar and will appear in the next Upcoming Events Digest.'
               : 'It will appear on the calendar once it has been reviewed.'}
           </p>

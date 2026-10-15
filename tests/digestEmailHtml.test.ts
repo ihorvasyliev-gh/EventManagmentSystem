@@ -65,9 +65,10 @@ test('text from events is escaped, and without a link the email says the PDF is 
   assert.doesNotMatch(empty, /Click here for details/);
 });
 
-test('the new email opens with only the subject, for the formatted text to be pasted in', () => {
+test('the new email opens with the recipients and subject, for the formatted text to be pasted in', () => {
   assert.equal(
     generateDigestMailtoSubject(start, new Date(2026, 9, 26)),
-    `mailto:?subject=${encodeURIComponent('Cork City Partnership: Upcoming Events Digest, 12 – 26 October 2026')}`
+    'mailto:allstaff@partnershipcork.ie?cc=martin_davoren@corkcity.ie,kieran_oconnell@corkcity.ie&' +
+      `subject=${encodeURIComponent('Cork City Partnership: Upcoming Events Digest, 12 – 26 October 2026')}`
   );
 });

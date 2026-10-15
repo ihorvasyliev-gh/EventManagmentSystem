@@ -69,7 +69,7 @@ test('email names the first 20 events and counts the rest', () => {
   assert.equal(items[20], '• …and 3 more events in the attached PDF');
 });
 
-/** Splits a mailto: link into its recipient, subject and body */
+/** Splits a mailto: link into its recipients, subject and body */
 const parseMailto = (link: string) => {
   assert.ok(link.startsWith('mailto:'));
   const [to, query] = link.slice('mailto:'.length).split('?');
@@ -77,16 +77,17 @@ const parseMailto = (link: string) => {
     const [k, v] = p.split('=');
     return [k, decodeURIComponent(v)] as [string, string];
   }));
-  return { to, subject: params.get('subject'), body: params.get('body'), keys: [...params.keys()] };
+  return { to, cc: params.get('cc'), subject: params.get('subject'), body: params.get('body'), keys: [...params.keys()] };
 };
 
-test('mailto link has no recipient, only the subject and the email text', () => {
+test('mailto link is addressed to the digest recipients, with the subject and the email text', () => {
   const events = [makeEvent('dance', new Date(2026, 9, 18, 15, 0), { title: 'Sunday Tea Dance', location: 'The HUT' })];
   const link = generateDigestMailto(events, start, end, { baseUrl: BASE });
-  const { to, subject, body, keys } = parseMailto(link);
+  const { to, cc, subject, body, keys } = parseMailto(link);
   const email = generateDigestEmail(events, start, end, { baseUrl: BASE });
-  assert.equal(to, '');
-  assert.deepEqual(keys, ['subject', 'body']);
+  assert.equal(to, 'allstaff@partnershipcork.ie');
+  assert.deepEqual(keys, ['cc', 'subject', 'body']);
+  assert.equal(cc, 'martin_davoren@corkcity.ie,kieran_oconnell@corkcity.ie');
   assert.equal(subject, email.subject);
   assert.equal(body, email.body.replace(/\n/g, '\r\n'));
   // Spaces must be %20: a "+" would show up in the email

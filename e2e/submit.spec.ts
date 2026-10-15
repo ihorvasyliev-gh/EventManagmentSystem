@@ -167,3 +167,14 @@ test('a weekly event: one date, “Every week” under the calendar, and a last 
   expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([last.getFullYear(), last.getMonth(), 1]);
   expect(new Date(String(submitted!.date)).getDate()).toBe(15);
 });
+
+test('the login page leads to the form without signing in, near the top on a phone too', async ({ page }) => {
+  await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  const submit = page.getByRole('button', { name: /^Submit an event/ });
+  await expect(submit).toBeInViewport();
+  await expectAccessible(page);
+  await submit.click();
+  await expect(page.getByRole('heading', { name: 'Submit an upcoming event' })).toBeVisible();
+});

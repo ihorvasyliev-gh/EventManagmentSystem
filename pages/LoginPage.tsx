@@ -107,6 +107,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
             <p className="hidden lg:flex eyebrow !text-white mb-3">Cork City Partnership</p>
             <h1 className="text-3xl lg:text-[2.75rem] lg:leading-none font-semibold tracking-[0.02em]">Event Calendar</h1>
             <p className="text-brand-100 text-sm mt-2">Staff portal for Cork City Partnership events</p>
+            {/* On a phone the form fills the screen, so the way in for anyone without an account is up here */}
+            {onOpenSubmitEvent && (
+              <button
+                type="button"
+                onClick={onOpenSubmitEvent}
+                className="lg:hidden mt-4 inline-flex items-center gap-2 pl-3 pr-4 h-11 rounded-full bg-white text-brand-700 text-sm font-semibold shadow-sm hover:bg-brand-50 transition-colors"
+              >
+                <CalendarPlus className="w-4 h-4 text-ccp-green-600" aria-hidden="true" />
+                Submit an event, no login needed
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
             <ul className="hidden lg:block mt-6 space-y-2.5 text-sm text-white/90">
               {['See every upcoming event in one calendar', 'Get the events digest as a branded PDF', 'Subscribe from Outlook, Google or Apple Calendar'].map((line) => (
                 <li key={line} className="flex items-start gap-2.5">
@@ -229,7 +241,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onOpenSubmitEvent }) => 
           </form>
 
           {onOpenSubmitEvent && (
-            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div className="hidden lg:block mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={onOpenSubmitEvent}

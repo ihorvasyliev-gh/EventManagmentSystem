@@ -217,7 +217,7 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
                       <span className="font-semibold">{entry.eventTitle}</span>
                     )}
                     {isNew && (
-                      <span className="ml-2 align-middle px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-brand-600 text-white">New</span>
+                      <span className="ml-2 align-middle px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-brand-600 text-white">New</span>
                     )}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">

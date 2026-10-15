@@ -366,6 +366,7 @@ const AppContent: React.FC = () => {
             onClose={() => setIsExportModalOpen(false)}
             events={filteredEvents}
             allEvents={hasActiveFilters ? events : undefined}
+            recurrenceExceptions={recurrenceExceptions}
             onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
           />
         </Suspense>

@@ -1,6 +1,7 @@
 /**
  * Cloudflare Pages Function — saving changes to an event (the event form's edit mode)
- * URL: POST /api/edit-event   multipart: event (JSON), poster (image, optional)
+ * URL: POST /api/edit-event   multipart: event (JSON), poster (image, optional),
+ *                              poster_screen, poster_thumb (the poster's lighter copies, optional)
  *
  * `event` holds the /submit form's fields (checked the same way, server/submission.ts) plus:
  *   id               the event
@@ -19,7 +20,7 @@
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
-import { type FileBucket, MAX_UPLOAD_BYTES, storeFlyer, fileKeyFromUrl, deleteUnreferencedFiles } from '../../server/files.ts';
+import { type FileBucket, MAX_FLYER_REQUEST_BYTES, storeFlyer, flyerVariantsOf, fileKeyFromUrl, deleteUnreferencedFiles, deleteStoredFile } from '../../server/files.ts';
 import { checkSubmission, type SubmissionInput } from '../../server/submission.ts';
 import { ownsEvent } from '../../utils/eventOwnership.ts';
 import { describeChanges, type ChangeSource } from '../../utils/eventChanges.ts';
@@ -52,7 +53,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (!cfg?.serviceKey) return fail('Editing events is not set up on the server (missing Supabase keys).', 500);
 
   const declared = Number(request.headers.get('content-length') || 0);
-  if (declared > MAX_UPLOAD_BYTES + 256 * 1024) return fail('The flyer is too large (max 15 MB).', 413);
+  if (declared > MAX_FLYER_REQUEST_BYTES + 256 * 1024) return fail('The flyer is too large (max 15 MB).', 413);
 
   const caller = await getCaller(cfg, bearerToken(request));
   if (!caller) return fail('Your session has expired. Please sign in again.', 401);
@@ -92,13 +93,13 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   let newPoster: string | null = null;
   const poster = form.get('poster');
   if (poster && typeof poster !== 'string') {
-    const result = await storeFlyer(env.BUCKET, poster);
+    const result = await storeFlyer(env.BUCKET, poster, flyerVariantsOf(form));
     if ('error' in result) return fail(result.error, result.status);
     posterUrl = newPoster = result.url;
   }
   const discardNewPoster = async () => {
     const key = fileKeyFromUrl(newPoster);
-    if (key && env.BUCKET) await env.BUCKET.delete(key).catch(() => undefined);
+    if (key && env.BUCKET) await deleteStoredFile(env.BUCKET, key).catch(() => undefined);
   };
 
   // Only admins publish or unpublish

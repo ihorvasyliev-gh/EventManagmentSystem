@@ -63,6 +63,38 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
   await assertNoCsp();
 });
 
+test('a flyer is sent with light copies for the screen, made in the browser', async ({ page }) => {
+  // An upright flyer, 20 × 40
+  const FLYER = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABQAAAAoCAIAAABxU02MAAAAJElEQVR42mM4YGBANmIY1TyqeVTzqOZRzaOaRzWPah7VTC4CANb1hC52qJBMAAAAAElFTkSuQmCC', 'base64');
+  let body = '';
+  await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));
+  await page.route('**/api/submit', async (route) => {
+    body = route.request().postDataBuffer()?.toString('latin1') ?? '';
+    await route.fulfill({ status: 201, json: { id: 'new', status: 'draft' } });
+  });
+  await page.goto('/submit');
+  await page.getByLabel('Event name').fill('Coffee morning');
+  await page.locator('#field-category').getByText('Community & Family', { exact: true }).click();
+  await page.getByRole('button', { name: 'Next month' }).click();
+  const now = new Date();
+  await page.getByRole('button', { name: new Date(now.getFullYear(), now.getMonth() + 1, 15).toDateString() }).click();
+  await page.locator('#field-location').fill('Mahon');
+  await page.getByLabel('Short description').fill('Tea.');
+  await page.getByLabel('Full name').fill('Sam Staff');
+  await page.getByLabel('Work email').fill('sam@partnershipcork.ie');
+  await page.locator('input[type="file"]').setInputFiles({ name: 'coffee.png', mimeType: 'image/png', buffer: FLYER });
+  await expect(page.getByText('coffee.png')).toBeVisible();
+  await page.getByRole('button', { name: 'Check & submit' }).last().click();
+  await page.getByRole('button', { name: 'Send for review' }).last().click();
+  await expect(page.getByRole('heading', { name: /event sent/i })).toBeVisible();
+
+  expect(body).toMatch(/name="poster"; filename="coffee\.png"\r\nContent-Type: image\/png/);
+  for (const variant of ['screen', 'thumb']) {
+    // A JPEG (it starts FF D8 FF)
+    expect(body).toMatch(new RegExp(`name="poster_${variant}"; filename="${variant}\\.jpg"\\r\\nContent-Type: image/jpeg\\r\\n\\r\\n\\xff\\xd8\\xff`));
+  }
+});
+
 test('when the server refuses a submission, the reason is shown and the details are kept', async ({ page }) => {
   await page.route('**/api/published-events', (route) => route.fulfill({ json: { events: [] } }));
   await page.route('**/api/submit', (route) => route.fulfill({ status: 413, json: { error: 'The flyer is too large (max 15 MB).' } }));

@@ -183,3 +183,64 @@ test('statistics download as an Excel workbook for the period', async ({ page })
   await book.xlsx.readFile(await file.path());
   expect(book.getWorksheet('Dates')!.rowCount).toBe(3);
 });
+
+test('a weekly series exports with its poster once, small and in its own shape, and without its deleted date', async ({ page }) => {
+  const KEY = '0f8fad5b-d9cb-469f-a165-70867728950e-club.png';
+  // An upright flyer, 20 × 40
+  const UPRIGHT = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABQAAAAoCAIAAABxU02MAAAAJElEQVR42mM4YGBANmIY1TyqeVTzqOZRzaOaRzWPah7VTC4CANb1hC52qJBMAAAAAElFTkSuQmCC', 'base64');
+  const start = daysFromNow(1, 16);
+  await mockSupabase(page, {
+    events: [eventRow({ id: ID, title: 'Coding club', date: start, recurrence_type: 'weekly', recurrence_interval: 1, recurrence_occurrences: 4, poster_url: `/api/file/${KEY}` })]
+  });
+  // The second week is deleted
+  const second = new Date(start);
+  second.setDate(second.getDate() + 7);
+  second.setHours(0, 0, 0, 0);
+  await page.route('https://e2e.supabase.co/rest/v1/recurrence_exceptions**', (route) =>
+    route.fulfill({ contentType: 'application/json', headers: { 'Content-Range': '0-0/1' }, body: JSON.stringify([{ event_id: ID, exception_date: second.toISOString() }]) })
+  );
+  const loaded: string[] = [];
+  await page.route('**/api/file/**', (route) => {
+    loaded.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ contentType: 'image/png', body: UPRIGHT });
+  });
+  await signIn(page);
+  await expect(page.getByText('Coding club').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Export & subscribe' });
+  await dialog.getByText('Excel spreadsheet (.xlsx)').click();
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: /^Download/ }).click();
+  const file = await download;
+
+  const ExcelJS = (await import('exceljs')).default;
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.readFile(await file.path());
+  const sheet = book.getWorksheet('Events')!;
+  // A heading row and the three dates left
+  expect(sheet.rowCount).toBe(4);
+  const images = sheet.getImages();
+  expect(images).toHaveLength(3);
+  // The workbook holds the poster once, and every date shows it
+  expect(new Set(images.map((i) => i.imageId)).size).toBe(1);
+  expect((book.model as unknown as { media: unknown[] }).media).toHaveLength(1);
+  const { ext } = images[0].range as unknown as { ext: { width: number; height: number } };
+  expect(ext).toEqual({ width: 29, height: 58 });
+  // From the poster's small copy, fetched once
+  expect(loaded.filter((p) => p.startsWith('/api/file/') && !p.endsWith('.screen.jpg'))).toEqual([`/api/file/${KEY}.thumb.jpg`]);
+});
+
+test('the event window shows the poster’s light copy and opens the full poster', async ({ page }) => {
+  const KEY = '0f8fad5b-d9cb-469f-a165-70867728950e-breakfast.png';
+  await mockSupabase(page, {
+    events: [eventRow({ id: ID, title: 'Enterprise breakfast', date: daysFromNow(1), poster_url: `/api/file/${KEY}` })]
+  });
+  await mockFiles(page);
+  await signIn(page);
+  await page.getByText('Enterprise breakfast').first().click();
+  const details = page.getByRole('dialog', { name: 'Event Details' });
+  await expect(details.getByRole('img', { name: 'Enterprise breakfast' })).toHaveAttribute('src', `/api/file/${KEY}.screen.jpg`);
+  await details.getByRole('button', { name: 'Open full poster' }).click();
+  await expect(page.locator(`img[src="/api/file/${KEY}"]`)).toBeVisible();
+});

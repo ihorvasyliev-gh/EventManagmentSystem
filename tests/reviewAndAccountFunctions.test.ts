@@ -59,7 +59,8 @@ test('declining emails the reason, deletes the draft and its flyer', async () =>
   // The database logs the deletion as declined by this admin
   assert.equal(del.headers['X-Acting-User'], '00000000-0000-0000-0000-00000000000a');
   assert.equal(del.headers['X-Delete-Reason'], 'declined');
-  assert.deepEqual(bucket.deleted, [KEY]);
+  // The flyer and its lighter copies
+  assert.deepEqual(bucket.deleted, [KEY, `${KEY}.screen.jpg`, `${KEY}.thumb.jpg`]);
   const [mail] = mails(calls);
   assert.match(mail.text, /Reason:\nNot a CCP event/);
 });

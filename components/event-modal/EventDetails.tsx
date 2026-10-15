@@ -8,6 +8,7 @@ import { getCategoryColor } from '../WeekView';
 import AddToCalendarMenu from './AddToCalendarMenu';
 import { eventContacts } from '../../utils/contacts';
 import { describeRepeat } from '../../utils/repeat';
+import { posterVariantUrl } from '../../utils/posterVariants';
 
 interface EventDetailsProps {
   event: Event;
@@ -84,10 +85,12 @@ const EventDetails: React.FC<EventDetailsProps> = ({
                   aria-label="Open full poster"
                   title="Open full poster"
                 >
+                  {/* The light copy for the screen; the full poster opens large and downloads */}
                   <img
-                    src={event.posterUrl}
+                    src={posterVariantUrl(event.posterUrl, 'screen')}
                     alt={event.title}
                     loading="lazy"
+                    decoding="async"
                     className="block w-full h-auto max-h-[50vh] md:max-h-[65vh] object-contain mx-auto"
                   />
                 </button>

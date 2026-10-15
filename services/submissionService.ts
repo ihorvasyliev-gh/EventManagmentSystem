@@ -51,6 +51,20 @@ const eventFields = (data: SubmissionData) => {
 };
 
 /**
+ * The flyer, and its lighter copies for the screen (utils/posterVariants.ts). Without the
+ * copies when they can't be made: the flyer is then shown whole, as before.
+ */
+const appendPoster = async (form: FormData, poster: File): Promise<void> => {
+  form.append('poster', poster, poster.name);
+  const variants = await import('../utils/posterFile')
+    .then(({ makePosterVariants }) => makePosterVariants(poster))
+    .catch(() => ({}));
+  for (const [variant, blob] of Object.entries(variants)) {
+    if (blob) form.append(`poster_${variant}`, blob, `${variant}.jpg`);
+  }
+};
+
+/**
  * Sends the /submit form: the event and its flyer go to the server together, so if the flyer
  * can't be saved the whole submission fails with a message, instead of arriving without it.
  * Works without an account (saved as a draft for review).
@@ -62,7 +76,7 @@ export const submitEvent = async (data: SubmissionData): Promise<{ id: string; s
     publish: !!data.publish,
     poster_url: data.posterFile ? null : data.existingPosterUrl ?? null
   }));
-  if (data.posterFile) form.append('poster', data.posterFile, data.posterFile.name);
+  if (data.posterFile) await appendPoster(form, data.posterFile);
   if (data.turnstileToken) form.append('turnstileToken', data.turnstileToken);
   return callApi<{ id: string; status: Event['status'] }>('/api/submit', { method: 'POST', form, auth: 'optional' });
 };
@@ -87,7 +101,7 @@ export const saveEventChanges = async (
     keep_poster: !data.posterFile && options.keepPoster,
     ...(options.status ? { status: options.status } : {})
   }));
-  if (data.posterFile) form.append('poster', data.posterFile, data.posterFile.name);
+  if (data.posterFile) await appendPoster(form, data.posterFile);
   const result = await callApi<{ event: EventRow; changed: boolean; exceptionsCleared: boolean }>('/api/edit-event', { method: 'POST', form });
   return { event: mapEventRow(result.event), changed: result.changed, exceptionsCleared: result.exceptionsCleared };
 };

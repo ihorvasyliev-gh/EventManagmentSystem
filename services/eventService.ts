@@ -30,17 +30,27 @@ export const fetchEventDetails = async (eventId: string): Promise<{ attachments:
   };
 };
 
+/** Event ids per attachments request: a few hundred in one address can be more than the server takes */
+const IDS_PER_REQUEST = 100;
+
 /** The events with their attachments (and a poster taken from an image attachment), e.g. for export */
 export const getEventsWithRelated = async (events: Event[]): Promise<Event[]> => {
   if (events.length === 0) return [];
   const eventIds = [...new Set(events.map(e => e.id))];
-  const { data } = await supabase
-    .from('event_attachments')
-    .select('*')
-    .in('event_id', eventIds)
-    .order('uploaded_at', { ascending: true });
+  const batches: string[][] = [];
+  for (let i = 0; i < eventIds.length; i += IDS_PER_REQUEST) batches.push(eventIds.slice(i, i + IDS_PER_REQUEST));
+  const pages = await Promise.all(batches.map(async (ids) => {
+    const { data, error } = await supabase
+      .from('event_attachments')
+      .select('*')
+      .in('event_id', ids)
+      .order('uploaded_at', { ascending: true });
+    // An export without its files would look complete: fail instead, so it can be tried again
+    if (error) throw new Error(error.message || 'The attachments could not be loaded');
+    return (data || []) as AttachmentRow[];
+  }));
   const byEvent = new Map<string, Attachment[]>();
-  for (const row of (data || []) as AttachmentRow[]) {
+  for (const row of pages.flat()) {
     const list = byEvent.get(row.event_id) ?? [];
     list.push(mapAttachmentRow(row));
     byEvent.set(row.event_id, list);
@@ -53,34 +63,6 @@ export const getEventsWithRelated = async (events: Event[]): Promise<Event[]> =>
       posterUrl: event.posterUrl || attachments.find(att => att.type === 'image')?.url || undefined
     };
   });
-};
-
-/**
- * The deleted dates of several events in one request (instead of one per event)
- */
-export const getRecurrenceExceptionsBatch = async (eventIds: string[]): Promise<Map<string, Date[]>> => {
-  const map = new Map<string, Date[]>();
-  if (!eventIds || eventIds.length === 0) {
-    return map;
-  }
-
-  const { data, error } = await supabase
-    .from('recurrence_exceptions')
-    .select('event_id, exception_date')
-    .in('event_id', eventIds);
-
-  if (error) {
-    console.error('Error fetching batch recurrence exceptions:', error);
-    return map;
-  }
-
-  for (const item of data || []) {
-    const list = map.get(item.event_id) || [];
-    list.push(new Date(item.exception_date));
-    map.set(item.event_id, list);
-  }
-
-  return map;
 };
 
 /**

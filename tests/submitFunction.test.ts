@@ -147,7 +147,33 @@ test('when the event cannot be saved, the uploaded flyer is removed again', asyn
   const res = await onRequestPost({ request: send({ event, poster: new File([JPEG], 'f.jpg', { type: 'image/jpeg' }) }), env: { ...env, BUCKET: bucket } });
   assert.equal(res.status, 502);
   assert.equal(bucket.stored.size, 0);
-  assert.equal(bucket.deleted.length, 1);
+  assert.deepEqual(bucket.deleted.map((key) => key.replace(/^[0-9a-f-]{36}-/, '')), ['f.jpg', 'f.jpg.screen.jpg', 'f.jpg.thumb.jpg']);
+});
+
+test('the flyer’s lighter copies are stored beside it when they really are JPEGs of a sensible size', async () => {
+  mockFetch(dbRoutes([]));
+  const bucket = fakeBucket();
+  const form = new FormData();
+  form.append('event', JSON.stringify(event));
+  form.append('poster', new File([PNG], 'flyer.png', { type: 'image/png' }));
+  form.append('poster_screen', new File([JPEG], 'screen.jpg', { type: 'image/jpeg' }));
+  // Not a JPEG inside: left out, and the flyer is served whole instead
+  form.append('poster_thumb', new File(['<html>'], 'thumb.jpg', { type: 'image/jpeg' }));
+  const res = await onRequestPost({ request: new Request('https://app.test/api/submit', { method: 'POST', body: form }), env: { ...env, BUCKET: bucket } });
+  assert.equal(res.status, 201);
+  const keys = [...bucket.stored.keys()].map((key) => key.replace(/^[0-9a-f-]{36}-/, '')).sort();
+  assert.deepEqual(keys, ['flyer.png', 'flyer.png.screen.jpg']);
+  const { posterUrl } = await res.json();
+  assert.ok(bucket.stored.has(`${posterUrl.slice('/api/file/'.length)}.screen.jpg`));
+
+  // A GIF (which may move) keeps no copies
+  const gifBucket = fakeBucket();
+  const gif = new FormData();
+  gif.append('event', JSON.stringify(event));
+  gif.append('poster', new File([new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])], 'flyer.gif', { type: 'image/gif' }));
+  gif.append('poster_screen', new File([JPEG], 'screen.jpg', { type: 'image/jpeg' }));
+  await onRequestPost({ request: new Request('https://app.test/api/submit', { method: 'POST', body: gif }), env: { ...env, BUCKET: gifBucket } });
+  assert.equal(gifBucket.stored.size, 1);
 });
 
 test('more contact people are saved with the event; a database without them yet still takes the event', async () => {

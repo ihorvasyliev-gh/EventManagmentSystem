@@ -1,6 +1,7 @@
 /**
  * Cloudflare Pages Function — the public /submit form
  * URL: POST /api/submit   multipart: event (JSON), poster (image, optional), turnstileToken
+ *                          poster_screen, poster_thumb (the poster's lighter copies, optional)
  *
  * Anyone can submit (no account needed): the event is saved as a draft for review. Signed-in
  * admins can publish straight away, or keep their own event as a draft to publish later. The flyer and the event are saved in one request, so an
@@ -14,7 +15,7 @@ import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
 import { verifyTurnstile, type TurnstileEnv } from '../../server/turnstile.ts';
 import { type EmailEnv, sendEmail, appUrl } from '../../server/email.ts';
-import { type FileBucket, MAX_UPLOAD_BYTES, storeFlyer, fileKeyFromUrl } from '../../server/files.ts';
+import { type FileBucket, MAX_FLYER_REQUEST_BYTES, storeFlyer, flyerVariantsOf, fileKeyFromUrl, deleteStoredFile } from '../../server/files.ts';
 import { checkSubmission, type SubmissionInput } from '../../server/submission.ts';
 import { newSubmissionEmail } from '../../server/notifications.ts';
 import { SUBMIT_LIMIT, withinRateLimit } from '../../server/rateLimit.ts';
@@ -43,7 +44,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (!cfg?.serviceKey) return fail('Submissions are not set up on the server (missing Supabase keys).', 500);
 
   const declared = Number(request.headers.get('content-length') || 0);
-  if (declared > MAX_UPLOAD_BYTES + 256 * 1024) return fail('The flyer is too large (max 15 MB).', 413);
+  if (declared > MAX_FLYER_REQUEST_BYTES + 256 * 1024) return fail('The flyer is too large (max 15 MB).', 413);
 
   // Before the upload is read: a flood is turned away cheaply
   const caller = await getCaller(cfg, bearerToken(request));
@@ -89,7 +90,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   const poster = form.get('poster');
   if (poster && typeof poster !== 'string') {
-    const stored = await storeFlyer(env.BUCKET, poster);
+    const stored = await storeFlyer(env.BUCKET, poster, flyerVariantsOf(form));
     if ('error' in stored) return fail(stored.error, stored.status);
     posterUrl = stored.url;
   }
@@ -116,7 +117,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (!res.ok) {
     console.error('Saving a submission failed:', res.status, await res.text());
     const key = poster && typeof poster !== 'string' ? fileKeyFromUrl(posterUrl) : null;
-    if (key && env.BUCKET) await env.BUCKET.delete(key).catch(() => undefined);
+    if (key && env.BUCKET) await deleteStoredFile(env.BUCKET, key).catch(() => undefined);
     return fail('The event could not be saved. Please try again.', 502);
   }
   const [saved] = (await res.json()) as Array<{ id: string }>;

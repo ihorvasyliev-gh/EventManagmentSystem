@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertTriangle, ChevronDown, Copy, ExternalLink, ImageIcon, MapPin, User } from 'lucide-react';
 import { getCategoryDotColor } from './WeekView';
 import type { OverlapEntry } from '../utils/duplicateDetection';
+import { posterVariantUrl } from '../utils/posterVariants';
 
 interface OverlapListProps {
   entries: OverlapEntry[];
@@ -24,8 +25,9 @@ const timeRange = (ev: OverlapEntry['event']) => {
   const e = ev.endDate ? new Date(ev.endDate) : null;
   return e ? `${clock(s)} – ${clock(e)}` : clock(s);
 };
+/** The poster's small copy, or the first image attached */
 const posterOf = (ev: OverlapEntry['event']): string | undefined =>
-  ev.posterUrl || ev.attachments?.find((a: { type?: string }) => a.type === 'image')?.url;
+  ev.posterUrl ? posterVariantUrl(ev.posterUrl, 'thumb') : ev.attachments?.find((a: { type?: string }) => a.type === 'image')?.url;
 
 const canHover = () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
@@ -46,7 +48,7 @@ const Details: React.FC<{ ev: OverlapEntry['event']; compact?: boolean }> = ({ e
   return (
     <div className="flex gap-3">
       {poster ? (
-        <img src={poster} alt="" className={`${compact ? 'w-16 h-20' : 'w-24 h-32'} shrink-0 object-cover rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100`} />
+        <img src={poster} alt="" loading="lazy" decoding="async" className={`${compact ? 'w-16 h-20' : 'w-24 h-32'} shrink-0 object-cover rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100`} />
       ) : (
         <span className={`${compact ? 'w-16 h-20' : 'w-24 h-32'} shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 flex items-center justify-center`}>
           <ImageIcon className="w-6 h-6" />

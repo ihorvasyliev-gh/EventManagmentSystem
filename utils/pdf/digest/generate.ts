@@ -10,6 +10,7 @@ import { type Event } from '../../../types';
 import { formatLocalDate } from '../../date';
 import { toDate, startOfLocalDay } from '../../digestText.ts';
 import { loadImageCached } from '../images';
+import { posterVariantUrl } from '../../posterVariants.ts';
 import { loadFontData } from '../fonts';
 import { registerLato, createPdfKit } from '../kit';
 import { MONTHS_LONG } from '../../digestText.ts';
@@ -67,7 +68,8 @@ export const generateEventsDigestPDF = async (
       await Promise.all(groups.map(async ({ event: ev }) => {
         const url = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (!url) return;
-        const flyer = await loadImageCached(url, maxSide, true);
+        // A poster's copy for the screen (1600 px) is big enough, and a fraction of the download
+        const flyer = await loadImageCached(ev.posterUrl ? posterVariantUrl(ev.posterUrl, 'screen') : url, maxSide, true);
         if (flyer) map.set(ev.id, { ...flyer, alias: `flyer-${url}` });
       }));
       return map;

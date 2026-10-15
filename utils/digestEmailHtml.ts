@@ -4,8 +4,14 @@
  * mailto: link can only carry plain text, so the app copies this to the clipboard and it is pasted
  * into the new email. Built from tables with inline styles, which Outlook, Gmail and Apple Mail all keep.
  * A pasted email keeps no <style> block, so there are no media queries: everything stacks (logo
- * over the title, category over the event name) and nothing sits side by side that would squeeze
+ * over the title, the event name over its time) and nothing sits side by side that would squeeze
  * on a phone, with only the date tile a fixed width.
+ *
+ * The new Outlook pastes with "merge formatting": every text colour and font size becomes the
+ * sender's default and a background on a table or div is dropped, while bold, link colours, images,
+ * borders and the background of a table cell stay. So the email reads well in that state too: the
+ * order and bold carry the hierarchy, and colour comes from cell backgrounds (the bars, the period
+ * band, the date tiles, the button), never from a table's background or only from text colour.
  * Plain words for every reader: no "digest", "PDF" or "download" when there is a link.
  */
 import type { Event } from '../types.ts';
@@ -24,6 +30,8 @@ const BODY = '#424242';
 const MUTED = '#737373';
 const BORDER = '#E6E6E6';
 const SOFT = '#F6F6F6';
+/** The brand colour, faded, behind the period */
+const BRAND_TINT = '#F9E9EF';
 const FONT = "Lato, 'Segoe UI', Arial, Helvetica, sans-serif";
 
 /** Side padding: room on a desktop without wasting a phone's narrow screen */
@@ -107,16 +115,16 @@ ${p(`Opens on your phone or computer. For each event you'll see the description,
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td width="56" valign="top" style="width:56px;padding-right:14px;">
-          <table role="presentation" width="56" cellpadding="0" cellspacing="0" border="0" bgcolor="${tint}" style="width:56px;background:${tint};border-radius:10px 0 10px 0;text-align:center;">
-            <tr><td style="padding:8px 0 0;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${WEEKDAYS_LONG[start.getDay()].slice(0, 3).toUpperCase()}</td></tr>
-            <tr><td style="font-family:${FONT};font-size:24px;line-height:28px;font-weight:bold;color:${INK};">${start.getDate()}</td></tr>
-            <tr><td style="padding:0 0 8px;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${monthShort(start).toUpperCase()}</td></tr>
+          <table role="presentation" width="56" cellpadding="0" cellspacing="0" border="0" style="width:56px;">
+            <tr><td height="4" bgcolor="${cat}" style="height:4px;line-height:4px;font-size:0;background:${cat};border-radius:6px 6px 0 0;">&nbsp;</td></tr>
+            <tr><td bgcolor="${tint}" align="center" style="background:${tint};padding:6px 0 0;text-align:center;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${WEEKDAYS_LONG[start.getDay()].slice(0, 3).toUpperCase()}</td></tr>
+            <tr><td bgcolor="${tint}" align="center" style="background:${tint};text-align:center;font-family:${FONT};font-size:24px;line-height:28px;font-weight:bold;color:${INK};">${start.getDate()}</td></tr>
+            <tr><td bgcolor="${tint}" align="center" style="background:${tint};padding:0 0 7px;text-align:center;border-radius:0 0 6px 6px;font-family:${FONT};font-size:10px;line-height:12px;font-weight:bold;letter-spacing:1px;color:${cat};">${monthShort(start).toUpperCase()}</td></tr>
           </table>
         </td>
         <td valign="top" style="font-family:${FONT};">
-          <div style="font-size:11px;line-height:15px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;color:${cat};">${esc(ev.category || 'Event')}</div>
-          <div style="margin-top:3px;font-size:17px;line-height:22px;font-weight:bold;color:${INK};">${esc(ev.title.trim() || 'Untitled event')}</div>
-          <div style="margin-top:5px;font-size:14px;line-height:19px;font-weight:bold;color:${BODY};">${esc(whenOf(start, end))}</div>
+          <div style="font-size:17px;line-height:22px;font-weight:bold;color:${INK};">${esc(ev.title.trim() || 'Untitled event')}</div>
+          <div style="margin-top:4px;font-size:14px;line-height:19px;color:${BODY};">${nowrap(esc(whenOf(start, end)))}<span style="color:${MUTED};"> &nbsp;·&nbsp; </span><span style="color:${cat};white-space:nowrap;">${esc(ev.category || 'Event')}</span></div>
           ${venue ? `<div style="margin-top:3px;font-size:14px;line-height:19px;"><a href="${esc(mapsUrl(venue))}" target="_blank" style="color:${PLACE};text-decoration:none;">&#128205;&nbsp;${esc(venue)}</a></div>` : ''}
           ${alsoOn ? `<div style="margin-top:5px;font-size:12px;line-height:17px;color:${MUTED};">Also on ${alsoOn}</div>` : ''}
         </td>
@@ -148,9 +156,13 @@ ${more > 0 ? `<tr><td style="padding:12px 0;border-top:1px solid ${BORDER};font-
     </td>
   </tr>
   <tr>
-    <td style="padding:20px ${SIDE}px 0;font-family:${FONT};">
-      <div style="font-size:11px;line-height:16px;font-weight:bold;letter-spacing:2px;color:${BRAND};">UPCOMING EVENTS</div>
-      <div style="margin-top:2px;font-size:22px;line-height:28px;font-weight:bold;color:${INK};">${period}</div>
+    <td style="padding:20px ${SIDE}px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td bgcolor="${BRAND_TINT}" style="background:${BRAND_TINT};border-left:4px solid ${BRAND};border-radius:0 8px 8px 0;padding:12px 16px;font-family:${FONT};">
+          <div style="font-size:11px;line-height:16px;font-weight:bold;letter-spacing:2px;color:${BRAND};">UPCOMING EVENTS</div>
+          <div style="margin-top:2px;font-size:22px;line-height:28px;font-weight:bold;color:${INK};">${period}</div>
+        </td>
+      </tr></table>
     </td>
   </tr>
   <tr>

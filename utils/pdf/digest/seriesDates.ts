@@ -1,14 +1,14 @@
 /**
  * "Also on" for a long series: the pattern ("every Thursday until 17 Dec") beside the label, and
- * the other dates by month ("22 · 29 Oct   5 · 12 · 19 · 26 Nov"), a row per venue, wrapped to
- * the width. No calendar buttons per date: a pair for every date is what made these cards long.
+ * the other dates by month ("22, 29 Oct · 5, 12, 19, 26 Nov", as in the email and WhatsApp text),
+ * a row per venue, wrapped to the width. No calendar buttons per date: a pair for every date is
+ * what made these cards long.
  */
 import type { SeriesSummary } from '../../digestGrouping';
 import { createGoogleMapsUrl } from '../links';
-import { INK, MUTED, FAINT, PLACE } from '../theme';
+import { INK, MUTED, PLACE } from '../theme';
 import type { DigestContext } from './context';
 
-const MONTH_GAP = 4.5;
 const PIN_W = 3.4;
 
 /**
@@ -19,6 +19,8 @@ export const seriesDates = (ctx: DigestContext, series: SeriesSummary, width: nu
   const { doc, kit: { font, txt, color, truncate, drawPin } } = ctx;
 
   font('semibold', fs);
+  // Days of a month apart by ", ", months by " · "
+  const spaceW = doc.getTextWidth(' ');
   const dotGap = doc.getTextWidth(' · ');
   const dayW = (s: string) => {
     font('semibold', fs);
@@ -29,7 +31,7 @@ export const seriesDates = (ctx: DigestContext, series: SeriesSummary, width: nu
     return doc.getTextWidth(` ${s}`);
   };
 
-  // Each date is placed whole; a month's name follows its last day
+  // Each date is placed whole, with its comma; a month's name follows its last day
   const items: Array<{ text: string; month?: string; x: number; row: number; dot: boolean }> = [];
   const places: Array<{ text: string; full: string; row: number }> = [];
   let row = -1;
@@ -45,16 +47,19 @@ export const seriesDates = (ctx: DigestContext, series: SeriesSummary, width: nu
     let x = indent;
     venue.months.forEach((m) => {
       m.days.forEach((day, di) => {
-        const month = di === m.days.length - 1 ? m.month : undefined;
-        const w = dayW(day) + (month ? monthW(month) : 0);
-        const gap = x === indent ? 0 : di === 0 ? MONTH_GAP : dotGap;
+        const last = di === m.days.length - 1;
+        const text = last ? day : `${day},`;
+        const month = last ? m.month : undefined;
+        const w = dayW(text) + (month ? monthW(month) : 0);
+        const gap = x === indent ? 0 : di === 0 ? dotGap : spaceW;
         if (x > indent && x + gap + w > width) {
           row++;
           x = indent;
         } else {
           x += gap;
         }
-        items.push({ text: day, month, x, row, dot: x > indent && di > 0 });
+        // A dot before a new month, unless it starts a row
+        items.push({ text, month, x, row, dot: x > indent && di === 0 });
         x += w;
       });
     });
@@ -81,7 +86,7 @@ export const seriesDates = (ctx: DigestContext, series: SeriesSummary, width: nu
         const y = firstRowY + it.row * rowH;
         if (it.dot) {
           font('semibold', fs);
-          color(FAINT);
+          color(MUTED);
           doc.text('·', x - dotGap / 2, y, { align: 'center' });
         }
         font('semibold', fs);

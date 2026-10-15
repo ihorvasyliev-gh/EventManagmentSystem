@@ -11,6 +11,7 @@ import OverlapList from './OverlapList';
 import { eventContacts } from '../utils/contacts';
 import { readScheduleFromEvent, formatTimeRange, listSessions, buildOccurrences } from '../utils/multiDateUtils';
 import { describeSeries } from '../utils/repeat';
+import { posterVariantUrl } from '../utils/posterVariants';
 import { approvedMailto, declinedMailto, firstName } from '../utils/authorEmail';
 import { eventShareLink } from '../hooks/useDeepLinks';
 import type { ReviewOutcome } from '../hooks/useSubmissionActions';
@@ -250,6 +251,8 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const isProcessing = processingId === event.id;
               const isConfirmingReject = rejectConfirmId === event.id;
               const imgUrl = event.posterUrl || event.attachments?.find((a) => a.type === 'image')?.url;
+              // The small copy in the list; the full poster opens large
+              const thumbUrl = event.posterUrl ? posterVariantUrl(event.posterUrl, 'thumb') : imgUrl;
               const schedule = readScheduleFromEvent(event, null);
               const dates = schedule.dates;
               const perDate = schedule.sameTime ? null : schedule.perDate;
@@ -361,7 +364,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                         className="shrink-0 self-start group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 w-20 h-24 sm:w-28 sm:h-36 bg-slate-100 dark:bg-slate-700"
                         aria-label="View poster"
                       >
-                        <img src={imgUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <img src={thumbUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                       </button>
                     )}
                   </div>

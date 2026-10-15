@@ -182,7 +182,8 @@ test('if someone saved the event after the form was opened, nothing is written a
   });
   assert.equal(raced.status, 409);
   assert.equal(bucket.stored.size, 0);
-  assert.equal(bucket.deleted.length, 1);
+  // With its lighter copies, had there been any
+  assert.deepEqual(bucket.deleted.map((key) => key.replace(/^[0-9a-f-]{36}-/, '')), ['new.png', 'new.png.screen.jpg', 'new.png.thumb.jpg']);
 });
 
 test('a new flyer replaces the old one, which is deleted once nothing uses it; keep_poster false removes it', async () => {
@@ -196,7 +197,8 @@ test('a new flyer replaces the old one, which is deleted once nothing uses it; k
   assert.equal(res.status, 200);
   assert.match(String(writes.patched[0].poster_url), /^\/api\/file\/[0-9a-f-]{36}-new\.png$/);
   assert.deepEqual(writes.history[0].changes, { poster: { old: null, new: 'Replaced' } });
-  assert.deepEqual(bucket.deleted, ['0f8fad5b-d9cb-469f-a165-70867728950e-old.png']);
+  const old = '0f8fad5b-d9cb-469f-a165-70867728950e-old.png';
+  assert.deepEqual(bucket.deleted, [old, `${old}.screen.jpg`, `${old}.thumb.jpg`]);
 
   const again = backend(stored);
   await onRequestPost({ request: send(form(stored, { keep_poster: false })), env: { ...env, BUCKET: fakeBucket() } });

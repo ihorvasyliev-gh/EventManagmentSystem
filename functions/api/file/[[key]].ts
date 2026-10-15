@@ -1,14 +1,29 @@
 /**
  * Cloudflare Pages Function — files stored in R2
- *   GET    /api/file/<key>   serve a poster or attachment
+ *   GET    /api/file/<key>   serve a poster or attachment (or a poster's lighter copy: utils/posterVariants.ts)
  *   DELETE /api/file/<key>   remove it (admins only; kept while any event still uses it)
  */
 import { json, fail, bearerToken } from '../../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../../server/supabase.ts';
 import { type FileBucket, deleteUnreferencedFiles, contentDisposition, digestPageRedirect } from '../../../server/files.ts';
+import { posterOfVariant } from '../../../utils/posterVariants.ts';
 
+/** What a stored file comes back as (the part of R2's object this function uses) */
+interface StoredObject {
+  body: ReadableStream;
+  httpEtag: string;
+  writeHttpMetadata(headers: Headers): void;
+}
+
+/** Typed by hand (not R2Bucket and PagesFunction) so the app's type check and tests can import it */
 interface Env extends SupabaseEnv {
-  BUCKET: R2Bucket;
+  BUCKET: FileBucket & { get(key: string): Promise<StoredObject | null> };
+}
+
+interface Context {
+  request: Request;
+  env: Env;
+  params: Record<string, string | string[]>;
 }
 
 // Types that are safe to render inline; everything else is forced to download.
@@ -19,8 +34,7 @@ const keyOf = (params: Record<string, string | string[]>): string => {
   return Array.isArray(key) ? key.join('/') : key ?? '';
 };
 
-export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { params, env, request } = context;
+export const onRequestGet = async ({ params, env, request }: Context): Promise<Response> => {
   const key = keyOf(params);
 
   // A digest link tapped in an email opens the digest's page (phone email apps can't show the file)
@@ -41,6 +55,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const object = await env.BUCKET.get(key);
 
     if (object === null) {
+      // A poster's lighter copy that was never made (sent before copies existed, or the browser
+      // couldn't make one): the poster itself. Not kept for long, in case the copy is added later.
+      const poster = posterOfVariant(key);
+      if (poster) {
+        return new Response(null, { status: 302, headers: { Location: `/api/file/${poster}`, 'Cache-Control': 'public, max-age=86400' } });
+      }
       return new Response("File not found", { status: 404 });
     }
 
@@ -71,7 +91,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-export const onRequestDelete: PagesFunction<Env> = async ({ request, params, env }) => {
+export const onRequestDelete = async ({ request, params, env }: Context): Promise<Response> => {
   if (!env.BUCKET) return fail("R2 Bucket binding 'BUCKET' not found.", 500);
   const cfg = supabaseConfig(env);
   if (!cfg?.serviceKey) return fail('File management is not set up on the server (missing Supabase keys).', 500);

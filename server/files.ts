@@ -1,5 +1,6 @@
 import { type SupabaseConfig, serviceRest } from './supabase.ts';
 import { sniffFileKind, KIND_OF_TYPE } from '../utils/fileKind.ts';
+import { MAX_VARIANT_BYTES, POSTER_VARIANTS, posterVariantKey, posterVariantKeys, type PosterVariant } from '../utils/posterVariants.ts';
 
 /** The part of an R2 bucket binding the functions use (typed here so the app's checks can import it) */
 export interface FileBucket {
@@ -56,14 +57,42 @@ export const storeFile = async (bucket: FileBucket, file: File, contentType: str
   return { key, url: `${FILE_PATH}${key}`, name: file.name, type: contentType, size: file.size };
 };
 
+/** A flyer's lighter copies as the form sent them (anything may arrive in a form field) */
+type FlyerVariants = Partial<Record<PosterVariant, File | string | null>>;
+
+/** The lighter copies a flyer was sent with (form fields poster_screen and poster_thumb) */
+export const flyerVariantsOf = (form: FormData): FlyerVariants =>
+  Object.fromEntries((Object.keys(POSTER_VARIANTS) as PosterVariant[]).map((v) => [v, form.get(`poster_${v}`)]));
+
+/**
+ * Stores the copies of a flyer that really are JPEGs of a sensible size, beside it
+ * (utils/posterVariants.ts). Anything else is left out: the flyer is then served whole.
+ */
+const storeFlyerVariants = async (
+  bucket: FileBucket,
+  key: string,
+  variants: FlyerVariants
+): Promise<void> => {
+  await Promise.all(Object.entries(variants).map(async ([variant, file]) => {
+    if (!file || typeof file === 'string' || file.size === 0 || file.size > MAX_VARIANT_BYTES) return;
+    if ((file.type || '').toLowerCase() !== 'image/jpeg' || !(await contentMatchesType(file, 'image/jpeg'))) return;
+    try {
+      await bucket.put(posterVariantKey(key, variant as PosterVariant), file.stream(), { httpMetadata: { contentType: 'image/jpeg' } });
+    } catch (err) {
+      console.error('Storing a flyer copy failed:', key, variant, err);
+    }
+  }));
+};
+
 /**
  * Checks and stores a flyer sent with the event form (/api/submit, /api/edit-event): an image
- * (a PDF flyer arrives already turned into one) that really is one. Returns its URL, or why it
- * was refused with the status to answer.
+ * (a PDF flyer arrives already turned into one) that really is one, with its lighter copies for
+ * the screen when they were sent. Returns its URL, or why it was refused with the status to answer.
  */
 export const storeFlyer = async (
   bucket: FileBucket | undefined,
-  poster: File
+  poster: File,
+  variants: FlyerVariants = {}
 ): Promise<{ url: string } | { error: string; status: number }> => {
   if (!bucket) return { error: 'Flyer uploads are not set up on the server.', status: 500 };
   if (poster.size > MAX_UPLOAD_BYTES) return { error: 'The flyer is too large (max 15 MB).', status: 413 };
@@ -73,11 +102,21 @@ export const storeFlyer = async (
     return { error: 'The flyer’s file is damaged or isn’t really an image. Please save it again as a PNG or JPG and send it once more.', status: 415 };
   }
   try {
-    return { url: (await storeFile(bucket, poster, type)).url };
+    const stored = await storeFile(bucket, poster, type);
+    if (type !== 'image/gif') await storeFlyerVariants(bucket, stored.key, variants);
+    return { url: stored.url };
   } catch (err) {
     console.error('Flyer upload failed:', err);
     return { error: 'The flyer could not be uploaded. Please try again.', status: 502 };
   }
+};
+
+/** Most a request with a flyer and its copies may carry, besides the form's own fields */
+export const MAX_FLYER_REQUEST_BYTES = MAX_UPLOAD_BYTES + Object.keys(POSTER_VARIANTS).length * MAX_VARIANT_BYTES;
+
+/** Removes a stored file and, for a poster, its lighter copies */
+export const deleteStoredFile = async (bucket: FileBucket, key: string): Promise<void> => {
+  await Promise.all([key, ...posterVariantKeys(key)].map((k) => bucket.delete(k)));
 };
 
 /**
@@ -137,7 +176,7 @@ export const deleteUnreferencedFiles = async (bucket: FileBucket, cfg: SupabaseC
   const deleted: string[] = [];
   for (const key of keys) {
     if (await isFileReferenced(cfg, key)) continue;
-    await bucket.delete(key);
+    await deleteStoredFile(bucket, key);
     deleted.push(key);
   }
   return deleted;

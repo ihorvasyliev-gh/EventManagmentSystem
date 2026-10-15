@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Download, Calendar, FileSpreadsheet, Link2, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { type Event } from '../types';
 import { exportToICal, exportToExcel, downloadFile, downloadBlob, isPublished } from '../utils/export';
-import { getEventsWithRelated, getRecurrenceExceptionsBatch } from '../services/eventService';
+import { getEventsWithRelated } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import ModalShell from './ModalShell';
 import { EVENT_CATEGORIES } from '../constants/categories';
@@ -19,13 +19,15 @@ interface ExportModalProps {
   events: Event[];
   /** Every event, when search or filters are on: the export can take all of them instead */
   allEvents?: Event[];
+  /** Deleted dates of repeating events (the calendar already has them) */
+  recurrenceExceptions: Map<string, Date[]>;
   onOpenFortnightlyBulletin?: () => void;
 }
 
 // Published events only (strictly excluding drafts and pending submissions)
 const publishedOnly = (list: Event[]) => list.filter(e => e.status !== 'draft' && (e.status === 'published' || !e.status));
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allEvents, onOpenFortnightlyBulletin }) => {
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allEvents, recurrenceExceptions, onOpenFortnightlyBulletin }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'subscribe'>('export');
   const [exportFormat, setExportFormat] = useState<'ical' | 'excel'>('ical');
   const [exporting, setExporting] = useState(false);
@@ -76,10 +78,6 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
     setExporting(true);
     try {
       const eventsWithRelated = await getEventsWithRelated(toExport);
-      const recurringIds = eventsWithRelated
-        .filter(e => e.recurrence && e.recurrence.type !== 'none')
-        .map(e => e.id);
-      const exceptionsMap = await getRecurrenceExceptionsBatch(recurringIds);
 
       const now = new Date();
       const rangeStart = eventsWithRelated.length > 0
@@ -94,7 +92,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
         })))
         : new Date(rangeStart.getTime() + twoYearsMs);
 
-      const expanded = expandRecurringEvents(eventsWithRelated, rangeStart, rangeEnd, exceptionsMap);
+      const expanded = expandRecurringEvents(eventsWithRelated, rangeStart, rangeEnd, recurrenceExceptions);
 
       if (exportFormat === 'ical') {
         const icalContent = exportToICal(expanded.filter(isPublished));

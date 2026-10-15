@@ -1,45 +1,23 @@
 import { type Event } from '../types';
 import { eventContacts } from './contacts';
 import { foldICSLine } from './icsFold.ts';
+import { loadImageForPdf, type LoadedPdfFlyer } from './pdf/images';
+import { posterVariantUrl } from './posterVariants.ts';
 
-interface LoadedPoster {
-  base64: string;
-  extension: 'png' | 'jpeg' | 'gif';
-}
+/** Posters are shown 58 px tall in the sheet; made twice that size, they stay sharp zoomed in */
+const SHEET_POSTER_PX = 58;
+const POSTER_TIMEOUT_MS = 8000;
 
-/**
- * Safely load an event poster/image as base64 data URL with abort timeout.
- * Returns null if network fails, times out, or CORS prevents access.
- */
-const loadEventPoster = async (url: string): Promise<LoadedPoster | null> => {
-  try {
-    const res = await fetch(url, { mode: 'cors', signal: AbortSignal.timeout(6000) });
-    if (!res.ok) return null;
+/** A row's poster (its small copy), or the first image attached */
+const posterOf = (event: Event): string | undefined =>
+  event.posterUrl ? posterVariantUrl(event.posterUrl, 'thumb') : event.attachments?.find(a => a.type === 'image')?.url;
 
-    const blob = await res.blob();
-    const mimeType = blob.type || '';
-    let extension: 'png' | 'jpeg' | 'gif' = 'jpeg';
-    if (mimeType.includes('png') || url.toLowerCase().includes('.png')) {
-      extension = 'png';
-    } else if (mimeType.includes('gif') || url.toLowerCase().includes('.gif')) {
-      extension = 'gif';
-    }
-
-    const base64 = await new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve(reader.result as string);
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-
-    if (!base64) return null;
-    return { base64, extension };
-  } catch {
-    return null;
-  }
-};
+/** A poster made small enough for the sheet, or null (offline, gone, not an image, too slow) */
+const loadSheetPoster = (url: string): Promise<LoadedPdfFlyer | null> =>
+  Promise.race([
+    loadImageForPdf(url, 2 * SHEET_POSTER_PX, true),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), POSTER_TIMEOUT_MS))
+  ]);
 
 const formatDateStr = (d?: Date | string | null): string => {
   if (!d) return '';
@@ -137,18 +115,11 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
   // 1. Strictly filter published events
   const publishedEvents = events.filter(isPublished);
 
-  // 2. Pre-fetch posters concurrently for events that have posterUrl or image attachments
-  const posterMap = new Map<string, LoadedPoster>();
-  const posterFetches = publishedEvents.map(async (event) => {
-    const imgUrl = event.posterUrl || event.attachments?.find(a => a.type === 'image')?.url;
-    if (imgUrl) {
-      const poster = await loadEventPoster(imgUrl);
-      if (poster) {
-        posterMap.set(event.instanceKey || event.id, poster);
-      }
-    }
-  });
-  await Promise.allSettled(posterFetches);
+  // 2. Each poster once, made small: a weekly series has a row per date, all with the same poster
+  const posterUrls = [...new Set(publishedEvents.map(posterOf).filter((url): url is string => !!url))];
+  const posters = new Map(await Promise.all(posterUrls.map(async (url) => [url, await loadSheetPoster(url)] as const)));
+  // The workbook holds each image once; every row with that poster shows the same one
+  const imageIds = new Map<string, number>();
 
   // 3. Create Workbook & Worksheet with gridlines enabled
   const workbook = new ExcelJSConstructor.Workbook();
@@ -245,20 +216,23 @@ export const exportToExcel = async (events: Event[]): Promise<Blob> => {
       attachments: attachmentsText
     });
 
-    const key = event.instanceKey || event.id;
-    const posterData = posterMap.get(key);
-    if (posterData) {
+    const posterUrl = posterOf(event);
+    const poster = posterUrl ? posters.get(posterUrl) : null;
+    if (posterUrl && poster) {
       try {
-        const imageId = workbook.addImage({
-          base64: posterData.base64,
-          extension: posterData.extension
-        });
+        let imageId = imageIds.get(posterUrl);
+        if (imageId === undefined) {
+          imageId = workbook.addImage({ base64: poster.dataUrl, extension: poster.format === 'PNG' ? 'png' : 'jpeg' });
+          imageIds.set(posterUrl, imageId);
+        }
 
         row.height = 65;
 
+        // In its own shape (flyers are mostly A4 upright), within a 58 px square
+        const scale = SHEET_POSTER_PX / Math.max(poster.width, poster.height);
         worksheet.addImage(imageId, {
           tl: { col: 0.1, row: row.number - 1 + 0.1 },
-          ext: { width: 58, height: 58 },
+          ext: { width: Math.round(poster.width * scale), height: Math.round(poster.height * scale) },
           editAs: 'oneCell'
         });
       } catch (err) {

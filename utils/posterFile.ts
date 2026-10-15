@@ -1,5 +1,6 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { sniffFileKind, type FileKind } from './fileKind.ts';
+import { POSTER_VARIANTS, variantSize, type PosterVariant } from './posterVariants.ts';
 
 /**
  * Poster uploads. Images are used as they are; a PDF flyer is turned into an image of one
@@ -284,4 +285,53 @@ export const prepareImagePoster = async (file: File): Promise<PreparedPoster> =>
     throw new Error('That image could not be read: it isn’t a PNG, JPG, GIF or WEBP inside. Please choose another file.');
   }
   return { file, preview };
+};
+
+/** `source` at most `longSide` px on its long side, on white (a JPEG has no transparency) */
+const drawScaled = (source: ImageBitmap | HTMLCanvasElement, longSide: number): HTMLCanvasElement => {
+  const { width, height } = variantSize(source.width, source.height, longSide);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('The browser could not draw the poster');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, width, height);
+  return canvas;
+};
+
+/**
+ * The poster's lighter copies for the screen (utils/posterVariants.ts), as JPEGs. None for a GIF,
+ * or when the browser can't read the image: the poster is then shown whole, as before.
+ */
+export const makePosterVariants = async (poster: Blob): Promise<Partial<Record<PosterVariant, Blob>>> => {
+  if (poster.type === 'image/gif' || typeof createImageBitmap !== 'function') return {};
+  const canvases: HTMLCanvasElement[] = [];
+  try {
+    // Upright like the poster shows (phone photos carry their turn in EXIF, which a copy loses)
+    const bitmap = await createImageBitmap(poster, { imageOrientation: 'from-image' });
+    try {
+      canvases.push(drawScaled(bitmap, POSTER_VARIANTS.screen.longSide));
+    } finally {
+      bitmap.close();
+    }
+    // The small one from the screen copy: a shorter step down keeps it sharp
+    canvases.push(drawScaled(canvases[0], POSTER_VARIANTS.thumb.longSide));
+    const [screen, thumb] = await Promise.all([
+      canvasToBlob(canvases[0], 'image/jpeg', POSTER_VARIANTS.screen.quality),
+      canvasToBlob(canvases[1], 'image/jpeg', POSTER_VARIANTS.thumb.quality)
+    ]);
+    return { screen, thumb };
+  } catch (err) {
+    console.warn('The poster’s lighter copies could not be made:', err);
+    return {};
+  } finally {
+    // Phones run out of canvas memory quickly: let these go straight away
+    for (const canvas of canvases) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
 };

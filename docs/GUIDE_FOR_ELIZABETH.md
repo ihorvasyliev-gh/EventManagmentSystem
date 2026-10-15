@@ -149,6 +149,9 @@ Once submissions are approved, you can generate both the **branded PDF** and the
   * Built-in interactive buttons allowing Board members to add events to **Outlook 365** or **Google Calendar** in 1 click. The buttons appear when the PDF is viewed on screen and are left out automatically when it is printed, so there is nothing to switch off.
 * **Compact Table:**
   * Clean, dense agenda table suitable for printing as a one-page handout.
+* **Flyers to print at the end** (ticked by default): adds pages with every flyer large enough to read and pin up on a noticeboard, four to a page. Under each flyer is the event, its date and the page of its card; on the cards, **Flyer · p. 5** under the small picture jumps to it. Untick it for a shorter PDF; the dialog remembers your choice on this computer.
+* Events added to the calendar in the last two weeks carry a green **New** label, and page 1 counts them, so the Board can see what has changed since the last digest.
+* The PDF only uses dates (no *Today* or *This week*), so it still reads right when someone opens the link days or weeks later.
 
 ### 4. Download the PDF
 * Click **"Download Events Digest PDF"**.
@@ -171,9 +174,11 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 
 > **Links open the digest's page.** The page shows every page of the PDF, sharp and with working links (add to calendar, maps, emails), and has a **Download PDF** button. It works in phone email apps (Gmail and Outlook open links in their own built-in browser, which can't show a PDF file) and isn't taken over by PDF add-ons such as Adobe Acrobat's Chrome extension. Links sent before this page existed open it too.
 
-> **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
+> **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout, the flyer pages and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
 
-> **Long periods:** for more than six weeks, page 1 of the Executive digest shows an *In this digest* list with page numbers instead of the month grid; clicking a row jumps to that event.
+> **Long periods:** for more than six weeks, page 1 of the Executive digest shows an *In this digest* list with page numbers instead of the month grid; clicking a row jumps to that event. The events are then headed by month instead of by week.
+
+> **Bookmarks:** in Adobe Reader, Chrome, Edge or Preview on a Mac, open the sidebar (the bookmarks or outline icon) to see every event under its month or week, and the flyer pages; click one to go to it.
 
 ---
 

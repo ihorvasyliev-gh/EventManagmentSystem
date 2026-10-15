@@ -28,7 +28,11 @@ test('anyone can submit an event without an account, and it goes to /api/submit 
   await page.locator('#field-location').fill('Mahon Community Centre');
   await page.getByLabel('Short description').fill('Tea, chats and information about local courses.');
   await page.getByLabel('Full name').fill('Sam Staff');
-  await page.getByLabel('Work email').fill('sam@partnershipcork.ie');
+  // A typo in the organisation's domain is pointed out, and fixed with a click
+  await page.getByLabel('Work email').fill('sam@pertnershipcork.ie');
+  await page.getByRole('button', { name: 'sam@partnershipcork.ie' }).click();
+  await expect(page.getByLabel('Work email')).toHaveValue('sam@partnershipcork.ie');
+  await expect(page.getByText('Did you mean')).toHaveCount(0);
   // A second contact person: a started row needs both a name and an email
   await page.getByRole('button', { name: 'Add another contact person' }).click();
   await expect(page.locator('#field-contact-0-name')).toBeFocused();

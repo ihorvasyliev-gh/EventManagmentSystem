@@ -8,37 +8,48 @@ import { toAbsoluteHttpUrl, toDate, WEEKDAYS_LONG, clock, startOfLocalDay, isAll
 import { getCategoryRgb } from '../../../constants/categoryColors';
 import { createGoogleMapsUrl } from '../links';
 import { dayKeyOf, dayCountInclusive } from '../dates';
-import { BRAND, INK, BODY, MUTED, BORDER, BG, WHITE, PLACE, BRAND_TINT, BRAND_TINT_BORDER, type Density } from '../theme';
+import {
+  BRAND, INK, BODY, MUTED, BORDER, BG, WHITE, PLACE, BRAND_TINT, BRAND_TINT_BORDER, GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER,
+  type Density
+} from '../theme';
+import { type Rgb } from '../../../constants/categoryColors';
 import type { Block, DigestContext } from './context';
-import { relativeDayLabel } from './headings';
 import { calendarLinks, otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
 import { seriesDates } from './seriesDates';
 import { eventContacts, formatContact } from '../../contacts';
 
 const TILE_H = 15;
 
-/** The day's date in the column left of its cards (today in raspberry) */
+// Under the thumbnail when the flyer is also printed large at the end: "FLYER · P. 5"
+const FLYER_TAG_H = 4.4;
+
+/** A chip after the category: raspberry ("3 DATES") or green ("NEW") */
+interface Chip {
+  text: string;
+  fg: Rgb;
+  bg: Rgb;
+  border: Rgb;
+}
+
+/** The day's date in the column left of its cards ("CONT." under it on a page the day carries over onto) */
 const dateTile = (ctx: DigestContext, day: Date, y: number, mode: 'first' | 'continued') => {
-  const { doc, today, geo: { M, TILE_W }, kit: { font, color, fill, stroke, spaced, leaf } } = ctx;
-  const isToday = day.getTime() === today.getTime();
+  const { doc, geo: { M, TILE_W }, kit: { font, color, fill, stroke, spaced, leaf } } = ctx;
   const cx = M + TILE_W / 2;
-  fill(isToday ? BRAND : WHITE);
-  stroke(isToday ? BRAND : BORDER, 0.35);
+  fill(WHITE);
+  stroke(BORDER, 0.35);
   leaf(M, y, TILE_W, TILE_H, 3, 'FD');
   font('semibold', 5.2);
-  color(isToday ? WHITE : MUTED);
+  color(MUTED);
   spaced(WEEKDAYS_LONG[day.getDay()].slice(0, 3).toUpperCase(), cx, y + 3.9, 0.3, 'center');
   font('bold', 13);
-  color(isToday ? WHITE : INK);
+  color(INK);
   doc.text(String(day.getDate()), cx, y + 9.7, { align: 'center' });
   font('semibold', 5.2);
-  color(isToday ? WHITE : MUTED);
+  color(MUTED);
   spaced(monthShortUpper(day), cx, y + 13.1, 0.3, 'center');
-  const note = mode === 'continued' ? 'CONT.' : relativeDayLabel(ctx, day);
-  if (note) {
+  if (mode === 'continued') {
     font('bold', 4.8);
-    color(mode === 'continued' ? MUTED : BRAND);
-    spaced(note, cx, y + TILE_H + 3.3, 0.2, 'center');
+    spaced('CONT.', cx, y + TILE_H + 3.3, 0.2, 'center');
   }
 };
 
@@ -107,9 +118,11 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
     : !end ? clock(start)
     : multi ? `${clock(start)} until ${WEEKDAYS_LONG[end.getDay()].slice(0, 3)} ${end.getDate()} ${monthShort(end)}`
     : `${clock(start)} – ${clock(end)}`;
-  const chips = [
-    ...(multi && end ? [`${dayCountInclusive(start, end)} DAYS`] : []),
-    ...(group.occurrences.length > 1 ? [`${group.occurrences.length} DATES`] : [])
+  const dateChip = (text: string): Chip => ({ text, fg: BRAND, bg: BRAND_TINT, border: BRAND_TINT_BORDER });
+  const chips: Chip[] = [
+    ...(ctx.newIds.has(ev.id) ? [{ text: 'NEW', fg: GREEN_DARK, bg: GREEN_TINT, border: GREEN_TINT_BORDER }] : []),
+    ...(multi && end ? [dateChip(`${dayCountInclusive(start, end)} DAYS`)] : []),
+    ...(group.occurrences.length > 1 ? [dateChip(`${group.occurrences.length} DATES`)] : [])
   ];
 
   let contentH = 4.2;                                              // time & category row
@@ -131,8 +144,9 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
       flyerW = flyerH * flyer.aspectRatio;
     }
   }
-  // Tall enough for the date tile (and its "Today" / "cont." note) beside it
-  const h = Math.max(TILE_H + 4.5, PAD_Y * 2 + contentH, flyer ? flyerH + PAD_Y * 2 : 0);
+  const flyerTag = !!flyer && ctx.printFlyers;
+  // Tall enough for the date tile (and its "cont." note) beside it
+  const h = Math.max(TILE_H + 4.5, PAD_Y * 2 + contentH, flyer ? flyerH + PAD_Y * 2 + (flyerTag ? FLYER_TAG_H : 0) : 0);
 
   const block: Block = {
     h: h + density.cardGap,
@@ -171,7 +185,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
       doc.line(mx, cy - 2.6, mx, cy + 0.3);
       mx += 2.6;
       font('bold', 5.8);
-      const chipW = chips.reduce((sum, c) => sum + doc.getTextWidth(c) + 0.3 * (c.length - 1) + 4.2 + 1.5, 0);
+      const chipW = chips.reduce((sum, c) => sum + doc.getTextWidth(c.text) + 0.3 * (c.text.length - 1) + 4.2 + 1.5, 0);
       categoryMark(ev.category, mx + 1, cy - 1.1, 1, false);
       font('bold', 6.3);
       color(cat.accent);
@@ -179,10 +193,10 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
       mx += 3.1 + spaced(truncate(catLabel, Math.max(10, buttonsLeft - mx - 3.1 - chipW - 2)), mx + 3.1, cy, 0.35) + 2;
       chips.forEach((c) => {
         font('bold', 5.8);
-        const cw = doc.getTextWidth(c) + 0.3 * (c.length - 1) + 4.2;
-        pill(mx, cy - 3.05, cw, 4.2, BRAND_TINT, BRAND_TINT_BORDER);
-        color(BRAND);
-        spaced(c, mx + 2.1, cy - 0.1, 0.3);
+        const cw = doc.getTextWidth(c.text) + 0.3 * (c.text.length - 1) + 4.2;
+        pill(mx, cy - 3.05, cw, 4.2, c.bg, c.border);
+        color(c.fg);
+        spaced(c.text, mx + 2.1, cy - 0.1, 0.3);
         mx += cw + 1.5;
       });
 
@@ -285,6 +299,19 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
           if (posterLink) doc.link(fx, fy, flyerW, flyerH, { url: posterLink });
         } catch (err) {
           console.warn('Could not embed flyer thumbnail in PDF:', err);
+        }
+        // Where the same flyer is printed large (a link to that page)
+        const page = ctx.flyerPages.get(ev.id);
+        if (flyerTag && page) {
+          const label = `FLYER · P. ${page}`;
+          const cx = CARD_X + CARD_W - 5 - FLYER_W / 2;
+          const ty = y + PAD_Y + flyerH + 3.6;
+          font('bold', 5.6);
+          color(BRAND);
+          const tw = spaced(label, cx, ty, 0.3, 'center');
+          stroke(BRAND, 0.15);
+          doc.line(cx - tw / 2, ty + 0.7, cx + tw / 2, ty + 0.7);
+          doc.link(cx - tw / 2 - 1, ty - 2.8, tw + 2, 4.2, { pageNumber: page, top: 0 });
         }
       }
     }

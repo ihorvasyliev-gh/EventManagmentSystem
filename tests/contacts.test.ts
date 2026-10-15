@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { eventContacts, formatContact, fromContactRows, newContactRow, toContactRows } from '../utils/contacts.ts';
+import { eventContacts, formatContact, fromContactRows, newContactRow, suggestEmailFix, toContactRows } from '../utils/contacts.ts';
 import { areEventsEqual } from '../utils/eventsEqual.ts';
 import { withContactsColumnFallback, withoutContactsInUrl, withoutContactsInBody } from '../services/contactsColumnFallback.ts';
 import type { Event } from '../types.ts';
@@ -68,4 +68,15 @@ test('the column comes out of a select list wherever it stands', () => {
   assert.equal(withoutContactsInUrl('https://x/rest/v1/events?select=id,extra_contacts'), 'https://x/rest/v1/events?select=id');
   assert.equal(withoutContactsInUrl('https://x/rest/v1/events?select=id,extra_contacts&id=eq.1'), 'https://x/rest/v1/events?select=id&id=eq.1');
   assert.equal(withoutContactsInBody('[{"a":1,"extra_contacts":[]}]'), '[{"a":1}]');
+});
+
+test('an email whose domain is a letter or two off the organisation\'s own gets it suggested', () => {
+  assert.equal(suggestEmailFix('cnimhaidin@pertnershipcork.ie'), 'cnimhaidin@partnershipcork.ie');
+  assert.equal(suggestEmailFix(' ann@partnershipcork.i '), 'ann@partnershipcork.ie');
+  assert.equal(suggestEmailFix('ann@PartnershipCork.ie'), null, 'only the case differs');
+  assert.equal(suggestEmailFix('ann@partnershipcork.ie'), null);
+  assert.equal(suggestEmailFix('ann@gmail.com'), null);
+  assert.equal(suggestEmailFix('ann@partnershipcork.com'), null, 'too far off to guess');
+  assert.equal(suggestEmailFix('ann'), null);
+  assert.equal(suggestEmailFix(''), null);
 });

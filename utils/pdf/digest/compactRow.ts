@@ -7,7 +7,7 @@ import { type DigestEventGroup, monthShort, summarizeSeries } from '../../digest
 import { toDate, clock, isAllDay } from '../../digestText.ts';
 import { getCategoryRgb } from '../../../constants/categoryColors';
 import { createGoogleCalendarUrl, createOutlookWebUrl, createGoogleMapsUrl } from '../links';
-import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE } from '../theme';
+import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE, GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER } from '../theme';
 import type { Block, DigestContext } from './context';
 import { otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
 import { seriesDates } from './seriesDates';
@@ -35,7 +35,7 @@ export const drawTableHead = ({ doc, geo: { M, CW }, kit: { font, color, fill, s
   spaced('CATEGORY', COL.category, y + 4.6, 0.4);
 };
 
-export const compactRow = (ctx: DigestContext, group: DigestEventGroup, dayKey: string): Block => {
+export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupIndex: number, dayKey: string): Block => {
   const { doc, screenOnly, geo: { M, CW } } = ctx;
   const { font, txt, color, stroke, spaced, fitLines, truncate, drawLinkedLines, pill, drawPin, categoryMark } = ctx.kit;
   const COL = columns(M);
@@ -72,11 +72,14 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, dayKey: 
   if (descLine) contentH += 3.3;
   contentH += 3.5;
   const mainH = Math.max(3.2 + contentH, 3.2 + venueLines.length * 3.3);
-  const h = Math.max(11.5, mainH + alsoH + 2.4);
+  const isNew = ctx.newIds.has(ev.id);
+  // A NEW label goes under the category
+  const h = Math.max(isNew ? 13.6 : 11.5, mainH + alsoH + 2.4);
 
   return {
     h,
     dayKey,
+    group: groupIndex,
     draw: (y) => {
       stroke(BORDER, 0.2);
       doc.line(M, y + h, M + CW, y + h);
@@ -164,6 +167,13 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, dayKey: 
       categoryMark(ev.category, COL.category + 2.1, y + 5.1, 0.85, false);
       color(cat.accent);
       doc.text(catText, COL.category + 3.6, y + 6.05);
+      if (isNew) {
+        font('bold', 5.6);
+        const nw = doc.getTextWidth('NEW') + 0.3 * 2 + 3.6;
+        pill(COL.category, y + 8.4, nw, 3.8, GREEN_TINT, GREEN_TINT_BORDER);
+        color(GREEN_DARK);
+        spaced('NEW', COL.category + 1.8, y + 11.1, 0.3);
+      }
     }
   };
 };

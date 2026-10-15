@@ -35,6 +35,7 @@ const PRESETS: Array<{ id: DateRangePreset; label: string }> = [
 ];
 
 const FORMAT_KEY = 'ccp_digest_format';
+const FLYERS_KEY = 'ccp_digest_flyers';
 
 const readPref = (key: string): string | null => {
   try {
@@ -135,6 +136,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [startDateStr, setStartDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).startDateStr);
   const [endDateStr, setEndDateStr] = useState(() => calculatePresetDateRange('2weeks', { events }).endDateStr);
   const [format, setFormat] = useState<'executive' | 'compact'>(() => (readPref(FORMAT_KEY) === 'compact' ? 'compact' : 'executive'));
+  // On unless turned off on this device
+  const [printFlyers, setPrintFlyers] = useState(() => readPref(FLYERS_KEY) !== 'off');
   const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | null>(null);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -180,9 +183,14 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   // Admins share the PDF as a link (in the email, the WhatsApp text or copied on its own)
   const shareable = canShare && groups.length > 0;
 
+  const flyerCount = useMemo(
+    () => groups.filter((g) => g.event.posterUrl || g.event.attachments?.some((a) => a.type === 'image')).length,
+    [groups]
+  );
+
   const dayCount = rangeValid ? Math.round((endDate.getTime() - startDate.getTime()) / 86400000) : 0;
 
-  const pdfOptions = { startDate, endDate, format };
+  const pdfOptions = { startDate, endDate, format, printableFlyers: printFlyers };
 
   const handleDownloadPDF = async () => {
     setBusy('download');
@@ -230,7 +238,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
    */
   const shared = useRef<{ key: string; link: Promise<string> } | null>(null);
   const getShareLink = (): Promise<string> => {
-    const key = digestKeyOf({ start: startDateStr, end: endDateStr, format, events: periodEvents });
+    const key = digestKeyOf({ start: startDateStr, end: endDateStr, format, flyers: printFlyers, events: periodEvents });
     if (shared.current?.key === key) return shared.current.link;
     const remembered = rememberedDigestLink(key);
     const link = remembered ? Promise.resolve(remembered) : (async () => {
@@ -501,6 +509,22 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
               );
             })}
           </div>
+
+          <label className="mt-3 flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={printFlyers}
+              onChange={(e) => { setPrintFlyers(e.target.checked); writePref(FLYERS_KEY, e.target.checked ? 'on' : 'off'); }}
+              className="mt-0.5 w-4 h-4 shrink-0 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 accent-brand-600"
+            />
+            <span className="text-sm">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">Flyers to print at the end</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Each flyer large enough to read and pin up, four to a page
+                {rangeValid && ` · ${flyerCount === 0 ? 'no flyers' : flyerCount === 1 ? '1 flyer' : `${flyerCount} flyers`} in this period`}
+              </span>
+            </span>
+          </label>
 
           <p className="mt-3 flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
             <CalendarPlus className="w-4 h-4 text-slate-400 shrink-0" />

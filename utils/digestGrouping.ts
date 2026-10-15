@@ -294,3 +294,16 @@ export const formatAlsoOnDates = (group: DigestEventGroup, separator = '  ·  ')
 
 export const monthShort = (d: Date): string => MONTHS_SHORT[d.getMonth()];
 export const monthShortUpper = (d: Date): string => MONTHS_SHORT[d.getMonth()].toUpperCase();
+
+/** Events added in the last two weeks are marked NEW in the digest (it goes out every fortnight) */
+export const NEW_FOR_DAYS = 14;
+
+/** The day from which an event counts as new: two weeks before the day the digest is issued */
+export const newSince = (issued: Date): Date =>
+  new Date(issued.getFullYear(), issued.getMonth(), issued.getDate() - NEW_FOR_DAYS);
+
+/** Added on or after `since` (and not after `now`: an event with no saved creation time is not new) */
+export const isNewEvent = (ev: Pick<Event, 'createdAt'>, since: Date, now: Date = new Date()): boolean => {
+  const t = toTime(ev.createdAt);
+  return !isNaN(t) && t >= since.getTime() && t <= now.getTime();
+};

@@ -8,7 +8,7 @@ import type { createScreenOnlyLayer } from '../../pdfScreenOnly.ts';
 import type { LayoutBlock } from '../../pdfLayout.ts';
 import { type Event } from '../../../types';
 import { isMultiDayEvent } from '../../date';
-import { groupDigestOccurrences, type DigestEventGroup } from '../../digestGrouping';
+import { groupDigestOccurrences, isNewEvent, newSince, type DigestEventGroup } from '../../digestGrouping';
 import { toDate, startOfLocalDay } from '../../digestText.ts';
 import type { createPdfKit } from '../kit';
 import type { LoadedPdfFlyer } from '../images';
@@ -20,6 +20,8 @@ export interface BulletinOptions {
   format: 'executive' | 'compact';
   /** 'save' downloads the file (default); 'blob' returns it, e.g. for an in-browser preview */
   output?: 'save' | 'blob';
+  /** Pages at the end with each flyer large enough to read and pin up (default on) */
+  printableFlyers?: boolean;
 }
 
 export type PdfKit = ReturnType<typeof createPdfKit>;
@@ -28,7 +30,7 @@ export type PdfFlyer = LoadedPdfFlyer & { alias: string };
 
 export interface Block extends LayoutBlock {
   draw: (y: number) => void;
-  /** Executive cards: index of the event group (for the contents list) */
+  /** Cards and table rows: index of the event group (for the contents list, bookmarks and flyer pages) */
   group?: number;
   /**
    * Executive cards: draw the day's date beside the card — on the day's first card, and
@@ -77,14 +79,23 @@ export interface DigestData {
   periodStart: Date;
   periodEnd: Date;
   isExecutive: boolean;
+  /** The day the digest is issued */
   today: Date;
   /** Published occurrences that start in the period */
   inPeriod: Event[];
   /** Occurrences of the same event merged into one entry */
   groups: DigestEventGroup[];
+  /**
+   * Over six weeks of "At a glance" rows: page 1 lists the events instead of the month grid,
+   * and the events are headed by month rather than by week
+   */
+  longPeriod: boolean;
+  /** Events added since this day are marked NEW (two weeks before the issue day) */
+  newSince: Date;
+  /** Ids of the events added since then */
+  newIds: Set<string>;
   /** Days of the period that have something on (multi-day events cover every day they span) */
   eventsByDay: Map<string, Event[]>;
-  venues: Set<string | undefined>;
   /** Every day of the period something is on, counting each day a multi-day event spans */
   eventDays: Set<string>;
   categories: string[];
@@ -121,7 +132,6 @@ export const collectDigestData = (events: Event[], options: BulletinOptions): Di
       eventsByDay.set(key, list);
     }
   }
-  const venues = new Set(groups.flatMap((g) => g.occurrences.map((o) => o.location?.trim().toLowerCase())).filter(Boolean));
   const eventDays = new Set(Array.from(eventsByDay.keys()).filter((key) => key >= dayKeyOf(periodStart) && key <= dayKeyOf(periodEnd)));
   const categories = Array.from(new Set(groups.map((g) => g.event.category || 'Other')));
 
@@ -136,8 +146,13 @@ export const collectDigestData = (events: Event[], options: BulletinOptions): Di
     return addDays(e, 6 - dow);
   })();
   const gridRows = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86400000 + 1) / 7;
+  const since = newSince(today);
+  const newIds = new Set(groups.filter((g) => isNewEvent(g.event, since)).map((g) => g.event.id));
 
-  return { periodStart, periodEnd, isExecutive, today, inPeriod, groups, eventsByDay, venues, eventDays, categories, gridStart, gridEnd, gridRows };
+  return {
+    periodStart, periodEnd, isExecutive, today, inPeriod, groups, longPeriod: gridRows > 6, newSince: since, newIds, eventsByDay,
+    eventDays, categories, gridStart, gridEnd, gridRows
+  };
 };
 
 export interface DigestContext extends DigestData {
@@ -147,6 +162,10 @@ export interface DigestContext extends DigestData {
   screenOnly: ScreenOnly;
   geo: Geometry;
   logo: LoadedPdfFlyer | null;
-  /** Executive cards: each event's flyer thumbnail */
+  /** Each event's flyer (thumbnails on the executive cards, and the pages of flyers at the end) */
   flyers: Map<string, PdfFlyer>;
+  /** Flyers printed large on pages at the end */
+  printFlyers: boolean;
+  /** Page each event's large flyer is on, by event id (filled in once the pages are laid out) */
+  flyerPages: Map<string, number>;
 }

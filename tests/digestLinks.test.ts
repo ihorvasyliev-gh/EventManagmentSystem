@@ -18,8 +18,11 @@ const ev = (over: Partial<Event> = {}): Event => ({
   status: 'published', createdAt: new Date('2026-01-01T00:00:00Z'), ...over
 });
 const today = new Date(2026, 9, 12, 9);
-const key = (events: Event[], over: { format?: string; today?: Date; end?: string } = {}) =>
-  digestKeyOf({ start: '2026-10-10', end: over.end ?? '2026-10-20', format: over.format ?? 'executive', events, today: over.today ?? today });
+const key = (events: Event[], over: { format?: string; today?: Date; end?: string; flyers?: boolean } = {}) =>
+  digestKeyOf({
+    start: '2026-10-10', end: over.end ?? '2026-10-20', format: over.format ?? 'executive', flyers: over.flyers, events,
+    today: over.today ?? today
+  });
 
 test('the same digest has the same key; any change to what the PDF shows gives a new one', () => {
   const base = key([ev()]);
@@ -33,6 +36,9 @@ test('the same digest has the same key; any change to what the PDF shows gives a
   assert.notEqual(key([ev()], { format: 'compact' }), base, 'other layout');
   assert.notEqual(key([ev()], { end: '2026-10-21' }), base, 'other period');
   assert.notEqual(key([ev()], { today: new Date(2026, 9, 13, 9) }), base, 'issued the next day');
+  assert.equal(key([ev()], { flyers: true }), base, 'flyers to print are on unless turned off');
+  assert.notEqual(key([ev()], { flyers: false }), base, 'without the flyers to print');
+  assert.notEqual(key([ev({ createdAt: new Date('2026-10-05T00:00:00Z') })]), base, 'added later: now marked NEW');
 });
 
 test('a shared link is remembered for its digest, newest first, and forgotten once expired', () => {

@@ -5,12 +5,12 @@
 import { monthShortUpper } from '../../digestGrouping';
 import { startOfLocalDay } from '../../digestText.ts';
 import { WEEKDAY_HEADERS, addDays, dayKeyOf } from '../dates';
-import { INK, BODY, MUTED, FAINT, BORDER, BG, WHITE, BRAND, DAY_WITH_EVENTS, type Density } from '../theme';
+import { INK, BODY, MUTED, FAINT, BORDER, BG, WHITE, DAY_WITH_EVENTS, type Density } from '../theme';
 import type { DigestContext } from './context';
 
-/** The compact table is about density, so it skips the mini calendar */
-export const showsGlance = ({ isExecutive, groups, gridRows }: DigestContext): boolean =>
-  isExecutive && groups.length > 0 && gridRows <= 6;
+/** The compact table is about density, so it skips the mini calendar; long periods list the events instead */
+export const showsGlance = ({ isExecutive, groups, longPeriod }: DigestContext): boolean =>
+  isExecutive && groups.length > 0 && !longPeriod;
 
 /** Longer periods get shorter rows so the first cards still fit on page 1 */
 export const glanceCellH = ({ gridRows }: DigestContext, d: Density): number => d.glanceCellH ?? (gridRows >= 5 ? 11 : 12.5);
@@ -19,7 +19,7 @@ export const glanceHeight = (ctx: DigestContext, d: Density): number =>
   showsGlance(ctx) ? 7 + 5 + ctx.gridRows * glanceCellH(ctx, d) : 0;
 
 export const drawGlance = (ctx: DigestContext, top: number, cellH: number) => {
-  const { doc, periodStart, periodEnd, today, eventsByDay, gridStart, gridRows, geo: { W, M, CW } } = ctx;
+  const { doc, periodStart, periodEnd, eventsByDay, gridStart, gridRows, geo: { W, M, CW } } = ctx;
   const { font, color, fill, stroke, spaced, leaf, eyebrow, categoryMark } = ctx.kit;
   eyebrow('AT A GLANCE', M, top + 3, W - M);
 
@@ -49,7 +49,6 @@ export const drawGlance = (ctx: DigestContext, top: number, cellH: number) => {
     const inRange = d >= startOfLocalDay(periodStart) && d <= startOfLocalDay(periodEnd);
     const key = dayKeyOf(d);
     const dayEvents = inRange ? eventsByDay.get(key) || [] : [];
-    const isToday = d.getTime() === today.getTime();
 
     if (!inRange) {
       fill(BG);
@@ -61,24 +60,15 @@ export const drawGlance = (ctx: DigestContext, top: number, cellH: number) => {
 
     // Day number (with month on the 1st and on the first cell)
     const showMonth = d.getDate() === 1 || i === 0;
-    if (isToday) {
-      // A smaller, higher circle in short rows keeps clear of the event dots
-      const short = cellH < 11;
-      fill(BRAND);
-      doc.circle(x + 4.3, y + (short ? 3.5 : 3.9), short ? 2.3 : 2.55, 'F');
-      font('bold', 7.5);
-      color(WHITE);
-      doc.text(String(d.getDate()), x + 4.3, y + (short ? 4.55 : 4.95), { align: 'center' });
-    } else {
-      font(dayEvents.length ? 'bold' : 'medium', 7.5);
-      color(inRange ? (dayEvents.length ? INK : MUTED) : FAINT);
-      doc.text(String(d.getDate()), x + 2.3, y + 5);
-    }
+    // No mark for the issue day: a shared digest is read long after it, when that day isn't "today"
+    font(dayEvents.length ? 'bold' : 'medium', 7.5);
+    color(inRange ? (dayEvents.length ? INK : MUTED) : FAINT);
+    doc.text(String(d.getDate()), x + 2.3, y + 5);
     if (showMonth) {
-      const numW = isToday ? 7 : doc.getTextWidth(String(d.getDate())) + 3.2;
+      const numW = doc.getTextWidth(String(d.getDate())) + 3.2;
       font('semibold', 5.8);
       color(inRange ? INK : FAINT);
-      doc.text(monthShortUpper(d), x + (isToday ? 1.8 : 2.3) + numW, y + 4.9);
+      doc.text(monthShortUpper(d), x + 2.3 + numW, y + 4.9);
     }
 
     if (dayEvents.length > 0) {

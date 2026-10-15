@@ -48,3 +48,31 @@ export const toContactRows = (contacts?: EventContact[]): ContactRow[] => readCo
 
 /** The rows as contacts to save: trimmed, rows left blank dropped */
 export const fromContactRows = (rows: ContactRow[]): EventContact[] => readContacts(rows);
+
+// The organisation's own email domain: a contact address close to it is most likely a typo
+const OWN_DOMAINS = ['partnershipcork.ie'];
+
+/** Letters to add, drop or change to turn one word into the other */
+const editDistance = (a: string, b: string): number => {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = row;
+  }
+  return prev[b.length];
+};
+
+/**
+ * "ann@pertnershipcork.ie" → "ann@partnershipcork.ie": the address with its domain corrected, when
+ * the domain is one or two letters away from the organisation's own. Null when it looks right.
+ */
+export const suggestEmailFix = (email: string): string | null => {
+  const match = /^([^\s@]+)@([^\s@]+\.[^\s@]+)$/.exec(email.trim());
+  if (!match) return null;
+  const domain = match[2].toLowerCase();
+  const own = OWN_DOMAINS.find((d) => d !== domain && editDistance(d, domain) <= 2);
+  return own ? `${match[1]}@${own}` : null;
+};

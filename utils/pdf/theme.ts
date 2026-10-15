@@ -35,6 +35,8 @@ export const BRAND_TINT: Rgb = [251, 240, 244]; // #FBF0F4
 export const BRAND_TINT_BORDER: Rgb = [234, 182, 202]; // #EAB6CA
 export const BRAND_LIGHT: Rgb = [232, 169, 194];       // #E8A9C2, the hairline after a label
 export const DAY_WITH_EVENTS: Rgb = [243, 243, 243];   // #F3F3F3, the site's grey sections
+export const GREEN_TINT: Rgb = [233, 242, 232];        // #E9F2E8, the NEW label
+export const GREEN_TINT_BORDER: Rgb = [183, 210, 179]; // #B7D2B3
 
 
 /**
@@ -46,6 +48,8 @@ export interface Density {
   /** "At a glance" row height (null: by number of weeks) */
   glanceCellH: number | null;
   weekBannerH: number;
+  /** Long periods are headed by month instead of by week */
+  monthBannerH: number;
   /** Extra space before the first card of a new day */
   dayGap: number;
   cardPadY: number;
@@ -54,7 +58,7 @@ export interface Density {
 }
 
 export const DENSITIES: Density[] = [
-  { glanceCellH: null, weekBannerH: 11, dayGap: 2.4, cardPadY: 4.6, cardGap: 3.2, flyerMaxH: 42 },
-  { glanceCellH: 10.5, weekBannerH: 10, dayGap: 2, cardPadY: 4.1, cardGap: 2.7, flyerMaxH: 37 },
-  { glanceCellH: 10, weekBannerH: 9.5, dayGap: 1.6, cardPadY: 3.7, cardGap: 2.3, flyerMaxH: 32 }
+  { glanceCellH: null, weekBannerH: 11, monthBannerH: 13, dayGap: 2.4, cardPadY: 4.6, cardGap: 3.2, flyerMaxH: 42 },
+  { glanceCellH: 10.5, weekBannerH: 10, monthBannerH: 12, dayGap: 2, cardPadY: 4.1, cardGap: 2.7, flyerMaxH: 37 },
+  { glanceCellH: 10, weekBannerH: 9.5, monthBannerH: 11.5, dayGap: 1.6, cardPadY: 3.7, cardGap: 2.3, flyerMaxH: 32 }
 ];

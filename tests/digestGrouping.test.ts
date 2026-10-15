@@ -6,6 +6,8 @@ import {
   formatOccurrenceLabel,
   formatGroupOccurrence,
   summarizeSeries,
+  newSince,
+  isNewEvent,
 } from '../utils/digestGrouping.ts';
 import type { Event } from '../types.ts';
 
@@ -148,4 +150,17 @@ test('a long series lists other venues apart and flags a different time', () => 
   const [group] = groupDigestOccurrences(events);
   assert.deepEqual(summarizeSeries(group)?.venues.map((v) => v.place), ['', 'Mahon Library']);
   assert.equal(formatAlsoOnDates(group), 'every Thursday: 22, 29 Oct · 19 (18:00), 26 Nov · 3 Dec; at Mahon Library: 5, 12 Nov');
+});
+
+test('events added in the two weeks before the digest is issued are new', () => {
+  const issued = new Date(2026, 9, 15, 11, 40);
+  const since = newSince(issued);
+  assert.deepEqual([since.getFullYear(), since.getMonth(), since.getDate(), since.getHours()], [2026, 9, 1, 0]);
+  const added = (d: Date) => ({ createdAt: d });
+  assert.equal(isNewEvent(added(new Date(2026, 9, 1, 0, 0)), since, issued), true, 'on the first day');
+  assert.equal(isNewEvent(added(new Date(2026, 9, 15, 9)), since, issued), true, 'that morning');
+  assert.equal(isNewEvent(added(new Date(2026, 8, 30, 23, 59)), since, issued), false, 'the day before');
+  // An event loaded without its creation time gets its own date instead: not new
+  assert.equal(isNewEvent(added(new Date(2026, 10, 4, 11)), since, issued), false, 'in the future');
+  assert.equal(isNewEvent({ createdAt: new Date(NaN) }, since, issued), false);
 });

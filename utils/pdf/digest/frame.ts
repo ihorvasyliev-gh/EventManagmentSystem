@@ -67,11 +67,12 @@ const STAT_H = 13;
 const STAT_GAP = 5; // either side of the separators
 
 export const drawStats = (ctx: DigestContext) => {
-  const { doc, groups, eventDays, venues, geo: { W, M }, kit: { font, color, fill, stroke } } = ctx;
+  const { doc, groups, eventDays, newIds, newSince, geo: { W, M }, kit: { font, color, fill, stroke } } = ctx;
   const stats: Array<{ value: string; label: string; accent: Rgb }> = [
     { value: String(groups.length), label: groups.length === 1 ? 'Event' : 'Events', accent: BRAND },
     { value: String(eventDays.size), label: eventDays.size === 1 ? 'Day with events' : 'Days with events', accent: GREEN },
-    { value: String(venues.size), label: venues.size === 1 ? 'Venue' : 'Venues', accent: MUTED }
+    // What the last digest didn't have: the events marked NEW
+    { value: String(newIds.size), label: `New since ${newSince.getDate()} ${monthShort(newSince)}`, accent: GREEN_DARK }
   ];
   const widths = stats.map((s) => {
     font('bold', 15);

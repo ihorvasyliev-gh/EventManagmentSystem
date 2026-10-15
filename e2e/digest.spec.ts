@@ -109,6 +109,13 @@ test('staff preview and download the digest; sharing it is for admins', async ({
   for (const name of [/WhatsApp/, /^Email$/, /Copy link/]) {
     await expect(dialog.getByRole('button', { name })).toHaveCount(0);
   }
+  // Flyers to print are on unless turned off, and stay off on this device once turned off
+  const flyers = dialog.getByRole('checkbox', { name: /Flyers to print at the end/ });
+  await expect(flyers).toBeChecked();
+  await flyers.uncheck();
+  await page.keyboard.press('Escape');
+  await page.getByTitle('Generate the Upcoming Events Digest (PDF)').first().click();
+  await expect(flyers).not.toBeChecked();
 });
 
 /** A one-page PDF with a line of text and a link, made by hand (offsets counted for the xref) */

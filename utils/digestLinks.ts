@@ -63,18 +63,22 @@ const fingerprint = (text: string): string => {
 const time = (d?: Date | string) => (d ? new Date(d).getTime() : 0);
 
 /**
- * What a digest PDF is made from: the day it is issued (its date and "Today" marks), the period,
- * the layout and everything the PDF shows of each event in it.
+ * What a digest PDF is made from: the day it is issued (its date, and which events count as new),
+ * the period, the layout, whether the flyers are printed at the end, and everything the PDF shows
+ * of each event in it.
  */
-export const digestKeyOf = (options: { start: string; end: string; format: string; events: Event[]; today?: Date }): string =>
+export const digestKeyOf = (options: {
+  start: string; end: string; format: string; flyers?: boolean; events: Event[]; today?: Date;
+}): string =>
   fingerprint(JSON.stringify([
     formatLocalDate(options.today ?? new Date()),
     options.start,
     options.end,
     options.format,
+    options.flyers !== false,
     options.events.map((e) => [
       e.instanceKey ?? e.id, e.status, time(e.date), time(e.endDate),
-      e.title, e.description, e.location, e.category, e.posterUrl ?? '', eventContacts(e)
+      e.title, e.description, e.location, e.category, e.posterUrl ?? '', eventContacts(e), time(e.createdAt)
     ])
   ]));
 

@@ -11,17 +11,21 @@ const WINANSI_SUPPORTED_EXTRA = new Set([
   8211, 8212, 8216, 8217, 8218, 8220, 8221, 8222, 8224, 8225, 8226, 8230, 8240, 8249, 8250, 8364, 8482
 ]);
 
+// "Outreach Office , 79" and "the area ." as typed: the space before the mark is dropped
+// (only before a mark that ends a word, so " ...", " :)" and ".NET" are left alone)
+const tidyPunctuation = (text: string): string => text.replace(/ +([,.;:!?])(?=\s|$)/g, '$1');
+
 const normaliseWhitespace = (text: string, preserveNewlines: boolean): string => {
   if (preserveNewlines) {
-    return text
+    return tidyPunctuation(text
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
       .replace(/[^\S\n]+/g, ' ')
       .replace(/ *\n */g, '\n')
       .replace(/\n{3,}/g, '\n\n')
-      .trim();
+      .trim());
   }
-  return text.replace(/\s+/g, ' ').trim();
+  return tidyPunctuation(text.replace(/\s+/g, ' ').trim());
 };
 
 const stripEmoji = (text: string): string =>
@@ -71,3 +75,14 @@ export const cleanUnicodeText = (text: string | null | undefined, preserveNewlin
   }
   return normaliseWhitespace(result, preserveNewlines);
 };
+
+// Bookmark titles go into the PDF as single bytes (jsPDF doesn't encode them), so they keep to Latin-1
+const OUTLINE_SWAPS: Record<string, string> = { '–': '-', '—': '-', '‘': "'", '’': "'", '“': '"', '”': '"', '…': '...', '•': '-' };
+
+/** Text for a bookmark in the viewer's sidebar */
+export const outlineText = (text: string | null | undefined): string =>
+  cleanUnicodeText(text)
+    .replace(/[–—‘’“”…•]/g, (c) => OUTLINE_SWAPS[c])
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();

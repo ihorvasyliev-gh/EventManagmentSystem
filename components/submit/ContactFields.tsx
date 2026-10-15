@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mail, Plus, User, X } from 'lucide-react';
 import { FieldError, inputClass } from './formParts';
-import { MAX_CONTACTS, type ContactRow } from '../../utils/contacts';
+import { MAX_CONTACTS, suggestEmailFix, type ContactRow } from '../../utils/contacts';
 
 export type ContactField = 'name' | 'email';
 
@@ -25,6 +25,10 @@ const ContactInputs: React.FC<ContactInputsProps> = ({ idPrefix, srLabel, name, 
   const emailId = idPrefix ? `field-${idPrefix}-email` : 'field-email';
   const nameErrId = idPrefix ? `err-${idPrefix}-name` : 'err-name';
   const emailErrId = idPrefix ? `err-${idPrefix}-email` : 'err-email';
+  const emailHintId = idPrefix ? `hint-${idPrefix}-email` : 'hint-email';
+  // "@pertnershipcork.ie": offer the organisation's own domain (a typo there means emails never arrive)
+  const emailFix = emailError ? null : suggestEmailFix(email);
+  const emailDescribedBy = [emailError ? emailErrId : '', emailFix ? emailHintId : ''].filter(Boolean).join(' ') || undefined;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
@@ -64,11 +68,24 @@ const ContactInputs: React.FC<ContactInputsProps> = ({ idPrefix, srLabel, name, 
             onChange={(e) => onChange('email', e.target.value)}
             placeholder="name@partnershipcork.ie"
             aria-invalid={!!emailError}
-            aria-describedby={emailError ? emailErrId : undefined}
+            aria-describedby={emailDescribedBy}
             className={`${inputClass(!!emailError)} pl-10 pr-3 py-3`}
           />
         </div>
         <FieldError id={emailErrId} message={emailError} />
+        {emailFix && (
+          <p id={emailHintId} className="mt-1.5 text-xs text-amber-800 dark:text-amber-300">
+            Did you mean{' '}
+            <button
+              type="button"
+              onClick={() => onChange('email', emailFix)}
+              className="font-semibold underline underline-offset-2 hover:no-underline break-all"
+            >
+              {emailFix}
+            </button>
+            ?
+          </p>
+        )}
       </div>
     </div>
   );

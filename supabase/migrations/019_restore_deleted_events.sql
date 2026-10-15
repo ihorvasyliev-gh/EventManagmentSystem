@@ -1,8 +1,8 @@
 -- ============================================
 -- Migration 019: a deleted event can be restored from the change log
 -- ============================================
--- Run in Supabase Dashboard → SQL Editor → New query → Run, after deploying (the app works
--- without it: only Restore in the change log needs it, Undo straight after deleting doesn't).
+-- Run in Supabase Dashboard → SQL Editor → New query → Run, before or after deploying (the app
+-- works without it: only Restore in the change log needs it, Undo straight after deleting doesn't).
 -- Safe to run more than once.
 --
 -- Deleting an event now keeps a copy of it in its "deleted" history entry (snapshot): the

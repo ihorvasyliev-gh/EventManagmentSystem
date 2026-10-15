@@ -57,7 +57,7 @@ Every Wednesday afternoon, send an email to all CCP staff reminding them to subm
 ### Direct Link to Share:
 > **Submission URL:** `https://ccp-event-calendar.pages.dev/submit`  
 > 
-> *Staff do not need to log in or remember passwords. The form opens directly on any computer, tablet, or smartphone. It can also be accessed directly on the login page ([https://ccp-event-calendar.pages.dev/](https://ccp-event-calendar.pages.dev/)) right under the Sign In button.*
+> *Staff do not need to log in or remember passwords. The form opens directly on any computer, tablet, or smartphone. The login page ([https://ccp-event-calendar.pages.dev/](https://ccp-event-calendar.pages.dev/)) also has a **Submit an event** button: under the sign-in form on a computer, at the top of the page on a phone.*
 
 ### Copy-Paste Email Template for Wednesday:
 
@@ -72,7 +72,7 @@ These will be compiled into our bi-weekly Upcoming Events Digest and circulated 
 
 👉 Submit your event here (takes 2 minutes, no login needed):
 https://ccp-event-calendar.pages.dev/submit
-(Or visit https://ccp-event-calendar.pages.dev/ and click "Submit an Event for review" below the Sign In button)
+(Or visit https://ccp-event-calendar.pages.dev/ and click "Submit an event")
 
 What kind of events?
 • Any event held exclusively by CCP, co-hosted, or funded by CCP
@@ -80,7 +80,7 @@ What kind of events?
 • Local community activities (coffee mornings, youth sessions, open days) to keep colleagues and the area informed
 
 Information needed:
-1. Name of the event
+1. Name of the event and what kind of event it is (the form asks for a category)
 2. Date & start/finish time
 3. Venue and location (room/building/address)
 4. A few lines describing what the event is about
@@ -106,12 +106,12 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 1. **Log in to the Calendar:**
    * Go to `https://ccp-event-calendar.pages.dev/` and sign in with your Admin email and password.
 
-2. **Check the Submissions Badge:**
+2. **Check the Inbox Badge:**
    * Look at the top navigation bar. If there are pending submissions, you will see a badge:
-   * `[📥 Submissions (3)]` *(the badge pulses when new items are waiting)*.
+   * `[📥 Inbox (3)]`. A line above the calendar also lists what is waiting.
 
 3. **Open the Inbox:**
-   * Click the **"Submissions"** button to open the moderation drawer.
+   * Click **Inbox** (or **Review** on that line). With several submissions waiting they sit in two columns on a wide screen.
 
 4. **Review Each Submission:**
    * Each card displays:
@@ -125,8 +125,12 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 5. **Take Action:**
    * **Approve & Publish (Green Checkmark):** Click to publish immediately. The event instantly appears on the live calendar and is marked ready for Friday's digest.
    * **Edit (Pencil Icon):** Need to fix a typo, clarify the venue, or refine the time? Click **Edit**: the submission opens in the event form (the same one staff use), with **Status** already set to **Published**. Make the changes and click **Save & publish**, or set **Status** back to **Draft** to save it without publishing.
-   * **Decline (Trash Icon):** If a submission is a duplicate, spam or not suitable, click **Decline**, then **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
-   * **Approve All:** If you have verified all entries at once, click **"Approve all"** in the top right of the modal.
+   * **Decline:** If a submission is a duplicate, spam or not suitable, click **Decline**. You can write a reason for the submitter (optional, it goes in the email), then click **Yes, decline** to delete the submission and its flyer; **Keep** leaves it in the inbox.
+   * **Approve all:** If you have checked every entry, click **Approve all 3** at the bottom of the inbox. It always asks first (*Approve all 3 events?*), and warns you if any of them look like a duplicate of an event already on the calendar.
+
+6. **Let the submitter know:**
+   * After each approval or decline, a line at the top of the inbox says what happened. If the calendar sends emails itself, it says *Sam has been emailed*.
+   * Otherwise it has an **Email Sam** button: your email app opens a message to them, already written (with a link to the event, or with your reason for declining). Check it and send.
 
 ---
 
@@ -135,7 +139,7 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 Once submissions are approved, you can generate both the **branded PDF** and the **WhatsApp digest** in under 60 seconds.
 
 ### 1. Open the Generator
-* In the top navigation bar, click the **"Events Digest"** button (with the document icon).
+* In the top navigation bar, click the **"Digest"** button (with the document icon).
 * *(Alternatively, click "Export" and choose "Upcoming Events Digest").*
 
 ### 2. Check the Date Range
@@ -150,16 +154,18 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 * **Compact Table:**
   * Clean, dense agenda table suitable for printing as a one-page handout.
 * **Flyers to print at the end** (ticked by default): adds pages with every flyer large enough to read and pin up on a noticeboard, four to a page. Under each flyer is the event, its date and the page of its card; on the cards, **Flyer · p. 5** under the small picture jumps to it. Untick it for a shorter PDF; the dialog remembers your choice on this computer.
-* Events added to the calendar in the last two weeks carry a green **New** label, and page 1 counts them, so the Board can see what has changed since the last digest.
+* Events that the last digest (shared before this week) didn't have carry a green **New** label, and page 1 counts them, so the Board can see what has changed since then.
 * The PDF only uses dates (no *Today* or *This week*), so it still reads right when someone opens the link days or weeks later.
 
+> **The buttons:** **Email** is the main button (you'll use it most). **WhatsApp**, **Link**, **Preview** and **Download PDF** sit beside it on a computer; on a phone they are under **More**.
+
 ### 4. Download the PDF
-* Click **"Download Events Digest PDF"**.
+* Click **"Download PDF"**.
 * The file will download to your computer as:
   `CCP-Events-Digest-YYYY-MM-DD.pdf`
 
 ### 5. Copy the WhatsApp Digest
-* Click **"WhatsApp"** (admins only, like **Email** and **Link** below; staff see just **Preview** and **Download PDF**).
+* Click **"WhatsApp"** (on a phone: **More → Copy WhatsApp text**). It is for admins only, like **Email** and **Link** below; staff see just **Preview** and **Download PDF**.
 * A green message confirms it was copied.
 * You can now paste (`Ctrl + V`) directly into company WhatsApp groups. The text includes dates, times, venues, short descriptions, each organiser's name and email, and at the end a link to the digest PDF (so you don't need to send the file as well), the live calendar and the submission form.
 
@@ -172,7 +178,7 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 ### 7. Just the link
 * **Link** copies the link to the PDF on its own, to paste into Teams, a calendar invite or anywhere else.
 
-> **Links open the digest's page.** The page shows every page of the PDF, sharp and with working links (add to calendar, maps, emails), and has a **Download PDF** button. It works in phone email apps (Gmail and Outlook open links in their own built-in browser, which can't show a PDF file) and isn't taken over by PDF add-ons such as Adobe Acrobat's Chrome extension. Links sent before this page existed open it too.
+> **Links open the digest's page.** It opens on a **List** of the events in text that is easy to read on a phone: the day, time, venue, description, contact people and the **New** marks. The **PDF** tab shows every page of the PDF, sharp and with working links (add to calendar, maps, emails), and has a **Download PDF** button. It works in phone email apps (Gmail and Outlook open links in their own built-in browser, which can't show a PDF file) and isn't taken over by PDF add-ons such as Adobe Acrobat's Chrome extension. Digests shared before the list existed open straight on the PDF.
 
 > **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout, the flyer pages and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
 
@@ -217,7 +223,7 @@ Warm regards,
 ### What if a staff member emails me their event instead of using the form?
 You don't need to type it into an email or re-route them. You have two options:
 1. Open `https://ccp-event-calendar.pages.dev/submit` and fill it out on their behalf (since you are logged in as admin, it will automatically publish!).
-2. In the calendar view, click the **"+ New Event"** button in the bottom corner and enter the details.
+2. In the calendar view, click the **"New Event"** button and enter the details. Every new event needs a category. If you set **Status** to **Draft**, the button becomes **Save as draft**: the event is kept off the calendar until you publish it.
 
 ### What if someone submits an event on Friday morning after I already generated the PDF?
 You can simply approve the submission in the **Submissions Inbox**, then click **"Events Digest"** and click **Download** again. The new PDF will immediately include the latest event.
@@ -240,8 +246,15 @@ Every change is recorded. **Account menu** (your name, top right) → **Change l
 
 **Deleted** lists every event that was deleted and every submission that was declined: who did it, when, and what the event was (its date, venue, contact…). The database records this itself, so it can't be skipped or removed from the app — if events disappear, this shows who deleted them.
 
+To find something, type part of the event's name in **Search by event name**, or pick a person in the list beside it to see only what they did.
+
+### I deleted an event by mistake
+Straight after you delete it, the message at the top has an **Undo** button for 10 seconds: the event comes back exactly as it was, flyer included.
+
+Later, open **Change log → Deleted** and click **Restore** under the event. It comes back to the calendar with the same link, its contact people and its deleted dates. Its flyer and files come back too if they are still stored (they are removed shortly after deleting; the message says if they couldn't come back). Events deleted before this button existed have no copy to restore.
+
 ### Can staff view the submissions inbox?
-No. The **Submissions** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff only see published events on the public calendar.
+No. The **Inbox** button and inbox are strictly restricted to administrators (Elizabeth and designated admins). Staff see published events, and under **My events** the ones they sent in, with whether each is published yet.
 
 ### A staff member's event happens every week
 In the form, under the date picker, **Does it repeat?** offers **Every week**, **Every 2 weeks** and **Every month**, from the date they picked, with an optional **Last date** (empty: it carries on). The inbox shows it as, for example, *Every week on Thursday from Thu 15 Oct 2026, with no end date*. Approving it puts every date on the calendar and in each digest. An event that was set up earlier to repeat in another way (e.g. every day, or a set number of times) keeps that repeat when you edit it: it shows as its own choice beside the others.
@@ -250,7 +263,10 @@ In the form, under the date picker, **Does it repeat?** offers **Every week**, *
 No. Open the event, click **Duplicate**: the submission form opens filled in with the title, category, venue, description, contact people and flyer. Pick the new date, change anything else that is different and click **Publish event**.
 
 ### The Board asks how many events we ran this quarter
-Open the **account menu** (your name, top right) → **Statistics**. Pick a period (this quarter, last quarter, this year, …, or your own dates) to see the number of events and dates held, by category, by month and by venue. **Copy as text** puts a short summary on the clipboard for an email or report.
+Open the **account menu** (your name, top right) → **Statistics**. Pick a period (this quarter, last quarter, this year, …, or your own dates) to see the number of events and dates held, by category, by month and by venue. **Copy as text** puts a short summary on the clipboard for an email or report. **Download Excel** saves a spreadsheet with a *Summary* sheet (the totals, categories, months and every venue) and a *Dates* sheet listing each date held, to sort or filter.
+
+### Exporting only some events
+Search or filter the calendar first (for example, a category), then click **Export**. It says *Your search or filters are on* and lets you choose **Only the events that match** or **All published events**; the heading shows how many will be exported.
 
 ---
 

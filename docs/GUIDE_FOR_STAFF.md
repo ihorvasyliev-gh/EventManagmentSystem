@@ -37,10 +37,9 @@ There are two easy ways to open the form:
    👉 [**https://ccp-event-calendar.pages.dev/submit**](https://ccp-event-calendar.pages.dev/submit)
 
 2. **Via the Login Page:**  
-   Open [**https://ccp-event-calendar.pages.dev/**](https://ccp-event-calendar.pages.dev/) — right below the Sign In button, you will see a dashed box:  
-   `[ 📝 Submit an Event for review | No login needed ]`. Click it, and the form opens instantly!
+   Open [**https://ccp-event-calendar.pages.dev/**](https://ccp-event-calendar.pages.dev/) and click **Submit an event** (*No login needed*). On a computer it is under the sign-in form; on a phone it is at the top of the page. The form opens instantly!
 
-*(If you are already logged in to the calendar, simply click the **"Submit Event"** button on the top right).*
+*(If you are already logged in to the calendar, simply click the **"Submit Event"** button on the top right, or **Submit an event** on a phone).*
 
 ---
 
@@ -66,8 +65,8 @@ This includes:
 | Field | Description & Best Practice |
 |-------|-----------------------------|
 | **Event Title** | Clear and recognizable. <br>*Example:* "Northside Enterprise Network Breakfast" or "Knocknaheeny Family Fun Day" |
-| **Category** | Select the best fit (*Enterprise & Employment*, *Community & Family*, *Education & Training*, etc.) to color-code your event in the digest. |
-| **Date & Time** | Tap every date the event runs on, then set the start and estimated finish time. <br>If the times differ from day to day, untick **Same time every day** and set a start and finish time for each date. <br>If it runs more than once on a day (e.g. morning and evening), click **Add another time**. |
+| **Category** *(required)* | Select the best fit (*Enterprise & Employment*, *Community & Family*, *Education & Training*, etc.) to color-code your event in the digest. |
+| **Date & Time** | Tap every date the event runs on, then set the start and estimated finish time. Days that have already passed are pale; you can still pick one if you need to. <br>If the times differ from day to day, untick **Same time every day** and set a start and finish time for each date. <br>If it runs more than once on a day (e.g. morning and evening), click **Add another time**. |
 | **Does it repeat?** | For an event that happens **every week, every 2 weeks or every month** (e.g. a weekly coffee morning), pick just its **first date** and time, then choose how often it repeats under the calendar. Add a **Last date** if it stops, or leave it empty if it carries on. It goes on the calendar on every one of those dates. |
 | **Venue / Location** | Be specific with the venue name, room number, or address. <br>*Example:* "Hollyhill Library, Meeting Room 2, Harbour View Rd, Knocknaheeny, Cork" *(This automatically links to Google Maps on the PDF!)* <br>If it moves between venues, untick **Same place for all dates** and enter the address for each date and time. |
 | **Short Description** | **A few lines explaining what the event is about** (up to 2,000 characters): <br>• Who is it for? <br>• What will happen? <br>• Do attendees need to book or register in advance? |
@@ -83,12 +82,13 @@ Before the form sends, you check everything on a review screen. Sometimes a smal
 1. **Instant Confirmation:** You will see a green checkmark screen confirming your submission was received.
 2. **Review:** Your submission goes to Elizabeth for quick moderation on Thursday.
    * If you were **signed in** when you sent it, the event is on your calendar straight away, with a yellow **Pending review** label and a dashed border, so you can see it was received. Only you and the admins can see it until it's approved. (Events sent from the form without signing in don't show up this way.)
+   * Signed in, **My events** (in the account menu under your name, or the tab bar on a phone) lists everything you sent in, or that names you as the contact, and whether each one is published yet.
 3. **Publication:** Once approved:
    * It immediately appears on the interactive company calendar (for you, the **Pending review** label goes away).
    * It is automatically included in Friday morning's **Upcoming Events Digest** sent to the Board and staff.
    * It is included in the Friday WhatsApp digest.
    * You can also open **Digest** yourself to preview or download the PDF for any period.
-4. **If it can't go on the calendar** (for example, it was sent twice), Elizabeth declines it and it won't appear on the calendar.
+4. **You hear back by email.** When your event is approved you get an email with a link to it on the calendar. If it can't go on the calendar (for example, it was sent twice), Elizabeth declines it and you get an email saying so, usually with the reason.
 
 ---
 

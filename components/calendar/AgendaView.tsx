@@ -42,7 +42,7 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
         previousMonth = thisMonth;
 
         return (
-          <div key={dateKey} className={isPast ? 'opacity-75' : ''}>
+          <div key={dateKey}>
             {newMonth && (
               <h3 className="px-3 sm:px-4 pt-4 pb-1.5 text-xs font-bold uppercase tracking-[0.12em] text-brand-700 dark:text-brand-300 border-b border-slate-100 dark:border-slate-800">
                 {thisMonth}
@@ -51,7 +51,8 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
             {/* Sticks under the navbar while the day's events scroll by; opaque so they don't show through */}
             <div className={`sticky top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-16 z-10 px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-3 ${isToday ? 'bg-brand-50 dark:bg-[#361B26]' : 'bg-slate-50 dark:bg-slate-850'}`}>
               <div className="flex items-baseline gap-2">
-                <span className={`text-2xl sm:text-3xl font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-900 dark:text-white'}`}>
+                {/* A day that has passed: its date paler (not the whole day faded, which would make its text too faint to read) */}
+                <span className={`text-2xl sm:text-3xl font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : isPast ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`}>
                   {date.getDate()}
                 </span>
                 <div className="flex flex-col">

@@ -6,6 +6,7 @@ import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
+import { copyFormattedEmail, PASTE_KEYS } from '../utils/copyEmail';
 import { shareDigestPdf, fetchPreviousDigestIssue } from '../services/digestService';
 import { buildDigestList } from '../utils/digestList';
 import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
@@ -80,8 +81,6 @@ const copyText = async (text: Promise<string>): Promise<void> => {
     document.body.removeChild(input);
   }
 };
-
-const PASTE_KEYS = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V';
 
 const spinner = <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />;
 
@@ -331,21 +330,11 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           return null;
         })
       : Promise.resolve(null);
-    let copied = false;
-    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-      try {
-        // Handed over still inside the click, as promises: Safari allows nothing later
-        await navigator.clipboard.write([new ClipboardItem({
-          'text/html': link.then((pdfUrl) =>
-            new Blob([generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl })], { type: 'text/html' })),
-          'text/plain': link.then((pdfUrl) =>
-            new Blob([generateDigestEmail(periodEvents, startDate, endDate, { baseUrl, pdfUrl }).body], { type: 'text/plain' }))
-        })]);
-        copied = true;
-      } catch (err) {
-        console.warn('Copying the formatted email failed:', err);
-      }
-    }
+    // Handed over still inside the click, as promises: Safari allows nothing later
+    const copied = await copyFormattedEmail(
+      link.then((pdfUrl) => generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl })),
+      link.then((pdfUrl) => generateDigestEmail(periodEvents, startDate, endDate, { baseUrl, pdfUrl }).body)
+    );
     const pdfUrl = await link;
     setBusy(null);
     window.location.href = copied

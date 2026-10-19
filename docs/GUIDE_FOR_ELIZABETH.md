@@ -54,6 +54,8 @@ As the coordinator, your role is supported by the **CCP Event Calendar**, which 
 
 Every Wednesday afternoon, send an email to all CCP staff reminding them to submit any events taking place over the **following two weeks**.
 
+**The calendar can write it for you:** click **Reminder** in the top bar (on a phone or tablet, open the menu → **Send a reminder**). A new email opens to allstaff@partnershipcork.ie with the subject filled in, and a formatted reminder in the digest's look is copied: click into the message and press Ctrl+V (⌘V on a Mac) to paste it. It asks for events before this Friday (from Friday on, next Friday), has a **Send in an event** button to the form, and says to write to ivasyliev@partnershipcork.ie with questions or suggestions about the site. You can edit it before sending, or use the template below instead.
+
 ### Direct Link to Share:
 > **Submission URL:** `https://ccp-event-calendar.pages.dev/submit`  
 > 

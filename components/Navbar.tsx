@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -20,6 +20,8 @@ interface NavbarProps {
   pendingSubmissionsCount?: number;
   onOpenSubmissions?: () => void;
   onOpenFortnightlyBulletin?: () => void;
+  /** Admins: email all staff a reminder to send in their events before Friday's digest */
+  onSendReminder?: () => void;
   onOpenSubmitEvent?: () => void;
   /** Admins: staff accounts and password resets */
   onOpenStaff?: () => void;
@@ -57,6 +59,7 @@ const Navbar: React.FC<NavbarProps> = ({
   pendingSubmissionsCount = 0,
   onOpenSubmissions,
   onOpenFortnightlyBulletin,
+  onSendReminder,
   onOpenSubmitEvent,
   onOpenStaff,
   onOpenStats,
@@ -112,6 +115,9 @@ const Navbar: React.FC<NavbarProps> = ({
   const menuItem =
     'w-full flex items-center gap-3 text-left px-3 py-3 min-h-[48px] rounded-xl font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors';
 
+  const barButton =
+    'items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors';
+
   return (
     <>
       <nav className="sticky top-0 z-50 w-full pt-[env(safe-area-inset-top)] glass-panel dark-glass text-slate-800 dark:text-white">
@@ -141,18 +147,29 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenFortnightlyBulletin}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
+                  className={`${barButton} hidden lg:inline-flex`}
                   title={isAdmin ? 'Generate the Upcoming Events Digest (PDF & WhatsApp)' : 'Generate the Upcoming Events Digest (PDF)'}
                 >
                   <FileText className="h-4 w-4" />
                   <span>Digest</span>
                 </button>
               )}
+              {isAdmin && onSendReminder && (
+                <button
+                  type="button"
+                  onClick={onSendReminder}
+                  className={`${barButton} hidden lg:inline-flex`}
+                  title="Email all staff a reminder to send in their events before Friday's digest"
+                >
+                  <BellRing className="h-4 w-4" />
+                  <span>Reminder</span>
+                </button>
+              )}
               {onExportClick && (
                 <button
                   type="button"
                   onClick={onExportClick}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
+                  className={`${barButton} hidden lg:inline-flex`}
                   title="Export or subscribe to the calendar"
                 >
                   <Download className="h-4 w-4" />
@@ -163,7 +180,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenSubmissions}
-                  className="hidden md:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50/60 dark:text-slate-300 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
+                  className={`${barButton} hidden md:inline-flex`}
                   title="Review staff submissions"
                 >
                   <Inbox className="h-4 w-4" />
@@ -173,6 +190,17 @@ const Navbar: React.FC<NavbarProps> = ({
                       {pendingSubmissionsCount}
                     </span>
                   )}
+                </button>
+              )}
+              {!isAdmin && onOpenMyEvents && (
+                <button
+                  type="button"
+                  onClick={onOpenMyEvents}
+                  className={`${barButton} hidden md:inline-flex`}
+                  title="The events you sent in, and whether they are published yet"
+                >
+                  <CalendarCheck className="h-4 w-4" />
+                  <span>My events</span>
                 </button>
               )}
 
@@ -229,11 +257,6 @@ const Navbar: React.FC<NavbarProps> = ({
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
                     </div>
-                    {!isAdmin && onOpenMyEvents && (
-                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenMyEvents)} className={accountItem}>
-                        <CalendarCheck className="h-4 w-4 text-slate-400" /> My events
-                      </button>
-                    )}
                     {onChangePassword && (
                       <button type="button" role="menuitem" onClick={closeMenuAnd(onChangePassword)} className={accountItem}>
                         <KeyRound className="h-4 w-4 text-slate-400" /> Change password
@@ -312,7 +335,8 @@ const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <div className="space-y-0.5">
-                {/* New event, Inbox, My events, Digest and Change log are in the tab bar when it shows */}
+                {/* New event, Inbox, My events, Digest and Change log are in the tab bar when it shows;
+                    Inbox and My events in the top bar from tablet width */}
                 {primaryAction && !hasTabBar && (
                   <button type="button" onClick={closeMenuAnd(primaryAction)} className={`${menuItem} cta md:hidden !text-white bg-brand-600 hover:!bg-brand-700 mb-1`}>
                     <PlusCircle className="h-5 w-5" />
@@ -329,7 +353,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
                 {!isAdmin && onOpenMyEvents && !hasTabBar && (
-                  <button type="button" onClick={closeMenuAnd(onOpenMyEvents)} className={menuItem}>
+                  <button type="button" onClick={closeMenuAnd(onOpenMyEvents)} className={`${menuItem} md:hidden`}>
                     <CalendarCheck className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">My events</span>
                   </button>
@@ -339,6 +363,13 @@ const Navbar: React.FC<NavbarProps> = ({
                     <FileText className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Events digest</span>
                     <span className="text-xs text-slate-400">{isAdmin ? 'PDF · WhatsApp' : 'PDF'}</span>
+                  </button>
+                )}
+                {isAdmin && onSendReminder && (
+                  <button type="button" onClick={closeMenuAnd(onSendReminder)} className={menuItem}>
+                    <BellRing className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Send a reminder</span>
+                    <span className="text-xs text-slate-400">All staff</span>
                   </button>
                 )}
                 {isAdmin && onOpenStaff && (

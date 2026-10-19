@@ -2,6 +2,7 @@ import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
 import { groupDigestOccurrences, formatAlsoOnDates, type DigestEventGroup, monthShort } from './digestGrouping.ts';
 import { DIGEST_EMAIL_TO, DIGEST_EMAIL_CC } from '../constants/digestRecipients.ts';
+import { mailtoLink } from './mailto.ts';
 
 /**
  * Plain-text parts of the Events Digest (the covering email) and the date / link helpers the
@@ -166,17 +167,9 @@ export const generateDigestEmail = (
  */
 export const MAILTO_MAX_LENGTH = 2000;
 
-/** Addresses for a mailto: link, comma-separated, the "@" kept as is (RFC 6068) */
-const addressList = (addresses: string[]): string =>
-  addresses.map((a) => encodeURIComponent(a).replace(/%40/g, '@')).join(',');
-
-/** Start of a digest mailto: link, the recipients filled in: "mailto:to?cc=…&" */
-const mailtoStart = (): string =>
-  `mailto:${addressList(DIGEST_EMAIL_TO)}?` + (DIGEST_EMAIL_CC.length ? `cc=${addressList(DIGEST_EMAIL_CC)}&` : '');
-
-/** mailto: link with the digest recipients, the subject and the text (line breaks as CRLF, RFC 6068) */
+/** mailto: link with the digest recipients, the subject and the text */
 const toMailto = ({ subject, body }: DigestEmail): string =>
-  `${mailtoStart()}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`;
+  mailtoLink({ to: DIGEST_EMAIL_TO, cc: DIGEST_EMAIL_CC, subject, body });
 
 /**
  * Link that opens a new email to the digest recipients with the subject and text filled in. A mailto:
@@ -204,4 +197,4 @@ export const generateDigestMailto = (
 
 /** New email with the recipients and subject filled in: the formatted text is pasted in from the clipboard */
 export const generateDigestMailtoSubject = (startDate: Date, endDate: Date): string =>
-  `${mailtoStart()}subject=${encodeURIComponent(digestEmailSubject(startDate, endDate))}`;
+  mailtoLink({ to: DIGEST_EMAIL_TO, cc: DIGEST_EMAIL_CC, subject: digestEmailSubject(startDate, endDate) });

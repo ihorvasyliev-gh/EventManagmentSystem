@@ -27,6 +27,7 @@ import { useSubmissionActions } from './hooks/useSubmissionActions';
 import { useDeepLinks, eventShareLink } from './hooks/useDeepLinks';
 import { useAppShortcuts } from './hooks/useAppShortcuts';
 import { useChangeLogBadge } from './hooks/useChangeLogBadge';
+import { useReminderEmail } from './hooks/useReminderEmail';
 import { loadOrReload } from './utils/staleChunk';
 
 // Windows and pages load when first opened; after a deploy an old tab reloads instead of crashing
@@ -89,6 +90,7 @@ const AppContent: React.FC = () => {
   }, []);
   // Admins: the change log, and how many staff edits came in since it was last opened
   const changeLog = useChangeLogBadge(isAdmin, events);
+  const sendReminder = useReminderEmail();
   const [changeLogNewSince, setChangeLogNewSince] = useState<Date | null>(null);
   const [isChangeLogOpen, setIsChangeLogOpen] = useState(false);
   const { markSeen: markChangeLogSeen } = changeLog;
@@ -255,6 +257,7 @@ const AppContent: React.FC = () => {
         pendingSubmissionsCount={pendingSubmissions.length}
         onOpenSubmissions={openInbox}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
+        onSendReminder={isAdmin ? sendReminder : undefined}
         onOpenStaff={() => setIsStaffOpen(true)}
         onOpenStats={() => setIsStatsOpen(true)}
         onOpenChangeLog={openChangeLog}

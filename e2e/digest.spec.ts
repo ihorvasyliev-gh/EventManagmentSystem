@@ -125,6 +125,25 @@ test('staff preview and download the digest; sharing it is for admins', async ({
   await expect(flyers).not.toBeChecked();
 });
 
+test('an admin emails all staff a reminder to send in their events, formatted like the digest', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await mockSupabase(page);
+  await signIn(page);
+
+  await page.getByRole('button', { name: 'Reminder' }).click();
+  await expect(page.getByText('Reminder copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
+  const email = await page.evaluate(async () => {
+    const [item] = await navigator.clipboard.read();
+    return { html: await (await item.getType('text/html')).text(), text: await (await item.getType('text/plain')).text() };
+  });
+  expect(email.html).toContain('REMINDER');
+  expect(email.html).toContain('href="http://localhost:4173/submit"');
+  expect(email.html).toContain('Send in an event');
+  expect(email.html).toContain('href="mailto:ivasyliev@partnershipcork.ie"');
+  expect(email.text).toMatch(/before Friday \d+ \w+ so it makes it into the next Upcoming Events Digest/);
+  expect(email.text).toContain('Email ivasyliev@partnershipcork.ie.');
+});
+
 /** A one-page PDF with a line of text and a link, made by hand (offsets counted for the xref) */
 const tinyPdf = (): Buffer => {
   const objects = [

@@ -66,8 +66,9 @@ test('staff see what they sent in under My events, and whether it is on the cale
   await signIn(page);
   await expect(page.getByText('Job fair').first()).toBeVisible();
 
-  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
-  await page.getByRole('menuitem', { name: 'My events' }).click();
+  // In the top bar, in the place admins have the inbox (and the reminder to all staff is for admins)
+  await expect(page.getByRole('button', { name: 'Reminder' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'My events' }).click();
   const mine = page.getByRole('dialog', { name: 'My events' });
   await expect(mine.getByText('1 waiting for review')).toBeVisible();
   await expect(mine.getByRole('button', { name: /Coffee morning/ })).toContainText('Pending review');

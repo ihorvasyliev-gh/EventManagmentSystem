@@ -117,7 +117,8 @@ npx wrangler pages deploy dist --project-name=ccp-event-calendar
 ## Troubleshooting
 
 ### Сборка падает
-- Node.js 24.22.1 или новее (задан в `.nvmrc` и `.node-version`).
+- Node.js 24 (задан в `.nvmrc` и `.node-version`), не ниже 24.22.1.
+- `node-build: definition not found: 24.x.y`: в этих файлах должна быть только мажорная версия. Cloudflare ставит Node через node-build, где новый выпуск появляется позже, чем на nodejs.org, и точная свежая версия роняет сборку.
 - Проверьте, что `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` заданы для нужного окружения (Production / Preview).
 
 ### `/submit`, одобрение или аккаунты отвечают «not set up on the server» / 500

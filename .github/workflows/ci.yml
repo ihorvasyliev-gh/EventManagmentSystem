@@ -14,9 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The newest Node 24 release, not the older one the runner has cached
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
 
       - run: npm ci
@@ -38,6 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          check-latest: true
           cache: npm
 
       - run: npm ci

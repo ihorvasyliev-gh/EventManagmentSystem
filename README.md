@@ -57,7 +57,7 @@ Step-by-step instructions, including email templates, are in the [coordinator gu
 
 ## Quick start
 
-**You need:** Node.js 24+ and a [Supabase](https://supabase.com) project. [Cloudflare Pages](https://pages.cloudflare.com) is only needed for deployment.
+**You need:** Node.js 24.22.1 or newer (pinned in `.nvmrc`) and a [Supabase](https://supabase.com) project. [Cloudflare Pages](https://pages.cloudflare.com) is only needed for deployment.
 
 ```bash
 git clone https://github.com/ihorvasyliev-gh/EventManagmentSystem.git

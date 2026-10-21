@@ -117,7 +117,7 @@ npx wrangler pages deploy dist --project-name=ccp-event-calendar
 ## Troubleshooting
 
 ### Сборка падает
-- Node.js 24+ (задан в `.nvmrc`).
+- Node.js 24.22.1 или новее (задан в `.nvmrc` и `.node-version`).
 - Проверьте, что `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` заданы для нужного окружения (Production / Preview).
 
 ### `/submit`, одобрение или аккаунты отвечают «not set up on the server» / 500

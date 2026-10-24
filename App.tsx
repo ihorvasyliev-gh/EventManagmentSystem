@@ -42,6 +42,7 @@ const DigestViewPage = lazyWithReload(() => import('./pages/DigestViewPage'));
 const isDigestPage = () => window.location.pathname.startsWith('/digest/');
 const SubmitEventPage = lazyWithReload(() => import('./pages/SubmitEventPage'));
 const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
+const EmailRecipientsModal = lazyWithReload(() => import('./components/EmailRecipientsModal'));
 const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'));
 const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
 const ChangeLogModal = lazyWithReload(() => import('./components/ChangeLogModal'));
@@ -79,6 +80,7 @@ const AppContent: React.FC = () => {
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState(false);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
   const [isStaffOpen, setIsStaffOpen] = useState(false);
+  const [isRecipientsOpen, setIsRecipientsOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isMyEventsOpen, setIsMyEventsOpen] = useState(false);
@@ -259,6 +261,7 @@ const AppContent: React.FC = () => {
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
         onSendReminder={isAdmin ? sendReminder : undefined}
         onOpenStaff={() => setIsStaffOpen(true)}
+        onOpenEmailRecipients={() => setIsRecipientsOpen(true)}
         onOpenStats={() => setIsStatsOpen(true)}
         onOpenChangeLog={openChangeLog}
         changeLogCount={changeLog.count}
@@ -378,6 +381,12 @@ const AppContent: React.FC = () => {
       {isStaffOpen && isAdmin && (
         <Suspense fallback={null}>
           <StaffModal isOpen={isStaffOpen} onClose={() => setIsStaffOpen(false)} currentUserId={user.id} />
+        </Suspense>
+      )}
+
+      {isRecipientsOpen && isAdmin && (
+        <Suspense fallback={null}>
+          <EmailRecipientsModal isOpen={isRecipientsOpen} onClose={() => setIsRecipientsOpen(false)} />
         </Suspense>
       )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing, Mails } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
@@ -25,6 +25,8 @@ interface NavbarProps {
   onOpenSubmitEvent?: () => void;
   /** Admins: staff accounts and password resets */
   onOpenStaff?: () => void;
+  /** Admins: who the digest and reminder emails go to */
+  onOpenEmailRecipients?: () => void;
   /** Admins: event statistics for Board reports */
   onOpenStats?: () => void;
   /** Admins: who changed which event (staff change their own events without review) */
@@ -62,6 +64,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onSendReminder,
   onOpenSubmitEvent,
   onOpenStaff,
+  onOpenEmailRecipients,
   onOpenStats,
   onOpenChangeLog,
   changeLogCount = 0,
@@ -267,6 +270,11 @@ const Navbar: React.FC<NavbarProps> = ({
                         <Users className="h-4 w-4 text-slate-400" /> Staff accounts
                       </button>
                     )}
+                    {isAdmin && onOpenEmailRecipients && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenEmailRecipients)} className={accountItem}>
+                        <Mails className="h-4 w-4 text-slate-400" /> Email recipients
+                      </button>
+                    )}
                     {isAdmin && onOpenStats && (
                       <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenStats)} className={accountItem}>
                         <BarChart3 className="h-4 w-4 text-slate-400" /> Statistics
@@ -376,6 +384,13 @@ const Navbar: React.FC<NavbarProps> = ({
                   <button type="button" onClick={closeMenuAnd(onOpenStaff)} className={menuItem}>
                     <Users className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Staff accounts</span>
+                  </button>
+                )}
+                {isAdmin && onOpenEmailRecipients && (
+                  <button type="button" onClick={closeMenuAnd(onOpenEmailRecipients)} className={menuItem}>
+                    <Mails className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Email recipients</span>
+                    <span className="text-xs text-slate-400">To · CC · BCC</span>
                   </button>
                 )}
                 {isAdmin && onOpenStats && (

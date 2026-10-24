@@ -54,7 +54,7 @@ As the coordinator, your role is supported by the **CCP Event Calendar**, which 
 
 Every Wednesday afternoon, send an email to all CCP staff reminding them to submit any events taking place over the **following two weeks**.
 
-**The calendar can write it for you:** click **Reminder** in the top bar (on a phone or tablet, open the menu → **Send a reminder**). A new email opens to allstaff@partnershipcork.ie with the subject filled in, and a formatted reminder in the digest's look is copied: click into the message and press Ctrl+V (⌘V on a Mac) to paste it. It asks for events before this Friday (from Friday on, next Friday), has a **Send in an event** button to the form, and says to write to ivasyliev@partnershipcork.ie with questions or suggestions about the site. You can edit it before sending, or use the template below instead.
+**The calendar can write it for you:** click **Reminder** in the top bar (on a phone or tablet, open the menu → **Send a reminder**). A new email opens to allstaff@partnershipcork.ie (or whoever you set: see *Who the emails go to* below) with the subject filled in, and a formatted reminder in the digest's look is copied: click into the message and press Ctrl+V (⌘V on a Mac) to paste it. It asks for events before this Friday (from Friday on, next Friday), has a **Send in an event** button to the form, and says to write to ivasyliev@partnershipcork.ie with questions or suggestions about the site. You can edit it before sending, or use the template below instead.
 
 ### Direct Link to Share:
 > **Submission URL:** `https://ccp-event-calendar.pages.dev/submit`  
@@ -173,8 +173,8 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 
 ### 6. Open the covering email
 * Click **"Email"**. The digest PDF is uploaded (a few seconds) and a **formatted email** is copied: the CCP logo and colours, a greeting, a **Click here for details** button, every event with its date, time, category and venue (linked to Google Maps), where to send in an event. There is no sign-off: your own email signature goes underneath.
-* Your email app (e.g. Outlook) opens a new email with the subject filled in. **Click into the message and press `Ctrl + V`** (`⌘ V` on a Mac) to paste the formatted email. (A link from the browser can only fill in plain text, so the formatted version comes through the clipboard.)
-* Add the recipients and send. There is nothing to attach: the button opens the digest's page, without signing in, for **six months**; after that the link stops working.
+* Your email app (e.g. Outlook) opens a new email with the recipients and the subject filled in. **Click into the message and press `Ctrl + V`** (`⌘ V` on a Mac) to paste the formatted email. (A link from the browser can only fill in plain text, so the formatted version comes through the clipboard.)
+* Check the recipients and send. There is nothing to attach: the button opens the digest's page, without signing in, for **six months**; after that the link stops working.
 * If the browser doesn't allow copying, the email opens with a plain-text version (with the link) instead. If the upload fails (for example, no internet), the email has no link: attach the PDF from Step 4 by hand.
 
 ### 7. Just the link
@@ -269,6 +269,22 @@ Open the **account menu** (your name, top right) → **Statistics**. Pick a peri
 
 ### Exporting only some events
 Search or filter the calendar first (for example, a category), then click **Export**. It says *Your search or filters are on* and lets you choose **Only the events that match** or **All published events**; the heading shows how many will be exported.
+
+---
+
+## ✉️ Who the emails go to
+
+The **Email** button in the digest and the **Reminder** button open a new email with the recipients already filled in. Each has its own list:
+
+* **Events Digest:** To allstaff@partnershipcork.ie, CC martin_davoren@corkcity.ie and kieran_oconnell@corkcity.ie.
+* **Reminder:** To allstaff@partnershipcork.ie, nobody in CC.
+
+To change them: **Account menu** (your name, top right; on a phone, the menu) → **Email recipients**.
+1. Each email has a **To**, **CC** and **BCC** line. Type an address and press Enter, or paste several at once (straight from Outlook works, names and all).
+2. Click the **×** on an address to take it off. **Original addresses** puts back the list above.
+3. Click **Save**. It applies to every admin straight away, and the window shows who changed it last.
+
+People in **BCC** get the email without anyone seeing their address. You can still add or remove someone in the email itself before sending; that doesn't change the saved lists.
 
 ---
 

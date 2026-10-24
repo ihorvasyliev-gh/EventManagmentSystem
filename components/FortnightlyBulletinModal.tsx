@@ -8,6 +8,7 @@ import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject 
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { copyFormattedEmail, PASTE_KEYS } from '../utils/copyEmail';
 import { shareDigestPdf, fetchPreviousDigestIssue } from '../services/digestService';
+import { recipientsFor } from '../services/emailRecipientsService';
 import { buildDigestList } from '../utils/digestList';
 import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
 import { calculatePresetDateRange, formatLocalDate, type DateRangePreset } from '../utils/date';
@@ -330,16 +331,17 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
           return null;
         })
       : Promise.resolve(null);
+    const recipients = recipientsFor('digest');
     // Handed over still inside the click, as promises: Safari allows nothing later
     const copied = await copyFormattedEmail(
       link.then((pdfUrl) => generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl })),
       link.then((pdfUrl) => generateDigestEmail(periodEvents, startDate, endDate, { baseUrl, pdfUrl }).body)
     );
-    const pdfUrl = await link;
+    const [pdfUrl, to] = await Promise.all([link, recipients]);
     setBusy(null);
     window.location.href = copied
-      ? generateDigestMailtoSubject(startDate, endDate)
-      : generateDigestMailto(periodEvents, startDate, endDate, { baseUrl, pdfUrl });
+      ? generateDigestMailtoSubject(startDate, endDate, to)
+      : generateDigestMailto(periodEvents, startDate, endDate, { baseUrl, pdfUrl, recipients: to });
     const failed = shareable && !pdfUrl;
     if (copied) {
       showToast(

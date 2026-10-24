@@ -28,6 +28,10 @@ export interface BulletinOptions {
    * marks events added in the last week).
    */
   previousIssue?: DigestPreviousIssue | null;
+  /** The day the digest is issued (default today); an update keeps the day it went out */
+  issued?: Date;
+  /** An update of a digest that went out: when it was made, and the events marked UPDATED */
+  updated?: { at: Date; ids: Set<string> };
 }
 
 export type { DigestPreviousIssue };
@@ -89,6 +93,12 @@ export interface DigestData {
   isExecutive: boolean;
   /** The day the digest is issued */
   today: Date;
+  /** The day printed as "Issued" (an update keeps the day the digest went out) */
+  issued: Date;
+  /** An update: when it was made (null: as the digest went out) */
+  updatedAt: Date | null;
+  /** Ids of the events changed since the digest went out (an update marks them UPDATED) */
+  updatedIds: Set<string>;
   /** Published occurrences that start in the period */
   inPeriod: Event[];
   /** Occurrences of the same event merged into one entry */
@@ -157,7 +167,8 @@ export const collectDigestData = (events: Event[], options: BulletinOptions): Di
   const { since, newIds } = digestNewEvents(groups, options.previousIssue);
 
   return {
-    periodStart, periodEnd, isExecutive, today, inPeriod, groups, longPeriod: gridRows > 6, newSince: since, newIds, eventsByDay,
+    periodStart, periodEnd, isExecutive, today, issued: options.issued ?? new Date(),
+    updatedAt: options.updated?.at ?? null, updatedIds: options.updated?.ids ?? new Set(), inPeriod, groups, longPeriod: gridRows > 6, newSince: since, newIds, eventsByDay,
     eventDays, categories, gridStart, gridEnd, gridRows
   };
 };

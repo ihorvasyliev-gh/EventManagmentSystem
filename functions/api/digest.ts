@@ -7,24 +7,21 @@
  * guessed). Links work for six months: each new digest deletes the ones older than that.
  *
  * Optional fields `issued` (YYYY-MM-DD) and `eventIds` (a JSON array) record which events the
- * digest carried, so next week's digest marks NEW only the events this one didn't have.
+ * digest carried, so next week's digest marks NEW only the events this one didn't have, and
+ * that the PDF is that day's issue: every link to the week's digest shows its newest PDF
+ * (server/digestVersions.ts). `update=1` makes it an update of the issue `issued` names, after
+ * its events changed; `layout` and `flyers` let a later update look the same.
  * An optional `list` (JSON, see utils/digestList.ts) is kept beside the PDF as <name>.json:
  * the digest's page shows it as a list that reads well on a phone.
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
 import { contentMatchesType } from '../../server/files.ts';
-import { type IssueBucket, parseIssue, recordIssue } from '../../server/digestIssues.ts';
+import { parseIssue, recordIssue, isDigestLayout } from '../../server/digestIssues.ts';
+import { type DigestBucket, DIGEST_PREFIX, listDigestObjects } from '../../server/digestVersions.ts';
 import { parseDigestList } from '../../utils/digestList.ts';
 
-/** Listing as well as storing: old digests are found by their upload date */
-export interface DigestBucket extends IssueBucket {
-  list(options: { prefix: string; cursor?: string }): Promise<{
-    objects: Array<{ key: string; uploaded: Date }>;
-    truncated: boolean;
-    cursor?: string;
-  }>;
-}
+export { type DigestBucket, DIGEST_PREFIX };
 
 interface Env extends SupabaseEnv {
   BUCKET?: DigestBucket;
@@ -36,7 +33,6 @@ interface Context {
   waitUntil?: (promise: Promise<unknown>) => void;
 }
 
-export const DIGEST_PREFIX = 'digests/';
 /** How long a digest link works (about six months) */
 export const DIGEST_KEEP_DAYS = 183;
 /** Flyers make a digest large; R2 and the Workers request limit allow far more */
@@ -52,15 +48,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Deletes digests uploaded more than DIGEST_KEEP_DAYS ago; returns their keys */
 export const deleteOldDigests = async (bucket: DigestBucket, now = new Date()): Promise<string[]> => {
   const cutoff = now.getTime() - DIGEST_KEEP_DAYS * DAY_MS;
-  const old: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await bucket.list({ prefix: DIGEST_PREFIX, cursor });
-    page.objects.forEach((o) => {
-      if (new Date(o.uploaded).getTime() < cutoff) old.push(o.key);
-    });
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
+  const old = (await listDigestObjects(bucket)).filter((o) => new Date(o.uploaded).getTime() < cutoff).map((o) => o.key);
   for (const key of old) await bucket.delete(key);
   return old;
 };
@@ -87,6 +75,15 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   const file = form.get('file');
   if (!file || typeof file === 'string') return fail('No PDF found in the request.', 400);
+  // An update names the issue it updates
+  const update = form.get('update') === '1';
+  let ids: unknown = null;
+  try {
+    const eventIds = form.get('eventIds');
+    ids = typeof eventIds === 'string' ? JSON.parse(eventIds) : null;
+  } catch { /* not recorded */ }
+  const issue = parseIssue(form.get('issued'), ids);
+  if (update && !issue) return fail('Which digest is being updated? (issued and eventIds)', 400);
   if ((file.type || '').toLowerCase() !== 'application/pdf' || !(await contentMatchesType(file, 'application/pdf'))) {
     return fail('The digest must be a PDF.', 415);
   }
@@ -117,16 +114,18 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     }
   }
 
-  // Remember what this digest carried; a failure only means next week's marks everything NEW
-  const eventIds = form.get('eventIds');
-  let ids: unknown = null;
-  try {
-    ids = typeof eventIds === 'string' ? JSON.parse(eventIds) : null;
-  } catch { /* not recorded */ }
-  const issue = parseIssue(form.get('issued'), ids);
+  // Remember what this digest carried and that it is the issue's newest PDF; a failure only means
+  // next week's marks everything NEW, and this PDF counts as shared the day it was uploaded
   if (issue) {
+    const layout = form.get('layout');
+    const flyers = form.get('flyers');
     try {
-      await recordIssue(env.BUCKET, issue);
+      await recordIssue(env.BUCKET, issue, {
+        key,
+        ...(update ? { update: true as const } : {}),
+        ...(isDigestLayout(layout) ? { layout } : {}),
+        ...(flyers === '1' || flyers === '0' ? { flyers: flyers === '1' } : {})
+      });
     } catch (err) {
       console.error('Recording the digest issue failed:', err);
     }

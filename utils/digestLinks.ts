@@ -2,7 +2,8 @@
  * Links to shared digest PDFs, remembered on this device: clicking Email (or Copy link) again for
  * the same digest — same day, period, layout and events — reuses the link instead of uploading
  * the PDF again, even after the dialog was closed or the page reloaded. Any change to the events
- * in the period makes a new digest, and so a new link; links sent earlier keep their version.
+ * in the period makes a new PDF, and so a new link; every link to the week's digest opens its
+ * newest PDF (functions/api/digest-versions.ts).
  */
 import type { Event } from '../types.ts';
 import { eventContacts } from './contacts.ts';
@@ -25,17 +26,80 @@ export const digestPageUrl = (fileUrl: string, origin: string): string => {
   return new URL(`/digest/${path.slice(FILE_PREFIX.length).replace(/\.pdf$/i, '')}`, origin).toString();
 };
 
-/** For a digest page's path: the PDF to show, its file name and the period it covers ("12 – 26 October 2026") */
-export const digestFromPagePath = (pathname: string): { fileUrl: string; fileName: string; period: string | null } | null => {
-  const match = PAGE_RE.exec(pathname);
-  if (!match) return null;
-  const name = match[1].replace(/\.pdf$/i, '');
-  const fileName = `${name.slice(37)}.pdf`;
+/** A shared digest's PDF: its key in storage, its URL, file name and the period it covers */
+export interface DigestFile {
+  key: string;
+  fileUrl: string;
+  fileName: string;
+  /** "12 – 26 October 2026", or null when the name doesn't say */
+  period: string | null;
+  /** The period as YYYY-MM-DD, or null when the name doesn't say */
+  start: string | null;
+  end: string | null;
+}
+
+/** For a digest's name (<id>-<file name>, without .pdf): its PDF and the period it covers */
+const digestFromName = (name: string): DigestFile => {
   const dates = /(\d{4})-(\d{2})-(\d{2})-to-(\d{4})-(\d{2})-(\d{2})/.exec(name);
   const period = dates
     ? formatPeriodShort(new Date(+dates[1], +dates[2] - 1, +dates[3]), new Date(+dates[4], +dates[5] - 1, +dates[6]))
     : null;
-  return { fileUrl: `${FILE_PREFIX}${name}.pdf`, fileName, period };
+  return {
+    key: `digests/${name}.pdf`,
+    fileUrl: `${FILE_PREFIX}${name}.pdf`,
+    fileName: `${name.slice(37)}.pdf`,
+    period,
+    start: dates ? `${dates[1]}-${dates[2]}-${dates[3]}` : null,
+    end: dates ? `${dates[4]}-${dates[5]}-${dates[6]}` : null
+  };
+};
+
+/** For a digest page's path: the PDF to show, its file name and the period it covers ("12 – 26 October 2026") */
+export const digestFromPagePath = (pathname: string): DigestFile | null => {
+  const match = PAGE_RE.exec(pathname);
+  return match ? digestFromName(match[1].replace(/\.pdf$/i, '')) : null;
+};
+
+/** For a digest's key in storage (digests/<id>-<name>.pdf): the same */
+export const digestFromKey = (key: string): DigestFile | null => {
+  const match = /^digests\/(.+)\.pdf$/i.exec(key);
+  return match && PAGE_RE.test(`/digest/${match[1]}`) ? digestFromName(match[1]) : null;
+};
+
+/** Where a shared digest's events are kept as a list (beside its PDF) */
+export const digestListUrl = (digest: Pick<DigestFile, 'fileUrl'>): string => digest.fileUrl.replace(/\.pdf$/i, '.json');
+
+/** A week's digest as /api/digest-versions names it: its newest PDF, its day, and when it was updated */
+export interface DigestRef {
+  digest: DigestFile;
+  /** YYYY-MM-DD */
+  issued: string;
+  updatedAt: Date | null;
+}
+
+/** What a digest link shows (its week's newest PDF) and each week's, newest first */
+export interface DigestVersions {
+  latest: DigestRef;
+  archive: DigestRef[];
+}
+
+const refFrom = (value: unknown): DigestRef | null => {
+  if (!value || typeof value !== 'object') return null;
+  const r = value as Record<string, unknown>;
+  const digest = typeof r.key === 'string' ? digestFromKey(r.key) : null;
+  if (!digest || typeof r.issued !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(r.issued)) return null;
+  const updatedAt = typeof r.updatedAt === 'string' ? new Date(r.updatedAt) : null;
+  return { digest, issued: r.issued, updatedAt: updatedAt && !isNaN(updatedAt.getTime()) ? updatedAt : null };
+};
+
+/** The answer of /api/digest-versions, or null when it isn't one */
+export const parseDigestVersions = (value: unknown): DigestVersions | null => {
+  if (!value || typeof value !== 'object') return null;
+  const data = value as Record<string, unknown>;
+  const latest = refFrom(data.latest);
+  if (!latest) return null;
+  const archive = (Array.isArray(data.archive) ? data.archive : []).map(refFrom).filter((r): r is DigestRef => !!r);
+  return { latest, archive };
 };
 
 const MAX_REMEMBERED = 10;

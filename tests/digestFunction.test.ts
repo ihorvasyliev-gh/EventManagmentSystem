@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestPost, deleteOldDigests, digestListKey, DIGEST_KEEP_DAYS, type DigestBucket } from '../functions/api/digest.ts';
 import { onRequestGet as getIssues } from '../functions/api/digest-issues.ts';
+import { onRequestGet as getVersions } from '../functions/api/digest-versions.ts';
 import { ISSUES_KEY, MAX_ISSUES, readIssues } from '../server/digestIssues.ts';
 import { mockFetch, authRoutes, env } from './support/mockFetch.ts';
 import { contentDisposition, digestPageRedirect } from '../server/files.ts';
@@ -13,9 +14,11 @@ const digestBucket = (existing: Record<string, Date> = {}) => {
   const uploaded = new Map(Object.entries(existing));
   const contents = new Map<string, unknown>();
   const deleted: string[] = [];
+  // Each upload a second after the one before, so which is newest is clear
+  let puts = 0;
   const bucket: DigestBucket = {
     put: async (key: string, value: unknown) => {
-      uploaded.set(key, new Date());
+      uploaded.set(key, new Date(Date.now() + 1000 * puts++));
       contents.set(key, value);
       return {};
     },
@@ -119,7 +122,7 @@ test('a shared digest records its events; next week asks for the last one shared
   // Before anything was shared: none, so the first digest marks everything NEW
   let res = await getIssues({ request: askIssue('2026-10-12'), env: { ...env, BUCKET: bucket } });
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { issue: null });
+  assert.deepEqual(await res.json(), { issue: null, latest: null });
 
   assert.equal((await share(issueOf('2026-10-15', ['a', 'b']))).status, 201, 'a Thursday share');
   assert.equal((await share(issueOf('2026-10-16', ['a', 'c']))).status, 201, 'Friday');
@@ -127,10 +130,10 @@ test('a shared digest records its events; next week asks for the last one shared
 
   // The same week's Friday still compares with the week before (nothing then)
   res = await getIssues({ request: askIssue('2026-10-12'), env: { ...env, BUCKET: bucket } });
-  assert.deepEqual(await res.json(), { issue: null });
+  assert.equal((await res.json() as { issue: unknown }).issue, null);
   // The next week: Friday's issue, with everything shared that day
   res = await getIssues({ request: askIssue('2026-10-19'), env: { ...env, BUCKET: bucket } });
-  assert.deepEqual(await res.json(), { issue: { issued: '2026-10-16', ids: ['a', 'c', 'd'] } });
+  assert.deepEqual((await res.json() as { issue: unknown }).issue, { issued: '2026-10-16', ids: ['a', 'c', 'd'] });
 });
 
 test('a share without (or with broken) issue fields still works and records nothing', async () => {
@@ -143,7 +146,9 @@ test('a share without (or with broken) issue fields still works and records noth
   assert.equal(contents.has(ISSUES_KEY), false);
   // Ids that aren't ids are dropped
   assert.equal((await share({ issued: '2026-10-16', eventIds: JSON.stringify(['ok-1', '<script>', 7]) })).status, 201);
-  assert.deepEqual(await readIssues(bucket), [{ issued: '2026-10-16', ids: ['ok-1'] }]);
+  const [issue, ...rest] = await readIssues(bucket);
+  assert.deepEqual(rest, []);
+  assert.deepEqual({ issued: issue.issued, ids: issue.ids }, { issued: '2026-10-16', ids: ['ok-1'] });
 });
 
 test('about half a year of digests is kept', async () => {
@@ -183,4 +188,81 @@ test('the events as a list are kept beside the PDF, read back field by field; a 
   assert.equal((await onRequestPost({ request: send(pdf, 'admin-token', { list: '{"version":2}' }), env: { ...env, BUCKET: bucket } })).status, 201);
   assert.equal((await onRequestPost({ request: send(pdf, 'admin-token', { list: 'not json' }), env: { ...env, BUCKET: bucket } })).status, 201);
   assert.equal(contents.size, before + 2, 'only the two PDFs');
+});
+
+const keyOf = async (res: Response) => ((await res.json()) as { url: string }).url.slice('/api/file/'.length);
+const askVersions = (key: string) => new Request(`https://app.test/api/digest-versions?key=${encodeURIComponent(key)}`);
+type Ref = { key: string; issued: string; updatedAt: string | null };
+
+test('every link to a week\'s digest shows its newest PDF, and the archive has each week\'s newest', async () => {
+  mockFetch(authRoutes);
+  // Shared before issues recorded their PDFs: they belong to the day they were uploaded, in Ireland
+  const legacy = 'digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events-2026-10-09-to-2026-10-23.pdf';
+  const lateSunday = 'digests/0f0f0f0f-0000-0000-0000-000000000002-CCP-Upcoming-Events-2026-10-19-to-2026-11-02.pdf';
+  const { bucket } = digestBucket({
+    [legacy]: new Date('2026-10-09T09:30:00Z'),
+    // 00:30 on Monday 19 October in Ireland: that week's
+    [lateSunday]: new Date('2026-10-18T23:30:00Z')
+  });
+  const share = (fields: Record<string, string>) => onRequestPost({ request: send(pdf, 'admin-token', fields), env: { ...env, BUCKET: bucket } });
+  const versions = async (key: string) => {
+    const res = await getVersions({ request: askVersions(key), env: { BUCKET: bucket } });
+    assert.equal(res.status, 200);
+    return await res.json() as { latest: Ref; archive: Ref[] };
+  };
+
+  const friday = await keyOf(await share({ ...issueOf('2026-10-23', ['a']), layout: 'compact', flyers: '0' }));
+  // A digest shared earlier in the week (on Monday, in Ireland) is behind Friday's
+  assert.equal((await versions(lateSunday)).latest.key, friday);
+  assert.equal((await versions(friday)).latest.updatedAt, null, 'as it went out');
+
+  // An event changed: the update is what Friday's links show from now on
+  const update = await keyOf(await share({ ...issueOf('2026-10-23', ['a', 'b']), update: '1' }));
+  const after = await versions(friday);
+  assert.equal(after.latest.key, update);
+  assert.equal(after.latest.issued, '2026-10-23');
+  assert.ok(after.latest.updatedAt && !isNaN(Date.parse(after.latest.updatedAt)));
+  assert.deepEqual(after.archive.map((r) => [r.key, r.issued]), [[update, '2026-10-23'], [legacy, '2026-10-09']], 'one a week, newest first');
+  // The week before keeps its own digest
+  assert.equal((await versions(legacy)).latest.key, legacy);
+
+  // What it carried counts for next week's NEW marks either way
+  const issue = (await readIssues(bucket)).find((i) => i.issued === '2026-10-23');
+  assert.deepEqual(issue?.ids, ['a', 'b']);
+  assert.deepEqual(issue?.versions, [{ key: friday, layout: 'compact', flyers: false }, { key: update, update: true }]);
+});
+
+test('a digest link that isn\'t one, or is no longer kept, lists nothing', async () => {
+  const { bucket } = digestBucket({ 'digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events.pdf': new Date() });
+  const ask = (key: string) => getVersions({ request: askVersions(key), env: { BUCKET: bucket } });
+  assert.equal((await ask('digests/0f0f0f0f-0000-0000-0000-000000000009-CCP-Upcoming-Events.pdf')).status, 404);
+  assert.equal((await ask('meta/digest-issues.json')).status, 400);
+  assert.equal((await ask('digests/../meta/digest-issues.json')).status, 400);
+  assert.equal((await ask('digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events.json')).status, 400, 'a list is not a digest');
+  assert.equal((await ask('digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events.pdf')).status, 200);
+});
+
+test('an update says which digest it updates; admins are told the latest digest, to update it', async () => {
+  mockFetch(authRoutes);
+  // Recorded before issues kept their PDFs, like the digest that went out on 23 October
+  const sent = 'digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events-2026-10-23-to-2026-11-06.pdf';
+  const { bucket } = digestBucket({ [sent]: new Date('2026-10-23T09:05:00Z') });
+  await bucket.put(ISSUES_KEY, new Blob([JSON.stringify([{ issued: '2026-10-23', ids: ['a'] }])]));
+  const share = (fields: Record<string, string>) => onRequestPost({ request: send(pdf, 'admin-token', fields), env: { ...env, BUCKET: bucket } });
+  const latest = async () => {
+    const res = await getIssues({ request: askIssue('2026-10-26'), env: { ...env, BUCKET: bucket } });
+    return (await res.json() as { latest: unknown }).latest;
+  };
+
+  assert.deepEqual(await latest(), { issued: '2026-10-23', key: sent, base: sent });
+  assert.equal((await share({ update: '1' })).status, 400, 'without the issue it updates');
+  assert.equal((await share({ update: '1', issued: 'Friday', eventIds: '[]' })).status, 400);
+
+  const first = await keyOf(await share({ ...issueOf('2026-10-23', ['a']), update: '1', layout: 'executive', flyers: '1' }));
+  assert.deepEqual(await latest(), { issued: '2026-10-23', key: first, base: sent, layout: 'executive', flyers: true });
+  // A second update still marks what changed since the PDF that went out
+  const second = await keyOf(await share({ ...issueOf('2026-10-23', ['a']), update: '1', layout: 'executive', flyers: '1' }));
+  assert.deepEqual(await latest(), { issued: '2026-10-23', key: second, base: sent, layout: 'executive', flyers: true });
+  const res = await getVersions({ request: askVersions(sent), env: { BUCKET: bucket } });
+  assert.equal((await res.json() as { latest: Ref }).latest.key, second, 'the email that went out shows the latest');
 });

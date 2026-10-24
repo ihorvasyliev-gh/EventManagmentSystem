@@ -23,7 +23,7 @@ const TILE_H = 15;
 // Under the thumbnail when the flyer is also printed large at the end: "FLYER · P. 5"
 const FLYER_TAG_H = 4.4;
 
-/** A chip after the category: raspberry ("3 DATES") or green ("NEW") */
+/** A chip after the category: raspberry ("3 DATES"), green ("NEW") or solid raspberry ("UPDATED") */
 interface Chip {
   text: string;
   fg: Rgb;
@@ -123,6 +123,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
     : `${clock(start)} – ${clock(end)}`;
   const dateChip = (text: string): Chip => ({ text, fg: BRAND, bg: BRAND_TINT, border: BRAND_TINT_BORDER });
   const chips: Chip[] = [
+    ...(ctx.updatedIds.has(ev.id) ? [{ text: 'UPDATED', fg: WHITE, bg: BRAND, border: BRAND }] : []),
     ...(ctx.newIds.has(ev.id) ? [{ text: 'NEW', fg: GREEN_DARK, bg: GREEN_TINT, border: GREEN_TINT_BORDER }] : []),
     ...(multi && end ? [dateChip(`${dayCountInclusive(start, end)} DAYS`)] : []),
     ...(group.occurrences.length > 1 ? [dateChip(`${group.occurrences.length} DATES`)] : [])

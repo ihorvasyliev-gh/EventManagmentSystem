@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { digestKeyOf, rememberedDigestLink, rememberDigestLink, digestPageUrl, digestFromPagePath } from '../utils/digestLinks.ts';
+import {
+  digestKeyOf, rememberedDigestLink, rememberDigestLink, digestPageUrl, digestFromPagePath, digestFromKey, digestListUrl, parseDigestVersions
+} from '../utils/digestLinks.ts';
 import type { Event } from '../types.ts';
 
 const store = new Map<string, string>();
@@ -61,11 +63,37 @@ test('a shared digest is linked to its page, which finds the file and the period
   const page = digestPageUrl(`/api/file/digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`, 'https://ccp.test');
   assert.equal(page, `https://ccp.test/digest/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26`);
   assert.deepEqual(digestFromPagePath(new URL(page).pathname), {
+    key: `digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`,
     fileUrl: `/api/file/digests/${id}-CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf`,
     fileName: 'CCP-Upcoming-Events-2026-10-12-to-2026-10-26.pdf',
-    period: '12 – 26 October 2026'
+    period: '12 – 26 October 2026',
+    start: '2026-10-12',
+    end: '2026-10-26'
   });
   assert.equal(digestFromPagePath(`/digest/${id}-notes`)?.period, null);
   assert.equal(digestFromPagePath('/digest/../api/staff'), null);
   assert.equal(digestFromPagePath('/digest/not-an-id-name'), null);
+});
+
+test('a digest found by its key in storage, and the answer naming what a link shows and the other weeks', () => {
+  const id = '0f0f0f0f-0000-0000-0000-000000000000';
+  const key = `digests/${id}-CCP-Upcoming-Events-2026-10-23-to-2026-11-06.pdf`;
+  const digest = digestFromKey(key)!;
+  assert.equal(digest.fileUrl, `/api/file/${key}`);
+  assert.equal(digest.period, '23 October – 6 November 2026');
+  assert.deepEqual([digest.start, digest.end], ['2026-10-23', '2026-11-06']);
+  assert.equal(digestListUrl(digest), `/api/file/digests/${id}-CCP-Upcoming-Events-2026-10-23-to-2026-11-06.json`);
+  assert.equal(digestFromKey('meta/digest-issues.json'), null);
+  assert.equal(digestFromKey(`digests/../${id}-x.pdf`), null);
+
+  const older = `digests/${id.replace(/0$/, '1')}-CCP-Upcoming-Events-2026-10-16-to-2026-10-30.pdf`;
+  const versions = parseDigestVersions({
+    latest: { key, issued: '2026-10-23', updatedAt: '2026-10-26T10:00:00.000Z' },
+    archive: [{ key, issued: '2026-10-23', updatedAt: '2026-10-26T10:00:00.000Z' }, { key: older, issued: '2026-10-16', updatedAt: null }, { key: 'nope', issued: 'x' }]
+  })!;
+  assert.equal(versions.latest.digest.key, key);
+  assert.equal(versions.latest.updatedAt?.toISOString(), '2026-10-26T10:00:00.000Z');
+  assert.deepEqual(versions.archive.map((r) => [r.digest.key, r.updatedAt]), [[key, versions.latest.updatedAt], [older, null]]);
+  assert.equal(parseDigestVersions({ error: 'This digest is no longer available.' }), null);
+  assert.equal(parseDigestVersions(null), null);
 });

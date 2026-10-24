@@ -1,19 +1,23 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2, MoreHorizontal
+  FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2, MoreHorizontal,
+  RefreshCw
 } from 'lucide-react';
 import { type Event } from '../types';
 import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from '../utils/pdfExport';
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { copyFormattedEmail, PASTE_KEYS } from '../utils/copyEmail';
-import { shareDigestPdf, fetchPreviousDigestIssue } from '../services/digestService';
+import { shareDigestPdf, fetchDigestIssues, type SentDigest } from '../services/digestService';
 import { recipientsFor } from '../services/emailRecipientsService';
-import { buildDigestList } from '../utils/digestList';
-import { digestKeyOf, rememberedDigestLink, rememberDigestLink } from '../utils/digestLinks';
+import { buildDigestList, parseDigestList, digestListChanges, markDigestUpdate, type DigestList } from '../utils/digestList';
+import {
+  digestKeyOf, rememberedDigestLink, rememberDigestLink, digestFromKey, digestFromPagePath, digestListUrl
+} from '../utils/digestLinks';
 import { calculatePresetDateRange, formatLocalDate, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart } from '../utils/digestGrouping';
+import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart, monthShort } from '../utils/digestGrouping';
+import { WEEKDAYS_LONG } from '../utils/digestText';
 import type { DigestPreviousIssue } from '../utils/pdf/digest/context';
 import { useToast } from '../contexts/ToastContext';
 import { getCategoryDotColor } from './WeekView';
@@ -83,6 +87,35 @@ const copyText = async (text: Promise<string>): Promise<void> => {
   }
 };
 
+/** A digest can be updated for a week after it went out: then the next one is due */
+const UPDATE_DAYS = 7;
+
+/** A shared digest's list of events (beside its PDF), or null when it has none or can't be had */
+const fetchDigestList = async (key: string): Promise<DigestList | null> => {
+  const file = digestFromKey(key);
+  if (!file) return null;
+  try {
+    const res = await fetch(digestListUrl(file));
+    return res.ok ? parseDigestList(await res.json()) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** "today" or "on Fri 23 Oct" */
+const sentOn = (day: Date): string =>
+  formatLocalDate(day) === formatLocalDate(new Date())
+    ? 'today'
+    : `on ${WEEKDAYS_LONG[day.getDay()].slice(0, 3)} ${day.getDate()} ${monthShort(day)}`;
+
+/** "Coffee morning", "Coffee morning and Job fair", "A, B, C and 2 more" */
+const nameEvents = (titles: string[]): string => {
+  const shown = titles.slice(0, 3);
+  const more = titles.length - shown.length;
+  if (more > 0) return `${shown.join(', ')} and ${more} more`;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}` : shown.join('');
+};
+
 const spinner = <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />;
 
 const fmtDay = (d: Date) => d.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -140,7 +173,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [format, setFormat] = useState<'executive' | 'compact'>(() => (readPref(FORMAT_KEY) === 'compact' ? 'compact' : 'executive'));
   // On unless turned off on this device
   const [printFlyers, setPrintFlyers] = useState(() => readPref(FLYERS_KEY) !== 'off');
-  const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | null>(null);
+  const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | 'update' | null>(null);
   const [copied, setCopied] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -162,23 +195,55 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
    */
   const previousIssue = useRef<Promise<DigestPreviousIssue | null | undefined>>(Promise.resolve(undefined));
 
+  /**
+   * Admins: the latest digest shared, while it can still be updated, and its events as its link
+   * shows them now (null: its list can't be had). When an event in it changes, the dialog offers
+   * to update it, so the email that already went out shows the change.
+   */
+  const [sent, setSent] = useState<{ digest: SentDigest; list: DigestList | null } | null>(null);
+
   // Always start from the default fortnight when the dialog opens
   useEffect(() => {
-    if (isOpen) {
-      previousIssue.current = fetchPreviousDigestIssue(formatLocalDate(digestWeekStart(new Date())))
-        .then((issue) => issue && { issued: new Date(`${issue.issued}T00:00:00`), ids: issue.ids })
-        .catch((err) => {
-          console.warn('Looking up the last digest failed:', err);
-          return undefined;
-        });
-      setActivePreset('2weeks');
-      const range = calculatePresetDateRange('2weeks', { events });
-      setStartDateStr(range.startDateStr);
-      setEndDateStr(range.endDateStr);
+    if (!isOpen) return;
+    let cancelled = false;
+    const issues = fetchDigestIssues(formatLocalDate(digestWeekStart(new Date())));
+    previousIssue.current = issues
+      .then(({ previous }) => previous && { issued: new Date(`${previous.issued}T00:00:00`), ids: previous.ids })
+      .catch((err) => {
+        console.warn('Looking up the last digest failed:', err);
+        return undefined;
+      });
+    setSent(null);
+    if (canShare) {
+      issues.then(async ({ latest }) => {
+        if (!latest || Date.now() >= new Date(`${latest.issued}T00:00:00`).getTime() + UPDATE_DAYS * 86400000) return;
+        const list = await fetchDigestList(latest.key);
+        if (!cancelled) setSent({ digest: latest, list });
+      }).catch(() => { /* no update offered */ });
     }
+    setActivePreset('2weeks');
+    const range = calculatePresetDateRange('2weeks', { events });
+    setStartDateStr(range.startDateStr);
+    setEndDateStr(range.endDateStr);
+    return () => {
+      cancelled = true;
+    };
     // Reset only when the dialog opens, not on every events refresh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  /** The sent digest's period, and the events in it that read differently now (null: can't tell) */
+  const sentState = useMemo(() => {
+    const file = sent && digestFromKey(sent.digest.key);
+    if (!sent || !file?.start || !file.end) return null;
+    const start = new Date(`${file.start}T00:00:00`);
+    const end = new Date(`${file.end}T23:59:59.999`);
+    if (!sent.list) return { start, end, changed: null };
+    const now = buildDigestList(expandRecurringEvents(events, start, end, recurrenceExceptions), { startDate: start, endDate: end });
+    const { changed, added, removed } = digestListChanges(sent.list, now);
+    return { start, end, changed: [...changed, ...added, ...removed].map((e) => e.title) };
+  }, [sent, events, recurrenceExceptions]);
+  const offerUpdate = !!sentState && (sentState.changed === null || sentState.changed.length > 0);
 
   const handleSelectPreset = (preset: DateRangePreset) => {
     setActivePreset(preset);
@@ -279,6 +344,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
         ids: groups.map((g) => g.event.id)
       }, list);
       rememberDigestLink(key, result);
+      // The newest digest now: what it updated earlier is behind it
+      setSent(null);
       return result.url;
     })();
     shared.current = { key, link };
@@ -368,6 +435,52 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       console.error('Sharing the digest PDF failed:', err);
       const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
       showToast(`The link could not be made${reason}. Please try again.`, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Makes the sent digest again from the events as they are now (same period, layout and flyers,
+   * same issue day) and shares it as its update: every link to it shows the new PDF, with the
+   * events changed since it went out marked UPDATED. Nothing needs sending again.
+   */
+  const handleUpdate = async () => {
+    if (!sent || !sentState) return;
+    const { digest } = sent;
+    const { start, end } = sentState;
+    setBusy('update');
+    try {
+      const issued = new Date(`${digest.issued}T00:00:00`);
+      const occurrences = expandRecurringEvents(events, start, end, recurrenceExceptions);
+      // NEW stays as it was: what the digest before it didn't have
+      const previous = await fetchDigestIssues(formatLocalDate(digestWeekStart(issued))).then(
+        ({ previous: p }) => p && { issued: new Date(`${p.issued}T00:00:00`), ids: p.ids },
+        () => undefined
+      );
+      // UPDATED: what changed since the PDF that went out (not since an earlier update)
+      const wentOut = digest.base === digest.key ? sent.list : await fetchDigestList(digest.base);
+      const { list, updatedIds } = markDigestUpdate(
+        buildDigestList(occurrences, { startDate: start, endDate: end, previousIssue: previous }), wentOut
+      );
+      const layout = digest.layout ?? format;
+      const flyers = digest.flyers ?? printFlyers;
+      const blob = await generateEventsDigestPDF(occurrences, {
+        startDate: start, endDate: end, format: layout, printableFlyers: flyers, output: 'blob',
+        previousIssue: previous, issued, updated: { at: new Date(), ids: updatedIds }
+      });
+      if (!blob) throw new Error('the PDF could not be made');
+      const result = await shareDigestPdf(blob, digestFileName(start, end), {
+        issued: digest.issued,
+        ids: list.entries.flatMap((e) => (e.id ? [e.id] : []))
+      }, list, { layout, flyers, update: true });
+      const key = digestFromPagePath(new URL(result.url).pathname)?.key;
+      setSent(key ? { digest: { ...digest, key }, list } : null);
+      showToast('Digest updated — the link people already have now shows the changes', 'success');
+    } catch (err) {
+      console.error('Updating the digest failed:', err);
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
+      showToast(`The digest could not be updated${reason}. Please try again.`, 'error');
     } finally {
       setBusy(null);
     }
@@ -487,6 +600,31 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       footer={footer}
     >
       <div className="space-y-6">
+        {offerUpdate && sent && sentState && (
+          <section aria-labelledby="digest-update" className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-sm text-amber-900 dark:text-amber-200">
+            <RefreshCw className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <div className="flex-1 min-w-0">
+              <h3 id="digest-update" className="font-semibold">
+                {sentState.changed ? 'Changed since the digest went out ' : 'Changed an event in the digest that went out '}
+                <span className="whitespace-nowrap">{sentOn(new Date(`${sent.digest.issued}T00:00:00`))}{sentState.changed ? '' : '?'}</span>
+              </h3>
+              <p className="mt-0.5 [overflow-wrap:anywhere]">
+                {sentState.changed && `${sentState.changed.length === 1 ? '1 event' : `${sentState.changed.length} events`}: ${nameEvents(sentState.changed)}. `}
+                Update it, and the link people already have shows the latest, with the changes marked. No need to send it again.
+              </p>
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={busy !== null}
+                className="cta mt-2.5 inline-flex items-center gap-2 h-10 px-4 rounded !text-xs tracking-[0.1em] text-white bg-amber-700 hover:bg-amber-800 shadow-sm transition-colors disabled:opacity-50"
+              >
+                {busy === 'update' ? spinner : <RefreshCw className="w-4 h-4 shrink-0" />}
+                {busy === 'update' ? 'Updating…' : 'Update digest'}
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* 1. Period */}
         <section aria-labelledby="digest-period">
           <h3 id="digest-period" className="eyebrow mb-3">
@@ -565,7 +703,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                     <opt.icon className={`w-4 h-4 shrink-0 ${active ? 'text-brand-600 dark:text-brand-300' : 'text-slate-400'}`} />
                     {opt.name}
                   </span>
-                  <span className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{opt.hint}</span>
+                  <span className="hidden sm:block text-xs text-slate-600 dark:text-slate-400 mt-0.5">{opt.hint}</span>
                 </button>
               );
             })}

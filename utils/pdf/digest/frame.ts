@@ -38,7 +38,7 @@ const drawBrandStripe = ({ doc, geo: { W }, kit: { fill } }: DigestContext) => {
 
 /** Page 1: logo, "Upcoming Events" and the period */
 export const drawHero = (ctx: DigestContext) => {
-  const { doc, periodStart, periodEnd, geo: { W, M }, kit: { font, color, spaced, txt, stroke } } = ctx;
+  const { doc, periodStart, periodEnd, issued, updatedAt, geo: { W, M }, kit: { font, color, spaced, txt, stroke } } = ctx;
   drawBrandStripe(ctx);
   drawLogo(ctx, M, 10, 13);
 
@@ -47,8 +47,8 @@ export const drawHero = (ctx: DigestContext) => {
   spaced('EVENTS DIGEST', W - M, 14.5, 0.6, 'right');
   font('regular', 8);
   color(MUTED);
-  const issued = new Date();
-  doc.text(`Issued ${WEEKDAYS_LONG[issued.getDay()].slice(0, 3)} ${issued.getDate()} ${monthShort(issued)} ${issued.getFullYear()}`, W - M, 19.5, { align: 'right' });
+  const day = (d: Date) => `${WEEKDAYS_LONG[d.getDay()].slice(0, 3)} ${d.getDate()} ${monthShort(d)}`;
+  doc.text(`Issued ${day(issued)} ${issued.getFullYear()}${updatedAt ? ` · Updated ${day(updatedAt)}` : ''}`, W - M, 19.5, { align: 'right' });
 
   font('semibold', 25);
   color(INK);

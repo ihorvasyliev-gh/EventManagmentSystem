@@ -8,16 +8,14 @@ import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { copyFormattedEmail, PASTE_KEYS } from '../utils/copyEmail';
-import { shareDigestPdf, fetchDigestIssues, type SentDigest } from '../services/digestService';
+import { shareDigestPdf, fetchDigestIssues, fetchDigestList, type SentDigest } from '../services/digestService';
 import { recipientsFor } from '../services/emailRecipientsService';
-import { buildDigestList, parseDigestList, digestListChanges, markDigestUpdate, type DigestList } from '../utils/digestList';
-import {
-  digestKeyOf, rememberedDigestLink, rememberDigestLink, digestFromKey, digestFromPagePath, digestListUrl
-} from '../utils/digestLinks';
+import { buildDigestList, markDigestUpdate } from '../utils/digestList';
+import { digestKeyOf, rememberedDigestLink, rememberDigestLink, digestFromPagePath } from '../utils/digestLinks';
+import { isUpdatable, issuedDay, sentDigestChanges, sentOn, nameEvents, type SentDigestState } from '../utils/sentDigest';
 import { calculatePresetDateRange, formatLocalDate, type DateRangePreset } from '../utils/date';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart, monthShort } from '../utils/digestGrouping';
-import { WEEKDAYS_LONG } from '../utils/digestText';
+import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart } from '../utils/digestGrouping';
 import type { DigestPreviousIssue } from '../utils/pdf/digest/context';
 import { useToast } from '../contexts/ToastContext';
 import { getCategoryDotColor } from './WeekView';
@@ -85,35 +83,6 @@ const copyText = async (text: Promise<string>): Promise<void> => {
     document.execCommand('copy');
     document.body.removeChild(input);
   }
-};
-
-/** A digest can be updated for a week after it went out: then the next one is due */
-const UPDATE_DAYS = 7;
-
-/** A shared digest's list of events (beside its PDF), or null when it has none or can't be had */
-const fetchDigestList = async (key: string): Promise<DigestList | null> => {
-  const file = digestFromKey(key);
-  if (!file) return null;
-  try {
-    const res = await fetch(digestListUrl(file));
-    return res.ok ? parseDigestList(await res.json()) : null;
-  } catch {
-    return null;
-  }
-};
-
-/** "today" or "on Fri 23 Oct" */
-const sentOn = (day: Date): string =>
-  formatLocalDate(day) === formatLocalDate(new Date())
-    ? 'today'
-    : `on ${WEEKDAYS_LONG[day.getDay()].slice(0, 3)} ${day.getDate()} ${monthShort(day)}`;
-
-/** "Coffee morning", "Coffee morning and Job fair", "A, B, C and 2 more" */
-const nameEvents = (titles: string[]): string => {
-  const shown = titles.slice(0, 3);
-  const more = titles.length - shown.length;
-  if (more > 0) return `${shown.join(', ')} and ${more} more`;
-  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}` : shown.join('');
 };
 
 const spinner = <span className="w-4 h-4 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />;
@@ -200,7 +169,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
    * shows them now (null: its list can't be had). When an event in it changes, the dialog offers
    * to update it, so the email that already went out shows the change.
    */
-  const [sent, setSent] = useState<{ digest: SentDigest; list: DigestList | null } | null>(null);
+  const [sent, setSent] = useState<SentDigestState<SentDigest> | null>(null);
 
   // Always start from the default fortnight when the dialog opens
   useEffect(() => {
@@ -216,7 +185,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     setSent(null);
     if (canShare) {
       issues.then(async ({ latest }) => {
-        if (!latest || Date.now() >= new Date(`${latest.issued}T00:00:00`).getTime() + UPDATE_DAYS * 86400000) return;
+        if (!latest || !isUpdatable(latest.issued)) return;
         const list = await fetchDigestList(latest.key);
         if (!cancelled) setSent({ digest: latest, list });
       }).catch(() => { /* no update offered */ });
@@ -233,16 +202,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   }, [isOpen]);
 
   /** The sent digest's period, and the events in it that read differently now (null: can't tell) */
-  const sentState = useMemo(() => {
-    const file = sent && digestFromKey(sent.digest.key);
-    if (!sent || !file?.start || !file.end) return null;
-    const start = new Date(`${file.start}T00:00:00`);
-    const end = new Date(`${file.end}T23:59:59.999`);
-    if (!sent.list) return { start, end, changed: null };
-    const now = buildDigestList(expandRecurringEvents(events, start, end, recurrenceExceptions), { startDate: start, endDate: end });
-    const { changed, added, removed } = digestListChanges(sent.list, now);
-    return { start, end, changed: [...changed, ...added, ...removed].map((e) => e.title) };
-  }, [sent, events, recurrenceExceptions]);
+  const sentState = useMemo(() => sentDigestChanges(sent, events, recurrenceExceptions), [sent, events, recurrenceExceptions]);
   const offerUpdate = !!sentState && (sentState.changed === null || sentState.changed.length > 0);
 
   const handleSelectPreset = (preset: DateRangePreset) => {
@@ -451,7 +411,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     const { start, end } = sentState;
     setBusy('update');
     try {
-      const issued = new Date(`${digest.issued}T00:00:00`);
+      const issued = issuedDay(digest.issued);
       const occurrences = expandRecurringEvents(events, start, end, recurrenceExceptions);
       // NEW stays as it was: what the digest before it didn't have
       const previous = await fetchDigestIssues(formatLocalDate(digestWeekStart(issued))).then(
@@ -606,7 +566,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
             <div className="flex-1 min-w-0">
               <h3 id="digest-update" className="font-semibold">
                 {sentState.changed ? 'Changed since the digest went out ' : 'Changed an event in the digest that went out '}
-                <span className="whitespace-nowrap">{sentOn(new Date(`${sent.digest.issued}T00:00:00`))}{sentState.changed ? '' : '?'}</span>
+                <span className="whitespace-nowrap">{sentOn(issuedDay(sent.digest.issued))}{sentState.changed ? '' : '?'}</span>
               </h3>
               <p className="mt-0.5 [overflow-wrap:anywhere]">
                 {sentState.changed && `${sentState.changed.length === 1 ? '1 event' : `${sentState.changed.length} events`}: ${nameEvents(sentState.changed)}. `}

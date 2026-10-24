@@ -392,3 +392,57 @@ test('after an event in the digest that went out changes, an admin updates it fr
   // Up to date now
   await expect(banner).toHaveCount(0);
 });
+
+test('admins see in the inbox and above the calendar that the digest that went out has changed, until it is updated', async ({ page }) => {
+  const eventId = '10000000-0000-0000-0000-000000000001';
+  await mockSupabase(page, {
+    events: [eventRow({ id: eventId, title: 'Community garden meitheal', date: daysFromNow(2), end_date: daysFromNow(2, 13) })]
+  });
+  const period = `${irishDay()}-to-${irishDay(14)}`;
+  const sent = digestId(1, period);
+  const update = digestId(2, period);
+  let shown = sent;
+  let updatedList: unknown = null;
+  await page.route('**/api/digest-issues?*', (route) => route.fulfill({ json: {
+    issue: null,
+    latest: { issued: irishDay(), key: `digests/${shown}.pdf`, base: `digests/${sent}.pdf`, layout: 'executive', flyers: false }
+  } }));
+  // As it went out: the wrong day
+  await page.route(`**/api/file/digests/${sent}.json`, (route) => route.fulfill({ json: {
+    version: 1, period: '', entries: [{ id: eventId, day: 'Thursday 1 January', title: 'Community garden meitheal', category: 'Community & Family',
+      time: '10:00 – 13:00', where: 'Heron House', also: '', description: 'A short description.', contacts: [], poster: '', isNew: true }]
+  } }));
+  await page.route(`**/api/file/digests/${update}.json`, (route) => route.fulfill({ json: updatedList }));
+  await page.route('**/api/digest', async (route) => {
+    const body = route.request().postDataBuffer()?.toString('utf8') ?? '';
+    updatedList = JSON.parse(/name="list"\r\n\r\n([^\r]*)/.exec(body)?.[1] ?? 'null');
+    shown = update;
+    await route.fulfill({ status: 201, json: { url: `/api/file/digests/${update}.pdf`, expiresAt: new Date(Date.now() + 183 * 86400000).toISOString() } });
+  });
+  await signIn(page);
+
+  // Above the calendar, like submissions waiting for review, and counted in the inbox
+  const banner = page.getByRole('button', { name: /1 event changed since the digest went out today/ });
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('Community garden meitheal');
+  await expect(page.getByTitle('Review staff submissions')).toContainText('1');
+  await expectAccessible(page);
+
+  await page.getByTitle('Review staff submissions').click();
+  const inbox = page.getByRole('dialog', { name: 'Submissions inbox' });
+  await expect(inbox.getByRole('status')).toContainText('1 event changed since the digest went out today: Community garden meitheal.');
+  await expect(inbox.getByRole('heading', { name: 'No submissions waiting' })).toBeVisible();
+  await expectAccessible(page);
+
+  // It opens the digest, which updates the one that went out
+  await inbox.getByRole('button', { name: 'Update digest' }).click();
+  await expect(inbox).toHaveCount(0);
+  const digest = page.getByRole('dialog', { name: 'Upcoming Events Digest' });
+  await digest.getByRole('region', { name: 'Changed since the digest went out today' }).getByRole('button', { name: 'Update digest' }).click();
+  await expect(page.getByText('Digest updated — the link people already have now shows the changes')).toBeVisible();
+  await digest.getByRole('button', { name: 'Close' }).first().click();
+
+  // Up to date again
+  await expect(banner).toHaveCount(0);
+  await expect(page.getByTitle('Review staff submissions')).not.toContainText('1');
+});

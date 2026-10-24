@@ -111,6 +111,7 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 2. **Check the Inbox Badge:**
    * Look at the top navigation bar. If there are pending submissions, you will see a badge:
    * `[📥 Inbox (3)]`. A line above the calendar also lists what is waiting.
+   * The badge also counts the digest that went out when an event in it has changed since: a second yellow line above the calendar says so (*1 event changed since the digest went out on Fri 23 Oct*), and so does the top of the inbox. **Update digest** there opens the digest to update it (see *What if an event in a digest I already sent changes?*).
 
 3. **Open the Inbox:**
    * Click **Inbox** (or **Review** on that line). With several submissions waiting they sit in two columns on a wide screen.
@@ -237,11 +238,11 @@ You can simply approve the submission in the **Submissions Inbox**, then click *
 ### What if an event in a digest I already sent changes?
 The email itself can't change, but its **Click here for details** button can.
 1. Fix the event in the calendar (see below).
-2. Open **Digest**. A yellow box at the top says what changed since the digest went out, for example *1 event: Test Site Community Garden Meitheal*.
+2. Open **Digest** (or click **Update digest** on the yellow line above the calendar or at the top of the inbox, which appear as soon as the calendar no longer matches the digest that went out). A yellow box at the top says what changed since the digest went out, for example *1 event: Test Site Community Garden Meitheal*.
 3. Click **Update digest**. The digest is made again with the same period, layout and flyers, and the day it went out.
 4. That's it, with nothing to send again. Everyone who opens the link from the email now sees the update: a note at the top says when it was updated, the changed events carry an **Updated** label (in the list and in the PDF), and events taken out are named.
 
-The box is there for a week after the digest went out, until the next one is due.
+The box, and the lines above the calendar and in the inbox, are there for a week after the digest went out, until the next one is due. Once it is updated they go away.
 
 ### What if an event date or venue changes after publication?
 1. Open the main calendar view.

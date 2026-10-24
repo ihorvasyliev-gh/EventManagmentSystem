@@ -1,6 +1,9 @@
 import { callApi } from './apiClient';
-import { digestPageUrl } from '../utils/digestLinks';
-import type { DigestList } from '../utils/digestList';
+import { digestPageUrl, digestFromKey, digestListUrl } from '../utils/digestLinks';
+import { parseDigestList, type DigestList } from '../utils/digestList';
+import { formatLocalDate } from '../utils/date';
+import { digestWeekStart } from '../utils/digestGrouping';
+import { isUpdatable, type SentDigestState } from '../utils/sentDigest';
 
 /** A shared digest: a link anyone can open, until it expires (about six months) */
 export interface SharedDigest {
@@ -80,4 +83,23 @@ export const fetchDigestIssues = async (before: string): Promise<{ previous: Dig
     throw new Error('Unexpected answer about the last digest');
   }
   return { previous: issue, latest: sentDigestFrom(latest) };
+};
+
+/** A shared digest's list of events (beside its PDF), or null when it has none or can't be had */
+export const fetchDigestList = async (key: string): Promise<DigestList | null> => {
+  const file = digestFromKey(key);
+  if (!file) return null;
+  try {
+    const res = await fetch(digestListUrl(file));
+    return res.ok ? parseDigestList(await res.json()) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** The latest digest shared and its events as its link shows them, while it can still be updated */
+export const fetchSentDigest = async (): Promise<SentDigestState<SentDigest> | null> => {
+  const { latest } = await fetchDigestIssues(formatLocalDate(digestWeekStart(new Date())));
+  if (!latest || !isUpdatable(latest.issued)) return null;
+  return { digest: latest, list: await fetchDigestList(latest.key) };
 };

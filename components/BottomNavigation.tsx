@@ -64,7 +64,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 </button>
 
                 {onInboxClick ? (
-                    <button type="button" onClick={onInboxClick} className={tab} aria-label={`Submissions inbox, ${inboxCount} pending`}>
+                    <button type="button" onClick={onInboxClick} className={tab} aria-label={`Submissions inbox, ${inboxCount} to review`}>
                         <span className="relative">
                             <Inbox className="h-6 w-6" />
                             {inboxCount > 0 && <Badge count={inboxCount} />}

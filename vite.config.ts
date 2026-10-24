@@ -28,8 +28,11 @@ const siteWideHeaders = (): Record<string, string> => {
 
 export default defineConfig(({ mode }) => {
   // On Cloudflare Pages (CF_PAGES=1) a missing key would ship a bundle that throws on load:
-  // fail the build instead so the previous deployment stays live
-  if (process.env.CF_PAGES && mode === 'production') {
+  // fail the build of main instead so the previous deployment stays live. Pull request previews
+  // (any other branch) have no keys set up and nothing live to protect: they still build, so
+  // their check says whether the code builds on Cloudflare
+  const isPreview = !!process.env.CF_PAGES_BRANCH && process.env.CF_PAGES_BRANCH !== 'main';
+  if (process.env.CF_PAGES && mode === 'production' && !isPreview) {
     const env = loadEnv(mode, '.', '');
     const missing = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'].filter((key) => !env[key]);
     if (missing.length > 0) {

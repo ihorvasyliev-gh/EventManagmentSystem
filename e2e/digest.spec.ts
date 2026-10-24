@@ -144,6 +144,69 @@ test('an admin emails all staff a reminder to send in their events, formatted li
   expect(email.text).toContain('Email ivasyliev@partnershipcork.ie.');
 });
 
+test('admins choose who the digest and the reminder go to, with To, CC and BCC for each', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const backend = await mockSupabase(page);
+  await signIn(page);
+
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Email recipients' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Email recipients' });
+  const digest = dialog.getByRole('region', { name: 'Events Digest' });
+  const reminder = dialog.getByRole('region', { name: 'Reminder' });
+  // Today's addresses to start with
+  await expect(digest.getByText('martin_davoren@corkcity.ie')).toBeVisible();
+  await expect(reminder.getByText('allstaff@partnershipcork.ie')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await expectAccessible(page);
+
+  // One CC off the digest; a BCC, pasted the way Outlook copies it, and a typed CC on the reminder
+  await digest.getByRole('button', { name: 'Remove kieran_oconnell@corkcity.ie from Events Digest CC' }).click();
+  const bcc = reminder.getByLabel('Reminder BCC: add an address');
+  await bcc.focus();
+  await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.setData('text/plain', 'Ihor Vasyliev <ivasyliev@partnershipcork.ie>; elizabeth@partnershipcork.ie');
+    document.activeElement!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(reminder.getByText('ivasyliev@partnershipcork.ie')).toBeVisible();
+  await expect(reminder.getByText('elizabeth@partnershipcork.ie')).toBeVisible();
+  const cc = reminder.getByLabel('Reminder CC: add an address');
+  await cc.fill('sam');
+  await cc.press('Enter');
+  await expect(reminder.getByText('“sam” isn’t a full email address.')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await cc.fill('sam@partnershipcork.ie');
+  await cc.press('Enter');
+  await expect(reminder.getByText('sam@partnershipcork.ie')).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Email recipients saved')).toBeVisible();
+  expect(backend.emailRecipients.recipients).toEqual({
+    digest: { to: ['allstaff@partnershipcork.ie'], cc: ['martin_davoren@corkcity.ie'], bcc: [] },
+    reminder: {
+      to: ['allstaff@partnershipcork.ie'],
+      cc: ['sam@partnershipcork.ie'],
+      bcc: ['ivasyliev@partnershipcork.ie', 'elizabeth@partnershipcork.ie']
+    }
+  });
+
+  // Opened again: what was saved, and by whom; the digest's original addresses can be put back
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Email recipients' }).click();
+  await expect(dialog.getByText(/Last changed by Ada Admin/)).toBeVisible();
+  await expect(reminder.getByText('elizabeth@partnershipcork.ie')).toBeVisible();
+  await digest.getByRole('button', { name: 'Original addresses' }).click();
+  await expect(digest.getByText('kieran_oconnell@corkcity.ie')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // The Reminder button asks for the saved recipients before it opens the email
+  backend.recipientRequests.length = 0;
+  await page.getByRole('button', { name: 'Reminder' }).click();
+  await expect(page.getByText('Reminder copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
+  expect(backend.recipientRequests).toEqual(['GET']);
+});
+
 /** A one-page PDF with a line of text and a link, made by hand (offsets counted for the xref) */
 const tinyPdf = (): Buffer => {
   const objects = [

@@ -43,7 +43,7 @@ React 19 · TypeScript · Supabase · Cloudflare Pages
  via /submit            approve · edit · decline   PDF + email / WhatsApp text
 ```
 
-1. **Submit.** Staff open [`/submit`](https://ccp-event-calendar.pages.dev/submit) on any device. Each new event is saved as a *pending* draft. To ask for them, an admin clicks **Reminder** (top bar; on a phone or tablet, in the menu): a formatted email in the digest's look, asking for events before Friday with a button to the form and who to write to about the site, is copied to paste into the new email that opens to allstaff@partnershipcork.ie (no CC; the address is in `constants/digestRecipients.ts`).
+1. **Submit.** Staff open [`/submit`](https://ccp-event-calendar.pages.dev/submit) on any device. Each new event is saved as a *pending* draft. To ask for them, an admin clicks **Reminder** (top bar; on a phone or tablet, in the menu): a formatted email in the digest's look, asking for events before Friday with a button to the form and who to write to about the site, is copied to paste into the new email that opens with the reminder's recipients filled in (allstaff@partnershipcork.ie, no CC, until an admin changes them). Admins choose who each email goes to, To, CC and BCC, separately for the reminder and the digest, in **account menu → Email recipients** (kept in R2 as `meta/email-recipients.json`, never served as a file; the defaults are in `constants/digestRecipients.ts`).
 2. **Review.** Admins see a badge on **Submissions**. From there they check the details and poster, then approve, edit or decline. An approved event appears on the calendar straight away.
 3. **Circulate.** Open **Events Digest**, pick the period (the next 14 days by default) and choose a layout:
    - **Executive cards.** Page 1 has the period totals (events, days with events, and how many are new since the last digest shared before this week) beside the title, then an overview: an *At a glance* month grid for periods up to six weeks, or an *In this digest* list with page numbers (click a row to jump to the event) for longer ones. Events follow week by week (headed by their dates), or month by month for periods over six weeks, each day's date beside its cards, with category colours, descriptions, contact people (an event can list several), flyers and add-to-calendar buttons. Nothing says *today* or *this week*: a shared digest is read for months after it is issued.
@@ -115,6 +115,7 @@ UPDATE public.users SET role = 'admin' WHERE email = 'user@example.com';
 | Create, edit, duplicate and delete events and occurrences | | ✅ |
 | Review submissions and see everyone's drafts | | ✅ |
 | Add staff accounts, reset passwords, see statistics and the change log | | ✅ |
+| Choose who the digest and reminder emails go to (To, CC, BCC) | | ✅ |
 | Preview and download the Events Digest | ✅ | ✅ |
 | Share the digest: covering email, WhatsApp text, link to the PDF | | ✅ |
 

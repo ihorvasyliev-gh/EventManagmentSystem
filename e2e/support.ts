@@ -57,7 +57,19 @@ interface BackendOptions {
 export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassword = false, events = [] }: BackendOptions = {}) => {
   const user = { id: ADMIN_ID, aud: 'authenticated', role: 'authenticated', email: 'ada@partnershipcork.ie', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
   const profile = { id: ADMIN_ID, email: user.email, full_name: 'Ada Admin', role, must_change_password: mustChangePassword };
-  const state = { profile, events, passwordChanges: [] as string[], writes: [] as Array<{ method: string; id: string; body: unknown }> };
+  const state = {
+    profile, events, passwordChanges: [] as string[], writes: [] as Array<{ method: string; id: string; body: unknown }>,
+    // /api/email-recipients: what an admin saved (the app's defaults until then), and every request
+    emailRecipients: {
+      recipients: {
+        digest: { to: ['allstaff@partnershipcork.ie'], cc: ['martin_davoren@corkcity.ie', 'kieran_oconnell@corkcity.ie'], bcc: [] as string[] },
+        reminder: { to: ['allstaff@partnershipcork.ie'], cc: [] as string[], bcc: [] as string[] }
+      },
+      updatedAt: null as string | null,
+      updatedBy: null as string | null
+    },
+    recipientRequests: [] as string[]
+  };
 
   await page.routeWebSocket(/\/realtime\/v1\/websocket/, () => {
     // Accept the connection and stay quiet: no live changes in these tests
@@ -130,6 +142,15 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
   await page.route(`${SUPABASE}/rest/v1/event_history**`, (route) =>
     route.request().method() === 'POST' ? route.fulfill({ status: 201 }) : json(route, [])
   );
+  await page.route('**/api/email-recipients', (route) => {
+    const method = route.request().method();
+    state.recipientRequests.push(method);
+    if (method === 'PUT') {
+      const { recipients } = JSON.parse(route.request().postData() || '{}');
+      state.emailRecipients = { recipients, updatedAt: '2026-10-24T14:20:00Z', updatedBy: profile.full_name };
+    }
+    return json(route, state.emailRecipients);
+  });
   return state;
 };
 

@@ -1,8 +1,9 @@
 import type { Event } from '../types.ts';
 import { isMultiDayEvent } from './date.ts';
 import { groupDigestOccurrences, formatAlsoOnDates, type DigestEventGroup, monthShort } from './digestGrouping.ts';
-import { DIGEST_EMAIL_TO, DIGEST_EMAIL_CC } from '../constants/digestRecipients.ts';
+import { DEFAULT_EMAIL_RECIPIENTS } from '../constants/digestRecipients.ts';
 import { mailtoLink } from './mailto.ts';
+import type { EmailRecipients } from './emailRecipients.ts';
 
 /**
  * Plain-text parts of the Events Digest (the covering email) and the date / link helpers the
@@ -169,8 +170,8 @@ export const generateDigestEmail = (
 export const MAILTO_MAX_LENGTH = 2000;
 
 /** mailto: link with the digest recipients, the subject and the text */
-const toMailto = ({ subject, body }: DigestEmail): string =>
-  mailtoLink({ to: DIGEST_EMAIL_TO, cc: DIGEST_EMAIL_CC, subject, body });
+const toMailto = ({ subject, body }: DigestEmail, recipients: EmailRecipients): string =>
+  mailtoLink({ ...recipients, subject, body });
 
 /**
  * Link that opens a new email to the digest recipients with the subject and text filled in. A mailto:
@@ -182,12 +183,13 @@ export const generateDigestMailto = (
   events: Event[],
   startDate: Date,
   endDate: Date,
-  options: { baseUrl?: string; maxLength?: number; pdfUrl?: string | null } = {}
+  options: { baseUrl?: string; maxLength?: number; pdfUrl?: string | null; recipients?: EmailRecipients } = {}
 ): string => {
   const maxLength = options.maxLength ?? MAILTO_MAX_LENGTH;
+  const recipients = options.recipients ?? DEFAULT_EMAIL_RECIPIENTS.digest;
   let limit = Math.min(EMAIL_LIST_LIMIT, digestGroupsFor(events, startDate, endDate).length);
   const email = (listLimit: number) =>
-    toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit, pdfUrl: options.pdfUrl }));
+    toMailto(generateDigestEmail(events, startDate, endDate, { baseUrl: options.baseUrl, listLimit, pdfUrl: options.pdfUrl }), recipients);
   let link = email(limit);
   while (link.length > maxLength && limit > 1) {
     limit -= 1;
@@ -197,5 +199,8 @@ export const generateDigestMailto = (
 };
 
 /** New email with the recipients and subject filled in: the formatted text is pasted in from the clipboard */
-export const generateDigestMailtoSubject = (startDate: Date, endDate: Date): string =>
-  mailtoLink({ to: DIGEST_EMAIL_TO, cc: DIGEST_EMAIL_CC, subject: digestEmailSubject(startDate, endDate) });
+export const generateDigestMailtoSubject = (
+  startDate: Date,
+  endDate: Date,
+  recipients: EmailRecipients = DEFAULT_EMAIL_RECIPIENTS.digest
+): string => mailtoLink({ ...recipients, subject: digestEmailSubject(startDate, endDate) });

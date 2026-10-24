@@ -7,6 +7,7 @@ import EventFiltersComponent, { type Submitter } from './components/EventFilters
 import ErrorBoundary from './components/ErrorBoundary';
 import CategoryPills from './components/CategoryPills';
 import SubmissionsBanner from './components/SubmissionsBanner';
+import DigestChangedBanner from './components/DigestChangedBanner';
 import UpdateBanner from './components/UpdateBanner';
 import AppFooter from './components/AppFooter';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
@@ -27,6 +28,7 @@ import { useSubmissionActions } from './hooks/useSubmissionActions';
 import { useDeepLinks, eventShareLink } from './hooks/useDeepLinks';
 import { useAppShortcuts } from './hooks/useAppShortcuts';
 import { useChangeLogBadge } from './hooks/useChangeLogBadge';
+import { useSentDigest } from './hooks/useSentDigest';
 import { useReminderEmail } from './hooks/useReminderEmail';
 import { loadOrReload } from './utils/staleChunk';
 
@@ -105,6 +107,19 @@ const AppContent: React.FC = () => {
 
   const { pendingSubmissions, handleApproveSubmission, handleRejectSubmission, handleApproveAllSubmissions } =
     useSubmissionActions({ isAdmin, events, setEvents, syncAfterChange, showToast });
+  // Admins: events in the digest that went out changed since, so it wants updating (in the inbox too)
+  const sentDigest = useSentDigest(isAdmin, !loadingEvents && events.length > 0, events, recurrenceExceptions);
+  const inboxCount = pendingSubmissions.length + (sentDigest.change ? 1 : 0);
+  const { refresh: refreshSentDigest } = sentDigest;
+  const closeDigest = useCallback(() => {
+    setIsBulletinModalOpen(false);
+    // It may have shared or updated the digest
+    refreshSentDigest();
+  }, [refreshSentDigest]);
+  const openDigestFromInbox = useCallback(() => {
+    setIsSubmissionsModalOpen(false);
+    setIsBulletinModalOpen(true);
+  }, []);
   const { handleDeleteInstance, handleDeleteEvent, restoreDeletedEvent, forgetExceptions } = useEventActions({
     user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, showToast, modal
   });
@@ -256,7 +271,7 @@ const AppContent: React.FC = () => {
         hasTabBar={hasTabBar}
         loadingEvents={loadingEvents}
         isRefreshing={isRefreshing}
-        pendingSubmissionsCount={pendingSubmissions.length}
+        pendingSubmissionsCount={inboxCount}
         onOpenSubmissions={openInbox}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
         onSendReminder={isAdmin ? sendReminder : undefined}
@@ -271,6 +286,9 @@ const AppContent: React.FC = () => {
       <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 lg:py-6">
         {isAdmin && pendingSubmissions.length > 0 && (
           <SubmissionsBanner submissions={pendingSubmissions} onOpen={openInbox} />
+        )}
+        {isAdmin && sentDigest.change && (
+          <DigestChangedBanner change={sentDigest.change} onOpen={() => setIsBulletinModalOpen(true)} />
         )}
 
         {/* Search, categories and Filters: one row from 1024px; below that the categories get their
@@ -444,7 +462,7 @@ const AppContent: React.FC = () => {
         <Suspense fallback={null}>
           <FortnightlyBulletinModal
             isOpen={isBulletinModalOpen}
-            onClose={() => setIsBulletinModalOpen(false)}
+            onClose={closeDigest}
             events={events}
             recurrenceExceptions={recurrenceExceptions}
             canShare={isAdmin}
@@ -468,6 +486,8 @@ const AppContent: React.FC = () => {
             onReject={handleRejectSubmission}
             onApproveAll={handleApproveAllSubmissions}
             onOpenEvent={openEvent}
+            digestChange={sentDigest.change}
+            onOpenDigest={openDigestFromInbox}
           />
         </Suspense>
       )}
@@ -480,7 +500,7 @@ const AppContent: React.FC = () => {
           onCreateClick={submitPage.open}
           createLabel={isAdmin ? 'New event' : 'Submit'}
           onInboxClick={isAdmin ? openInbox : undefined}
-          inboxCount={pendingSubmissions.length}
+          inboxCount={inboxCount}
           onMyEventsClick={isAdmin ? undefined : () => setIsMyEventsOpen(true)}
           onDigestClick={() => setIsBulletinModalOpen(true)}
           onChangeLogClick={isAdmin ? openChangeLog : undefined}

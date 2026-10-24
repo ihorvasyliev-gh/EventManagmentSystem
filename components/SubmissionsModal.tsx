@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat, X } from 'lucide-react';
+import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat, X, RefreshCw } from 'lucide-react';
 import { type Event } from '../types';
 import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
@@ -15,6 +15,9 @@ import { posterVariantUrl } from '../utils/posterVariants';
 import { approvedMailto, declinedMailto, firstName } from '../utils/authorEmail';
 import { eventShareLink } from '../hooks/useDeepLinks';
 import type { ReviewOutcome } from '../hooks/useSubmissionActions';
+import type { DigestChange } from '../hooks/useSentDigest';
+import { DigestChangeLine } from './DigestChangedBanner';
+import { nameEvents } from '../utils/sentDigest';
 
 interface SubmissionsModalProps {
   isOpen: boolean;
@@ -29,6 +32,10 @@ interface SubmissionsModalProps {
   onApproveAll?: () => Promise<ReviewOutcome | void>;
   /** Opens an existing event in full (to compare with a submission) */
   onOpenEvent?: (event: Event) => void;
+  /** Events in the digest that went out have changed since: the inbox says so first */
+  digestChange?: DigestChange | null;
+  /** Opens the digest, which updates the one that went out */
+  onOpenDigest?: () => void;
 }
 
 /** A submission just approved or declined: whether its sender was told, or a link to tell them */
@@ -73,7 +80,9 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
   onEdit,
   onReject,
   onApproveAll,
-  onOpenEvent
+  onOpenEvent,
+  digestChange,
+  onOpenDigest
 }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isApprovingAll, setIsApprovingAll] = useState(false);
@@ -221,26 +230,51 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
     </ul>
   );
 
+  // The digest that went out no longer matches the calendar: it opens the digest to update it
+  const digestNotice = digestChange && onOpenDigest && (
+    <div
+      role="status"
+      className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 pl-3 pr-2 py-2.5 rounded-leaf-xs border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 text-sm"
+    >
+      <RefreshCw className="w-4 h-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+      <span className="flex-1 min-w-[12rem] text-amber-900 dark:text-amber-100">
+        <span className="font-semibold"><DigestChangeLine change={digestChange} />:</span>{' '}
+        {nameEvents(digestChange.titles)}. Update it, and the link people already have shows the change.
+      </span>
+      <button
+        type="button"
+        onClick={onOpenDigest}
+        className="cta inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+      >
+        <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        Update digest
+      </button>
+    </div>
+  );
+
+  const waiting = submissions.length === 0
+    ? 'Nothing waiting for review'
+    : `${submissions.length} ${submissions.length === 1 ? 'event' : 'events'} waiting for review`;
+
   return (
     <>
       <ModalShell
         isOpen={isOpen}
         onClose={onClose}
         title="Submissions inbox"
-        subtitle={submissions.length === 0
-          ? 'Nothing waiting for review'
-          : `${submissions.length} ${submissions.length === 1 ? 'event' : 'events'} waiting for review`}
+        subtitle={digestNotice ? `${waiting} · the digest needs an update` : waiting}
         icon={<Inbox className="w-5 h-5" />}
         size={wide ? 'xl' : 'lg'}
         footer={submissions.length > 0 ? footer : undefined}
       >
+        {digestNotice}
         {reviewNotes}
         {submissions.length === 0 ? (
           <div className="py-10 text-center">
             <div className="w-16 h-16 bg-ccp-green-50 dark:bg-ccp-green-950/30 text-ccp-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-semibold text-slate-900 dark:text-white">All caught up</h3>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">{digestNotice ? 'No submissions waiting' : 'All caught up'}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
               When staff submit events through the form, they’ll appear here for you to approve.
             </p>

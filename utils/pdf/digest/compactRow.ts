@@ -5,9 +5,9 @@
 import { isMultiDayEvent } from '../../date';
 import { type DigestEventGroup, monthShort, summarizeSeries } from '../../digestGrouping';
 import { toDate, clock, isAllDay } from '../../digestText.ts';
-import { getCategoryRgb } from '../../../constants/categoryColors';
+import { getCategoryRgb, type Rgb } from '../../../constants/categoryColors';
 import { createGoogleCalendarUrl, createOutlookWebUrl, createGoogleMapsUrl } from '../links';
-import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE, GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER } from '../theme';
+import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE, WHITE, GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER } from '../theme';
 import type { Block, DigestContext } from './context';
 import { otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
 import { seriesDates } from './seriesDates';
@@ -73,8 +73,9 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
   contentH += 3.5;
   const mainH = Math.max(3.2 + contentH, 3.2 + venueLines.length * 3.3);
   const isNew = ctx.newIds.has(ev.id);
-  // A NEW label goes under the category
-  const h = Math.max(isNew ? 13.6 : 11.5, mainH + alsoH + 2.4);
+  const isUpdated = ctx.updatedIds.has(ev.id);
+  // UPDATED and NEW labels go under the category
+  const h = Math.max(isNew || isUpdated ? 13.6 : 11.5, mainH + alsoH + 2.4);
 
   return {
     h,
@@ -167,13 +168,17 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
       categoryMark(ev.category, COL.category + 2.1, y + 5.1, 0.85, false);
       color(cat.accent);
       doc.text(catText, COL.category + 3.6, y + 6.05);
-      if (isNew) {
+      let lx = COL.category;
+      const label = (text: string, fg: Rgb, bg: Rgb, border: Rgb) => {
         font('bold', 5.6);
-        const nw = doc.getTextWidth('NEW') + 0.3 * 2 + 3.6;
-        pill(COL.category, y + 8.4, nw, 3.8, GREEN_TINT, GREEN_TINT_BORDER);
-        color(GREEN_DARK);
-        spaced('NEW', COL.category + 1.8, y + 11.1, 0.3);
-      }
+        const lw = doc.getTextWidth(text) + 0.3 * (text.length - 1) + 3.6;
+        pill(lx, y + 8.4, lw, 3.8, bg, border);
+        color(fg);
+        spaced(text, lx + 1.8, y + 11.1, 0.3);
+        lx += lw + 1.2;
+      };
+      if (isUpdated) label('UPDATED', WHITE, BRAND, BRAND);
+      if (isNew) label('NEW', GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER);
     }
   };
 };

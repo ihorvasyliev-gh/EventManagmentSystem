@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, FileText, List, Clock, MapPin, Mail, Repeat } from 'lucide-react';
+import { AlertCircle, Download, FileText, List, Clock, MapPin, Mail, Repeat, History, RefreshCw } from 'lucide-react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import ThemeToggle from '../components/ThemeToggle';
 import { loadPdfJs } from '../utils/posterFile';
-import { digestFromPagePath } from '../utils/digestLinks';
+import {
+  digestFromPagePath, digestListUrl, digestPageUrl, parseDigestVersions, type DigestRef, type DigestVersions
+} from '../utils/digestLinks';
+import { MONTHS_LONG, WEEKDAYS_LONG } from '../utils/digestText';
 import { parseDigestList, type DigestList, type DigestListEntry } from '../utils/digestList';
 import { getCategoryDotColor } from '../components/WeekView';
 import type { EventCategory } from '../types';
@@ -14,18 +17,35 @@ type Tab = 'list' | 'pdf';
 const MAX_PAGE_WIDTH = 880;
 const pageWidth = () => Math.max(280, Math.min(MAX_PAGE_WIDTH, window.innerWidth - 24));
 
+/** "Friday 23 October" (with the year when it isn't this year) for an issue's day, YYYY-MM-DD */
+const issuedLabel = (issued: string): string => {
+  const [y, m, d] = issued.split('-').map(Number);
+  const day = new Date(y, m - 1, d);
+  return `${WEEKDAYS_LONG[day.getDay()]} ${d} ${MONTHS_LONG[m - 1]}${y === new Date().getFullYear() ? '' : ` ${y}`}`;
+};
+
+/** "Sat 24 Oct" */
+const shortDay = (d: Date) => `${WEEKDAYS_LONG[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS_LONG[d.getMonth()].slice(0, 3)}`;
+
 /**
  * A shared digest (/digest/<id>-<name>): its events as a list (when it was shared with one; the
  * first view on phones), the PDF's pages drawn here with pdf.js with its links kept clickable,
  * and a download button. Phone email apps open links in a built-in browser that can't
  * show or save a PDF (a black screen), and desktop PDF extensions render it badly; a page works
  * everywhere. Anyone with the link can open it, for as long as the file is kept (six months).
+ *
+ * A link shows its week's newest digest: when an event changed after the email went out and the
+ * digest was updated, the update, with what changed marked. "Previous digests" opens each
+ * week's, newest first.
  */
 const DigestViewPage: React.FC = () => {
-  const digest = useMemo(() => digestFromPagePath(window.location.pathname), []);
-  const [state, setState] = useState<ViewState>(digest ? 'idle' : 'missing');
+  const link = useMemo(() => digestFromPagePath(window.location.pathname), []);
+  // What the link shows and the other weeks; null when that can't be had (the link's own PDF then)
+  const [versions, setVersions] = useState<DigestVersions | null | undefined>(link ? undefined : null);
+  const digest = useMemo(() => (versions === undefined ? null : versions?.latest.digest ?? link), [versions, link]);
+  const [state, setState] = useState<ViewState>(link ? 'idle' : 'missing');
   // The list stored beside the PDF; digests shared before it existed have only the PDF
-  const [list, setList] = useState<DigestList | null | undefined>(digest ? undefined : null);
+  const [list, setList] = useState<DigestList | null | undefined>(link ? undefined : null);
   const [tab, setTab] = useState<Tab>(() => (window.innerWidth < 768 ? 'list' : 'pdf'));
   const showing: Tab | null = list === undefined ? null : list ? tab : 'pdf';
   const [width, setWidth] = useState(pageWidth);
@@ -51,9 +71,21 @@ const DigestViewPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!link) return;
+    let cancelled = false;
+    fetch(`/api/digest-versions?key=${encodeURIComponent(link.key)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => !cancelled && setVersions(parseDigestVersions(data)))
+      .catch(() => !cancelled && setVersions(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [link]);
+
+  useEffect(() => {
     if (!digest) return;
     let cancelled = false;
-    fetch(digest.fileUrl.replace(/\.pdf$/i, '.json'))
+    fetch(digestListUrl(digest))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => !cancelled && setList(parseDigestList(data)))
       .catch(() => !cancelled && setList(null));
@@ -150,13 +182,22 @@ const DigestViewPage: React.FC = () => {
   // Waiting for the list, or for the PDF once it is wanted
   const view: ViewState = state === 'idle' && (showing === null || wantsPdf) ? 'loading' : state;
 
+  const updatedAt = versions?.latest.updatedAt ?? null;
+  const marked = list?.entries.filter((e) => e.isUpdated).length ?? 0;
+  // A link to an earlier week: the newest digest is a tap away
+  const newest = versions?.archive[0];
+  const newer = newest && digest && newest.digest.key !== digest.key && newest.issued > versions.latest.issued ? newest : null;
+  const others = !!digest && !!versions?.archive.some((r) => r.digest.key !== digest.key);
+
   const download = digest && view !== 'missing' && (
     <a
       href={`${digest.fileUrl}?download=1`}
       download={digest.fileName}
-      className="cta inline-flex items-center justify-center gap-2 h-11 px-4 sm:px-5 rounded bg-brand-600 hover:bg-brand-700 text-white !text-xs tracking-[0.1em] shadow-sm transition-colors"
+      aria-label="Download PDF"
+      className="cta inline-flex items-center justify-center gap-2 h-11 px-4 sm:px-5 rounded bg-brand-600 hover:bg-brand-700 text-white !text-xs tracking-[0.1em] shadow-sm whitespace-nowrap transition-colors"
     >
-      <Download className="w-4 h-4 shrink-0" /> Download PDF
+      {/* A phone's header also fits Previous digests beside it: "PDF" there */}
+      <Download className="w-4 h-4 shrink-0" /> <span><span className="hidden min-[440px]:inline">Download </span>PDF</span>
     </a>
   );
 
@@ -182,7 +223,7 @@ const DigestViewPage: React.FC = () => {
   return (
     <div className="min-h-[100dvh] bg-slate-100 dark:bg-slate-900">
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-5xl mx-auto px-3 sm:px-6 h-16 flex items-center gap-3">
+        <div className="relative max-w-5xl mx-auto px-3 sm:px-6 h-16 flex items-center gap-3">
           <span className="bg-white p-1 px-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shrink-0">
             <img src="/assets/ccp-logo-v2.png" alt="Cork City Partnership" className="h-6 sm:h-7 w-auto object-contain" />
           </span>
@@ -192,6 +233,7 @@ const DigestViewPage: React.FC = () => {
           </div>
           <div className="ml-auto flex items-center gap-1.5">
             <ThemeToggle />
+            {others && versions && digest && <PreviousDigests archive={versions.archive} current={digest.key} />}
             {download}
           </div>
         </div>
@@ -202,6 +244,31 @@ const DigestViewPage: React.FC = () => {
           <h1 className="text-base font-semibold text-slate-900 dark:text-white">Upcoming Events Digest</h1>
           {digest?.period && <p className="text-xs text-slate-600 dark:text-slate-400">{digest.period}</p>}
         </div>
+
+        {view !== 'missing' && (updatedAt || newer) && (
+          <div className="max-w-2xl mx-auto mb-4 sm:mb-6 space-y-2">
+            {updatedAt && (
+              <div className="flex items-start gap-2.5 p-3 rounded-leaf-sm bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-sm text-amber-900 dark:text-amber-100">
+                <RefreshCw className="w-4 h-4 mt-0.5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+                <div className="min-w-0 [overflow-wrap:anywhere]">
+                  <p>
+                    <strong>Updated {shortDay(updatedAt)}</strong>, after this digest was sent.
+                    {marked > 0 && ` ${marked === 1 ? 'The event that changed is' : `The ${marked} events that changed are`} marked Updated.`}
+                  </p>
+                  {list?.removed && <p className="mt-1">No longer on: {list.removed.join('; ')}.</p>}
+                </div>
+              </div>
+            )}
+            {newer && (
+              <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-sm text-slate-600 dark:text-slate-300">
+                <span>A newer digest went out on {issuedLabel(newer.issued)}.</span>
+                <a href={digestPageUrl(newer.digest.fileUrl, window.location.origin)} className="font-semibold text-brand-700 dark:text-brand-300 hover:underline">
+                  Open the latest
+                </a>
+              </p>
+            )}
+          </div>
+        )}
 
         {list && view !== 'missing' && (
           <div role="tablist" aria-label="Show the digest as" className="mb-4 sm:mb-6 mx-auto w-max flex gap-1 p-1 rounded-md bg-slate-200/70 dark:bg-slate-800">
@@ -256,6 +323,83 @@ const DigestViewPage: React.FC = () => {
   );
 };
 
+/** Each week's digest (its newest version), newest first, to open another one */
+const PreviousDigests: React.FC<{ archive: DigestRef[]; current: string }> = ({ archive, current }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="previous-digests"
+        aria-label="Previous digests"
+        title="Previous digests"
+        className="cta inline-flex items-center justify-center gap-2 h-11 w-11 sm:w-auto sm:px-4 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 !text-xs tracking-[0.1em] transition-colors"
+      >
+        <History className="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span className="hidden sm:inline">Previous digests</span>
+      </button>
+      {open && (
+        <nav
+          id="previous-digests"
+          aria-label="Previous digests"
+          className="absolute right-3 sm:right-6 top-full mt-1 w-[min(22rem,calc(100vw-24px))] max-h-[70vh] overflow-y-auto p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+        >
+          <p className="px-3 pt-2 pb-1.5 text-xs text-slate-600 dark:text-slate-400">One a week, each in its latest version</p>
+          <ul>
+            {archive.map((r) => {
+              const here = r.digest.key === current;
+              const body = (
+                <>
+                  <span className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900 dark:text-white">{issuedLabel(r.issued)}</span>
+                    {r.updatedAt && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100 text-[10px] font-bold uppercase tracking-[0.1em]">Updated</span>
+                    )}
+                    {here && <span className="ml-auto text-xs text-slate-600 dark:text-slate-400">Showing</span>}
+                  </span>
+                  {r.digest.period && <span className="block text-xs text-slate-600 dark:text-slate-400">{r.digest.period}</span>}
+                </>
+              );
+              return (
+                <li key={r.digest.key}>
+                  {here ? (
+                    <div aria-current="page" className="px-3 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm">{body}</div>
+                  ) : (
+                    <a
+                      href={digestPageUrl(r.digest.fileUrl, window.location.origin)}
+                      className="block px-3 py-2.5 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      {body}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+    </div>
+  );
+};
+
 /** The digest's events by day, in plain text: easy to read and to tap on a phone */
 const DigestListView: React.FC<{ list: DigestList }> = ({ list }) => {
   const days: Array<{ day: string; entries: DigestListEntry[] }> = [];
@@ -278,8 +422,13 @@ const DigestListView: React.FC<{ list: DigestList }> = ({ list }) => {
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(entry.category as EventCategory)}`} aria-hidden="true" />
                   <span className="truncate">{entry.category}</span>
-                  {entry.isNew && (
-                    <span className="ml-auto shrink-0 px-1.5 py-0.5 rounded bg-brand-600 text-white tracking-[0.1em]">New</span>
+                  {(entry.isUpdated || entry.isNew) && (
+                    <span className="ml-auto shrink-0 flex gap-1">
+                      {entry.isUpdated && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100 tracking-[0.1em]">Updated</span>
+                      )}
+                      {entry.isNew && <span className="px-1.5 py-0.5 rounded bg-brand-600 text-white tracking-[0.1em]">New</span>}
+                    </span>
                   )}
                 </div>
                 <h3 className="mt-1.5 text-base font-semibold leading-snug text-slate-900 dark:text-white [overflow-wrap:anywhere]">{entry.title}</h3>

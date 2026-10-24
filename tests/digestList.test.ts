@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDigestList, parseDigestList } from '../utils/digestList.ts';
+import { buildDigestList, parseDigestList, digestListChanges, markDigestUpdate } from '../utils/digestList.ts';
 import type { Event } from '../types.ts';
 
 const event = (over: Partial<Event>): Event => ({
@@ -40,4 +40,59 @@ test('a stored list is read back only if it is one, and only its known fields', 
     version: 1, period: 'P',
     entries: [{ day: 'D', title: 'T', category: '', time: '', where: '', also: '', description: '', contacts: [{ name: '', email: 'e@x.ie' }], isNew: false }]
   });
+});
+
+test('the list keeps each event\'s id and flyer, so an update can tell what changed', () => {
+  const [entry] = buildDigestList([event({ id: 'a', posterUrl: '/api/file/0f0f0f0f-0000-0000-0000-000000000000-flyer.png' })], options).entries;
+  assert.equal(entry.id, 'a');
+  assert.equal(entry.poster, '/api/file/0f0f0f0f-0000-0000-0000-000000000000-flyer.png');
+  assert.equal(buildDigestList([event({ id: 'a' })], options).entries[0].poster, '');
+  assert.equal('isUpdated' in entry, false);
+});
+
+test('what changed since the digest went out: by id, or by title in a list from before ids', () => {
+  const sent = buildDigestList([
+    event({ id: 'a', title: 'Community garden meitheal', date: new Date(2026, 9, 23, 10), endDate: new Date(2026, 9, 23, 13) }),
+    event({ id: 'b', title: 'Job fair', date: new Date(2026, 9, 22, 9), endDate: new Date(2026, 9, 22, 13) }),
+    event({ id: 'c', title: 'Tea dance', date: new Date(2026, 9, 24, 15), endDate: new Date(2026, 9, 24, 17) })
+  ], options);
+  const now = buildDigestList([
+    // Moved to the 25th, with another flyer
+    event({ id: 'a', title: 'Community garden meitheal', date: new Date(2026, 9, 25, 10), endDate: new Date(2026, 9, 25, 13), posterUrl: '/api/file/new.png' }),
+    event({ id: 'b', title: 'Job fair', date: new Date(2026, 9, 22, 9), endDate: new Date(2026, 9, 22, 13) }),
+    event({ id: 'd', title: 'Coding club', date: new Date(2026, 9, 26, 18), endDate: new Date(2026, 9, 26, 19) })
+  ], options);
+  const changes = digestListChanges(sent, now);
+  assert.deepEqual(changes.changed.map((e) => e.id), ['a']);
+  assert.deepEqual(changes.added.map((e) => e.id), ['d']);
+  assert.deepEqual(changes.removed.map((e) => e.id), ['c']);
+
+  // Only a new flyer
+  const flyer = buildDigestList([event({ id: 'b', title: 'Job fair', date: new Date(2026, 9, 22, 9), endDate: new Date(2026, 9, 22, 13), posterUrl: '/f.png' })], options);
+  assert.deepEqual(digestListChanges({ ...sent, entries: sent.entries.filter((e) => e.id === 'b') }, flyer).changed.map((e) => e.id), ['b']);
+
+  // A list shared before ids and flyers were kept: matched by title, and a flyer can't tell
+  const old = parseDigestList(JSON.parse(JSON.stringify({ ...sent, entries: sent.entries.map(({ id: _id, poster: _poster, ...rest }) => rest) })))!;
+  assert.equal(old.entries[0].id, undefined);
+  const fromOld = digestListChanges(old, now);
+  assert.deepEqual(fromOld.changed.map((e) => e.id), ['a']);
+  assert.deepEqual(digestListChanges(old, flyer).changed, [], 'the same event, and the old list has no flyer to compare');
+  assert.deepEqual(digestListChanges(sent, sent), { changed: [], added: [], removed: [] });
+});
+
+test('an update marks the events changed since the digest went out and names the ones gone', () => {
+  const sent = buildDigestList([
+    event({ id: 'a', title: 'Community garden meitheal', date: new Date(2026, 9, 23, 10) }),
+    event({ id: 'c', title: 'Tea dance', date: new Date(2026, 9, 24, 15), endDate: new Date(2026, 9, 24, 17) })
+  ], options);
+  const now = buildDigestList([event({ id: 'a', title: 'Community garden meitheal', date: new Date(2026, 9, 25, 10) })], options);
+  const { list, updatedIds } = markDigestUpdate(now, sent);
+  assert.deepEqual([...updatedIds], ['a']);
+  assert.equal(list.entries[0].isUpdated, true);
+  assert.deepEqual(list.removed, ['Tea dance, Saturday 24 October']);
+  // Kept through storing and reading back
+  assert.deepEqual(parseDigestList(JSON.parse(JSON.stringify(list))), list);
+  // Nothing to compare with: nothing marked
+  assert.deepEqual(markDigestUpdate(now, null), { list: now, updatedIds: new Set() });
+  assert.equal(parseDigestList({ version: 1, period: 'P', entries: [], removed: 'x' })?.removed, undefined);
 });

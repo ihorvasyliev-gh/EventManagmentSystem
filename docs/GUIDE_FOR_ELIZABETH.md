@@ -182,7 +182,11 @@ Once submissions are approved, you can generate both the **branded PDF** and the
 
 > **Links open the digest's page.** It opens on a **List** of the events in text that is easy to read on a phone: the day, time, venue, description, contact people and the **New** marks. The **PDF** tab shows every page of the PDF, sharp and with working links (add to calendar, maps, emails), and has a **Download PDF** button. It works in phone email apps (Gmail and Outlook open links in their own built-in browser, which can't show a PDF file) and isn't taken over by PDF add-ons such as Adobe Acrobat's Chrome extension. Digests shared before the list existed open straight on the PDF.
 
-> **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout, the flyer pages and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A link you already sent keeps showing the version it was made from: send the new link if the change matters. A new day also makes a new PDF (the PDF shows the day it was issued).
+> **One digest, one link.** Email, WhatsApp and Link all use the same uploaded PDF. Clicking them again — even after closing the window or the next time you open the calendar that day — gives the same link, as long as the period, the layout, the flyer pages and the events are unchanged. If an event in the period is added, edited, approved or deleted, the next click makes a new PDF with a new link. A new day also makes a new PDF (the PDF shows the day it was issued).
+>
+> **Links always show the week's latest digest.** Every link to this week's digest, including the ones in emails already sent, opens the newest PDF shared that week. The email says so under its button.
+>
+> **Previous digests.** Next to **Download PDF**, the digest's page has a **Previous digests** button: one digest for each Friday of the last six months, each in its latest version. Anyone with a digest link can open them, as Board members have no accounts.
 
 > **Long periods:** for more than six weeks, page 1 of the Executive digest shows an *In this digest* list with page numbers instead of the month grid; clicking a row jumps to that event. The events are then headed by month instead of by week.
 
@@ -229,6 +233,15 @@ You don't need to type it into an email or re-route them. You have two options:
 
 ### What if someone submits an event on Friday morning after I already generated the PDF?
 You can simply approve the submission in the **Submissions Inbox**, then click **"Events Digest"** and click **Download** again. The new PDF will immediately include the latest event.
+
+### What if an event in a digest I already sent changes?
+The email itself can't change, but its **Click here for details** button can.
+1. Fix the event in the calendar (see below).
+2. Open **Digest**. A yellow box at the top says what changed since the digest went out, for example *1 event: Test Site Community Garden Meitheal*.
+3. Click **Update digest**. The digest is made again with the same period, layout and flyers, and the day it went out.
+4. That's it, with nothing to send again. Everyone who opens the link from the email now sees the update: a note at the top says when it was updated, the changed events carry an **Updated** label (in the list and in the PDF), and events taken out are named.
+
+The box is there for a week after the digest went out, until the next one is due.
 
 ### What if an event date or venue changes after publication?
 1. Open the main calendar view.

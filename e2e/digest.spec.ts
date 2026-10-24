@@ -225,3 +225,107 @@ test('an expired digest link says so', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'This digest is no longer available' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Download PDF' })).toHaveCount(0);
 });
+
+const digestId = (n: number, period: string) => `0f0f0f0f-0000-0000-0000-00000000000${n}-CCP-Upcoming-Events-${period}`;
+
+test('a link to a digest that was updated after it went out shows the update, marked, and the weeks before', async ({ page }) => {
+  const sent = digestId(1, '2026-10-23-to-2026-11-06');
+  const update = digestId(2, '2026-10-23-to-2026-11-06');
+  const before = digestId(3, '2026-10-16-to-2026-10-30');
+  const ref = (id: string, issued: string, updatedAt: string | null = null) => ({ key: `digests/${id}.pdf`, issued, updatedAt });
+  const archive = [ref(update, '2026-10-23', '2026-10-24T14:00:00Z'), ref(before, '2026-10-16')];
+  await page.route('**/api/digest-versions?*', (route) => {
+    const key = new URL(route.request().url()).searchParams.get('key');
+    const latest = key === `digests/${before}.pdf` ? archive[1] : archive[0];
+    return route.fulfill({ json: { latest, archive } });
+  });
+  await page.route('**/api/file/digests/*.pdf*', (route) => route.fulfill({ status: 200, contentType: 'application/pdf', body: tinyPdf() }));
+  await page.route(`**/api/file/digests/${update}.json`, (route) => route.fulfill({ json: {
+    version: 1,
+    period: '23 October – 6 November 2026',
+    entries: [
+      { id: 'a', day: 'Sunday 25 October', title: 'Community garden meitheal', category: 'Community & Family', time: '10:00 – 13:00', where: 'Test Site',
+        also: '', description: 'Help us pack up the garden.', contacts: [], poster: '', isNew: true, isUpdated: true },
+      { id: 'b', day: 'Monday 26 October', title: 'Job fair', category: 'Enterprise & Employment', time: '09:00 – 13:00', where: 'City Hall',
+        also: '', description: '', contacts: [], poster: '', isNew: false }
+    ],
+    removed: ['Tea dance, Saturday 24 October']
+  } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/digest/${sent}`);
+
+  // The email that went out links to the first PDF; the page shows the update
+  await expect(page.getByText('Updated Sat 24 Oct')).toBeVisible();
+  await expect(page.getByText('The event that changed is marked Updated.')).toBeVisible();
+  await expect(page.getByText('No longer on: Tea dance, Saturday 24 October.')).toBeVisible();
+  const sunday = page.getByRole('region', { name: 'Sunday 25 October' });
+  await expect(sunday.getByText('Updated', { exact: true })).toBeVisible();
+  await expect(sunday.getByText('New', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Monday 26 October' }).getByText('Updated', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', `/api/file/digests/${update}.pdf?download=1`);
+
+  // One digest a week, each in its latest version
+  await page.getByRole('button', { name: 'Previous digests' }).click();
+  const menu = page.getByRole('navigation', { name: 'Previous digests' });
+  await expect(menu.locator('[aria-current="page"]')).toContainText(/Friday 23 October.*Updated.*Showing/);
+  const earlier = menu.getByRole('link', { name: /Friday 16 October/ });
+  await expect(earlier).toHaveAttribute('href', `http://localhost:4173/digest/${before}`);
+  await expect(earlier).toContainText('16 – 30 October 2026');
+  await expectAccessible(page);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+
+  // An earlier week's link: its own digest, and the newest a tap away
+  await page.goto(`/digest/${before}`);
+  await expect(page.getByText('A newer digest went out on Friday 23 October.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open the latest' })).toHaveAttribute('href', `http://localhost:4173/digest/${update}`);
+  await expect(page.getByText(/Updated .*after this digest was sent/)).toHaveCount(0);
+});
+
+/** Today in Ireland, YYYY-MM-DD, and a day some days later */
+const irishDay = (plusDays = 0) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(Date.now() + plusDays * 86400000));
+
+test('after an event in the digest that went out changes, an admin updates it from the dialog', async ({ page }) => {
+  const eventId = '10000000-0000-0000-0000-000000000001';
+  await mockSupabase(page, {
+    events: [eventRow({ id: eventId, title: 'Community garden meitheal', date: daysFromNow(2), end_date: daysFromNow(2, 13) })]
+  });
+  const sent = digestId(1, `${irishDay()}-to-${irishDay(14)}`);
+  await page.route('**/api/digest-issues?*', (route) => route.fulfill({ json: {
+    issue: null,
+    latest: { issued: irishDay(), key: `digests/${sent}.pdf`, base: `digests/${sent}.pdf`, layout: 'executive', flyers: false }
+  } }));
+  // As it went out: the wrong day
+  await page.route(`**/api/file/digests/${sent}.json`, (route) => route.fulfill({ json: {
+    version: 1, period: '', entries: [{ id: eventId, day: 'Thursday 1 January', title: 'Community garden meitheal', category: 'Community & Family',
+      time: '10:00 – 13:00', where: 'Heron House', also: '', description: 'A short description.', contacts: [], poster: '', isNew: true }]
+  } }));
+  const uploads: string[] = [];
+  await page.route('**/api/digest', async (route) => {
+    uploads.push(route.request().postDataBuffer()?.toString('latin1') ?? '');
+    await route.fulfill({ status: 201, json: { url: `/api/file/digests/${digestId(2, `${irishDay()}-to-${irishDay(14)}`)}.pdf`, expiresAt: new Date(Date.now() + 183 * 86400000).toISOString() } });
+  });
+  await signIn(page);
+  await page.getByTitle('Generate the Upcoming Events Digest (PDF & WhatsApp)').first().click();
+  const dialog = page.getByRole('dialog', { name: 'Upcoming Events Digest' });
+
+  const banner = dialog.getByRole('region', { name: 'Changed since the digest went out today' });
+  await expect(banner).toContainText('1 event: Community garden meitheal.');
+  await expect(banner).toContainText('No need to send it again.');
+  await expectAccessible(page);
+
+  await banner.getByRole('button', { name: 'Update digest' }).click();
+  await expect(page.getByText('Digest updated — the link people already have now shows the changes')).toBeVisible();
+  expect(uploads).toHaveLength(1);
+  const field = (name: string) => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`).exec(uploads[0])?.[1];
+  expect(field('update')).toBe('1');
+  expect(field('issued')).toBe(irishDay());
+  expect(field('layout')).toBe('executive');
+  expect(field('flyers')).toBe('0');
+  expect(field('list')).toMatch(new RegExp(`"id":"${eventId}".*"isUpdated":true`));
+  expect(uploads[0]).toContain(`filename="CCP-Upcoming-Events-${irishDay()}-to-${irishDay(14)}.pdf"`);
+  // Up to date now
+  await expect(banner).toHaveCount(0);
+});

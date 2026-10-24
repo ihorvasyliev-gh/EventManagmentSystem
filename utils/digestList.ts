@@ -11,6 +11,8 @@ import { digestGroupsFor, formatPeriodShort, isAllDay, clock, MONTHS_LONG, WEEKD
 import { eventContacts } from './contacts.ts';
 
 export interface DigestListEntry {
+  /** The event's id (lists shared before updates existed have none) */
+  id?: string;
   /** "Thursday 15 October" */
   day: string;
   title: string;
@@ -22,7 +24,11 @@ export interface DigestListEntry {
   also: string;
   description: string;
   contacts: Array<{ name: string; email: string }>;
+  /** The flyer the PDF shows ('' none), so a new flyer counts as a change (older lists have none) */
+  poster?: string;
   isNew: boolean;
+  /** In an update: it changed since the digest went out */
+  isUpdated?: true;
 }
 
 export interface DigestList {
@@ -30,11 +36,14 @@ export interface DigestList {
   /** "16 – 30 October 2026" */
   period: string;
   entries: DigestListEntry[];
+  /** In an update: the events no longer in it since the digest went out ("Coffee morning, Thu 15 Oct") */
+  removed?: string[];
 }
 
 /** Far more than a digest carries; keeps a stored list small */
 const MAX_ENTRIES = 500;
 const MAX_TEXT = 4000;
+const MAX_REMOVED = 50;
 
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -59,6 +68,7 @@ export const buildDigestList = (
       const ev = group.event;
       const start = toDate(ev.date)!;
       return {
+        id: ev.id,
         day: `${WEEKDAYS_LONG[start.getDay()]} ${start.getDate()} ${MONTHS_LONG[start.getMonth()]}`,
         title: ev.title,
         category: ev.category || 'Other',
@@ -67,6 +77,7 @@ export const buildDigestList = (
         also: formatAlsoOnDates(group, ', '),
         description: ev.description?.trim() ?? '',
         contacts: eventContacts(ev).map((c) => ({ name: c.name ?? '', email: c.email ?? '' })),
+        poster: ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url || '',
         isNew: newIds.has(ev.id)
       };
     })
@@ -85,6 +96,7 @@ export const parseDigestList = (value: unknown): DigestList | null => {
     const e = raw as Record<string, unknown>;
     if (!text(e.title) || !text(e.day)) return [];
     return [{
+      ...(text(e.id) ? { id: text(e.id) } : {}),
       day: text(e.day),
       title: text(e.title),
       category: text(e.category),
@@ -96,8 +108,68 @@ export const parseDigestList = (value: unknown): DigestList | null => {
         const c = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
         return text(c.name) || text(c.email) ? [{ name: text(c.name), email: text(c.email) }] : [];
       }),
-      isNew: e.isNew === true
+      ...(typeof e.poster === 'string' ? { poster: text(e.poster) } : {}),
+      isNew: e.isNew === true,
+      ...(e.isUpdated === true ? { isUpdated: true as const } : {})
     }];
   });
-  return { version: 1, period: text(list.period), entries };
+  const removed = Array.isArray(list.removed) ? list.removed.map(text).filter(Boolean).slice(0, MAX_REMOVED) : [];
+  return { version: 1, period: text(list.period), entries, ...(removed.length ? { removed } : {}) };
+};
+
+/** Whether an event reads differently in two lists: what the page and the PDF show of it */
+const entryChanged = (before: DigestListEntry, after: DigestListEntry): boolean =>
+  (['day', 'title', 'category', 'time', 'where', 'also', 'description'] as const).some((f) => before[f] !== after[f])
+  || JSON.stringify(before.contacts) !== JSON.stringify(after.contacts)
+  // A list from before flyers were recorded can't tell
+  || (before.poster !== undefined && after.poster !== undefined && before.poster !== after.poster);
+
+export interface DigestListChanges {
+  /** Entries of the newer list that read differently */
+  changed: DigestListEntry[];
+  /** Entries of the newer list the older one didn't have */
+  added: DigestListEntry[];
+  /** Entries of the older list the newer one doesn't have */
+  removed: DigestListEntry[];
+}
+
+/**
+ * What changed between two lists of the same digest period. Events are matched by id, and by
+ * title where the older list has no ids (shared before updates existed).
+ */
+export const digestListChanges = (before: DigestList, after: DigestList): DigestListChanges => {
+  const unmatched = [...before.entries];
+  const changed: DigestListEntry[] = [];
+  const added: DigestListEntry[] = [];
+  after.entries.forEach((entry) => {
+    const i = unmatched.findIndex((old) => (old.id && entry.id ? old.id === entry.id : old.title === entry.title));
+    if (i < 0) {
+      added.push(entry);
+      return;
+    }
+    const [old] = unmatched.splice(i, 1);
+    if (entryChanged(old, entry)) changed.push(entry);
+  });
+  return { changed, added, removed: unmatched };
+};
+
+/** "Coffee morning, Thursday 15 October": an event no longer in the digest */
+const removedLabel = (entry: DigestListEntry) => `${entry.title}, ${entry.day}`;
+
+/**
+ * An update of a digest that went out (`sent`, null when its list can't be had): the events that
+ * read differently since are marked Updated, and the ones no longer in it are named.
+ */
+export const markDigestUpdate = (list: DigestList, sent: DigestList | null): { list: DigestList; updatedIds: Set<string> } => {
+  if (!sent) return { list, updatedIds: new Set() };
+  const { changed, removed } = digestListChanges(sent, list);
+  const updated = new Set(changed);
+  return {
+    list: {
+      ...list,
+      entries: list.entries.map((e) => (updated.has(e) ? { ...e, isUpdated: true as const } : e)),
+      ...(removed.length ? { removed: removed.slice(0, MAX_REMOVED).map(removedLabel) } : {})
+    },
+    updatedIds: new Set(changed.flatMap((e) => (e.id ? [e.id] : [])))
+  };
 };

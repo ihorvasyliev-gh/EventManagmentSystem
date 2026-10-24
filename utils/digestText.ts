@@ -151,6 +151,7 @@ export const generateDigestEmail = (
     lines.push(
       '',
       `${options.pdfUrl ? 'Click the link above for' : 'The attached PDF has'} each event's description, venue with a map, contacts, and buttons to add it to your Outlook or Google calendar.`
+        + (options.pdfUrl ? ' If anything changes after this email, the link always shows the latest version.' : '')
     );
   }
   const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);

@@ -52,7 +52,7 @@ export const generateDigestEmailHtml = (
       : p(`Please find attached our ${upcoming}.`);
 
   const button = groups.length > 0 && pdfUrl ? `${emailButton(pdfUrl, 'Click here for details')}
-${smallPrint(`Opens on your phone or computer. For each event you'll see the description, the venue with a map, contacts, and buttons to add it to your Outlook or Google calendar.`)}` : '';
+${smallPrint(`Opens on your phone or computer. For each event you'll see the description, the venue with a map, contacts, and buttons to add it to your Outlook or Google calendar. If anything changes after this email, the link always shows the latest version.`)}` : '';
 
   const rows = groups.slice(0, LIST_LIMIT).map((group) => {
     const ev = group.event;

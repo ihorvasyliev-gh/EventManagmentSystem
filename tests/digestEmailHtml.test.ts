@@ -32,6 +32,7 @@ test('the formatted email has a clickable button to the PDF and lists each event
   ], start, end, { baseUrl: BASE, pdfUrl: PDF });
 
   assert.ok(html.includes(`<a href="${PDF}"`), 'the PDF link is a real link');
+  assert.ok(html.includes('If anything changes after this email, the link always shows the latest version.'), 'the link stays right');
   assert.match(html, /Click here for details/);
   assert.equal(html.split('12 – 26 October 2026').length, 2, 'the period is shown once, beside the logo');
   assert.ok(html.includes('<span style="white-space:nowrap;">12 – 26 October 2026</span>'), 'one month stays on one line');
@@ -59,6 +60,7 @@ test('text from events is escaped, and without a link the email says the PDF is 
   assert.ok(!html.includes('<b>place</b>'));
   assert.match(html, /Please find attached our one upcoming event\./);
   assert.doesNotMatch(html, /Click here for details/);
+  assert.doesNotMatch(html, /latest version/, 'an attached PDF can\'t change');
 
   const empty = generateDigestEmailHtml([], start, end, { baseUrl: BASE, pdfUrl: PDF });
   assert.match(empty, /There are no events scheduled/);

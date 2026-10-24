@@ -4,11 +4,12 @@
  * covering email (emailHtml.ts) and sent the same way: the HTML is copied to be pasted into the new
  * email, with the plain text for email apps that only take that.
  */
-import { REMINDER_EMAIL_TO } from '../constants/digestRecipients.ts';
+import { DEFAULT_EMAIL_RECIPIENTS } from '../constants/digestRecipients.ts';
 import { CONTACT_EMAIL } from '../constants/support.ts';
 import { toAbsoluteHttpUrl, startOfLocalDay, WEEKDAYS_LONG, MONTHS_LONG } from './digestText.ts';
 import { BRAND, INK, esc, nowrap, p, smallPrint, emailButton, emailShell } from './emailHtml.ts';
 import { mailtoLink } from './mailto.ts';
+import type { EmailRecipients } from './emailRecipients.ts';
 
 const FRIDAY = 5;
 
@@ -61,10 +62,13 @@ export const generateReminderEmailHtml = (today: Date, options: { baseUrl?: stri
   });
 };
 
-/** New email to all staff with the reminder's subject and text filled in, for when the formatted one can't be copied */
-export const generateReminderMailto = (today: Date, options: { baseUrl?: string } = {}): string =>
-  mailtoLink({ to: REMINDER_EMAIL_TO, ...generateReminderEmail(today, options) });
+/** New email to the reminder's recipients with its subject and text filled in, for when the formatted one can't be copied */
+export const generateReminderMailto = (
+  today: Date,
+  options: { baseUrl?: string; recipients?: EmailRecipients } = {}
+): string =>
+  mailtoLink({ ...(options.recipients ?? DEFAULT_EMAIL_RECIPIENTS.reminder), ...generateReminderEmail(today, options) });
 
-/** New email to all staff with the subject filled in: the formatted text is pasted in from the clipboard */
-export const generateReminderMailtoSubject = (today: Date): string =>
-  mailtoLink({ to: REMINDER_EMAIL_TO, subject: reminderEmailSubject(today) });
+/** New email to the reminder's recipients with the subject filled in: the formatted text is pasted in from the clipboard */
+export const generateReminderMailtoSubject = (today: Date, recipients: EmailRecipients = DEFAULT_EMAIL_RECIPIENTS.reminder): string =>
+  mailtoLink({ ...recipients, subject: reminderEmailSubject(today) });

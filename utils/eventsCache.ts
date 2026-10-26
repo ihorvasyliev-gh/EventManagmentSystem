@@ -108,6 +108,17 @@ export function touchEventsCache(): void {
   }
 }
 
+/** When the cached events were last confirmed by the server, if there are any */
+export function getEventsCacheTime(): Date | null {
+  try {
+    const ts = cacheStorage()?.getItem(EVENTS_CACHE_TIMESTAMP_KEY);
+    const ms = ts ? parseInt(ts, 10) : NaN;
+    return Number.isFinite(ms) ? new Date(ms) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The cached events, while they are recent enough (CACHE_DURATION_MS) */
 export function getCachedEvents(): Event[] | null {
   try {

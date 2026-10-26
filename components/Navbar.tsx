@@ -74,6 +74,8 @@ const Navbar: React.FC<NavbarProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user.role === UserRole.ADMIN;
   const isBusy = loadingEvents || isRefreshing;
 
@@ -86,11 +88,16 @@ const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isMenuOpen]);
 
-  // Account menu (desktop): closes on Escape or a click elsewhere
+  // Account menu (desktop): opens with its first item focused, closes on Escape (back to its
+  // button) or a click elsewhere
   useEffect(() => {
     if (!isAccountOpen) return;
+    accountMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsAccountOpen(false);
+      if (e.key !== 'Escape') return;
+      const focusWasInMenu = accountMenuRef.current?.contains(document.activeElement);
+      setIsAccountOpen(false);
+      if (focusWasInMenu) accountButtonRef.current?.focus();
     };
     const handleClick = (e: MouseEvent) => {
       if (!accountRef.current?.contains(e.target as Node)) setIsAccountOpen(false);
@@ -102,6 +109,25 @@ const Navbar: React.FC<NavbarProps> = ({
       document.removeEventListener('mousedown', handleClick);
     };
   }, [isAccountOpen]);
+
+  // Arrow keys, Home and End move between the account menu's items; Tab leaves (and closes) it
+  const handleAccountMenuKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab') {
+      setIsAccountOpen(false);
+      return;
+    }
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (current + 1) % items.length
+      : e.key === 'ArrowUp' ? (current - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? items.length - 1
+      : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
 
   const closeMenuAnd = (action?: () => void) => () => {
     setIsMenuOpen(false);
@@ -233,8 +259,15 @@ const Navbar: React.FC<NavbarProps> = ({
               {/* Account (desktop) */}
               <div ref={accountRef} className="relative hidden lg:flex items-center pl-3 ml-1.5 border-l border-slate-200 dark:border-slate-800">
                 <button
+                  ref={accountButtonRef}
                   type="button"
                   onClick={() => setIsAccountOpen((open) => !open)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setIsAccountOpen(true);
+                    }
+                  }}
                   aria-haspopup="menu"
                   aria-expanded={isAccountOpen}
                   aria-controls="account-menu"
@@ -255,7 +288,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
                 {isAccountOpen && (
-                  <div id="account-menu" role="menu" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 animate-scale-in origin-top-right bg-white dark:bg-slate-900`}>
+                  <div ref={accountMenuRef} id="account-menu" role="menu" aria-label="Account" onKeyDown={handleAccountMenuKey} className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 animate-scale-in origin-top-right bg-white dark:bg-slate-900`}>
                     <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.fullName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>

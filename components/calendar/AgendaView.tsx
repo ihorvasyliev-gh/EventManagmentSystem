@@ -59,7 +59,8 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
                   <span className={`text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-600 dark:text-slate-400'}`}>
                     {dayOfWeek}
                   </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {/* A shade darker on today's tint, where the usual grey is too faint to read */}
+                  <span className={`text-[11px] ${isToday ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
                     {month}
                   </span>
                 </div>

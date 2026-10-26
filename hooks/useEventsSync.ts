@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { type Event } from '../types';
 import { supabase } from '../lib/supabase';
 import { getEvents, getAllRecurrenceExceptions } from '../services/eventService';
-import { getCachedEvents, cacheEvents, getCachedExceptions, cacheExceptions, touchEventsCache } from '../utils/eventsCache';
+import { getCachedEvents, cacheEvents, getCachedExceptions, cacheExceptions, touchEventsCache, getEventsCacheTime } from '../utils/eventsCache';
 import { areEventsEqual, areExceptionsEqual } from '../utils/eventsEqual';
 import { applyEventChanges, touchesSeries, type EventChange } from '../utils/realtimeEvents';
 
@@ -25,6 +25,8 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
   const [recurrenceExceptions, setRecurrenceExceptions] = useState<Map<string, Date[]>>(new Map());
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // When the events on screen last came from the server (offline, the calendar says how fresh they are)
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Latest values for the refresh logic, which compares before it sets state
   const eventsRef = React.useRef(events);
@@ -63,6 +65,7 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
         setEvents(data);
       }
       if (exceptionsMap) setExceptionsIfChanged(exceptionsMap);
+      setLastSyncedAt(new Date());
     } catch (error) {
       console.error('Error loading events:', error);
       if (isManual) {
@@ -115,6 +118,7 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
     if (!userId) {
       setEvents([]);
       setRecurrenceExceptions(new Map());
+      setLastSyncedAt(null);
       return;
     }
     const cached = getCachedEvents();
@@ -123,6 +127,7 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
       restoredFromCacheRef.current = cached;
       setEvents(cached);
       setLoadingEvents(false);
+      setLastSyncedAt(getEventsCacheTime());
       const cachedExceptions = getCachedExceptions();
       if (cachedExceptions) setRecurrenceExceptions(cachedExceptions);
     } else {
@@ -207,12 +212,19 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
         void refreshEvents(false);
       }
     };
+    // Back online: catch up on whatever changed meanwhile
+    const handleOnline = () => {
+      lastSync = Date.now();
+      void refreshEvents(false);
+    };
     window.addEventListener('focus', handleSyncOnVisible);
     document.addEventListener('visibilitychange', handleSyncOnVisible);
+    window.addEventListener('online', handleOnline);
     const poll = REALTIME_ENABLED ? undefined : setInterval(handleSyncOnVisible, 30 * 1000);
     return () => {
       window.removeEventListener('focus', handleSyncOnVisible);
       document.removeEventListener('visibilitychange', handleSyncOnVisible);
+      window.removeEventListener('online', handleOnline);
       clearInterval(poll);
     };
   }, [userId, refreshEvents]);
@@ -224,6 +236,7 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
     setRecurrenceExceptions,
     loadingEvents,
     isRefreshing,
+    lastSyncedAt,
     refreshEvents,
     syncAfterChange
   };

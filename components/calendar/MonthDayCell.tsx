@@ -69,7 +69,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
       }`}
     >
       <div className={`flex items-center ${isMobile ? 'justify-center' : 'justify-between'} gap-1 mb-1 sm:mb-2 ${
-        isToday ? 'text-brand-700 dark:text-brand-300' : muted ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200'
+        isToday ? 'text-brand-700 dark:text-brand-300' : muted ? 'text-slate-400' : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200'
       }`}>
         {/* The day itself is a button, so the keyboard and screen readers can open (or pick) it too */}
         <button
@@ -134,7 +134,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               <div
                 key={ev.instanceKey ?? ev.id}
                 {...clickableProps(() => onEventClick(ev))}
-                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[11px] 2xl:text-xs px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
+                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[11px] lg:text-xs xl:text-[13px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                 title={itemTitle}
               >
                 {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding.
@@ -154,7 +154,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
                 e.stopPropagation();
                 onOpenDay(day);
               }}
-              className="w-full text-left text-[11px] 2xl:text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 py-0.5 px-1 rounded hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
+              className="w-full text-left text-[11px] lg:text-xs xl:text-[13px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 py-0.5 px-1 rounded hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
             >
               +{dayEvents.length - 3} more
             </button>

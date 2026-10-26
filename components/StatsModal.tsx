@@ -143,15 +143,17 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
       subtitle={periodLabel || 'Pick a period'}
       icon={<BarChart3 className="w-5 h-5" />}
       footer={
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-          <button type="button" onClick={onClose} className="cta h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+        // Phones: one row, and no Close (the sheet has its own close button and pulls down), so the
+        // figures keep the room
+        <div className="flex sm:justify-end gap-2">
+          <button type="button" onClick={onClose} className="cta hidden sm:inline-flex items-center h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
             Close
           </button>
-          <button type="button" onClick={copySummary} disabled={!stats} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60">
+          <button type="button" onClick={copySummary} disabled={!stats} className="cta inline-flex items-center justify-center gap-2 h-11 px-4 sm:px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60">
             {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'Copied' : 'Copy as text'}
+            {copied ? 'Copied' : <><span className="sm:hidden">Copy</span><span className="hidden sm:inline">Copy as text</span></>}
           </button>
-          <button type="button" onClick={() => void downloadExcel()} disabled={!stats || downloading} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
+          <button type="button" onClick={() => void downloadExcel()} disabled={!stats || downloading} className="cta flex-1 sm:flex-none inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
             {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
             {downloading ? 'Preparing…' : 'Download Excel'}
           </button>

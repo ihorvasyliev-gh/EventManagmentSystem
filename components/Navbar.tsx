@@ -349,17 +349,19 @@ const Navbar: React.FC<NavbarProps> = ({
         </div>
       </nav>
 
-      {/* Menu drawer */}
+      {/* Menu drawer. Phones: down to the bottom of the screen, over the tab bar rather than cutting
+          across its raised New event button. Up to md: a card that stops above the tab bar */}
       {isMenuOpen && (
         <>
+          {/* Over the phone tab bar too (z-40), so the menu never looks cut into it */}
           <div
-            className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm animate-fade-in lg:hidden"
+            className="fixed inset-0 z-[45] bg-slate-900/50 backdrop-blur-sm animate-fade-in lg:hidden"
             onClick={() => setIsMenuOpen(false)}
             aria-hidden="true"
           />
           <div
             id="app-menu"
-            className={`fixed top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 bg-white dark:bg-slate-900 border-b sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden max-h-[calc(100dvh-4rem)] overflow-y-auto`}
+            className={`fixed top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 sm:bottom-auto sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 bg-white dark:bg-slate-900 sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden sm:max-h-[calc(100dvh-4rem-6.75rem-env(safe-area-inset-bottom))] md:max-h-[calc(100dvh-5rem)] overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:pb-0`}
           >
             <div className="p-3">
               <div className="flex items-center gap-3 px-3 py-3 mb-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">

@@ -91,8 +91,8 @@ export const statsSummaryText = (stats: PeriodStats, periodLabel: string): strin
     `${stats.events} ${stats.events === 1 ? 'event' : 'events'} on ${stats.occurrences} ${stats.occurrences === 1 ? 'date' : 'dates'} at ${stats.venues} ${stats.venues === 1 ? 'venue' : 'venues'}`,
     `${stats.submitted} sent in by staff through the event form`,
     '',
-    'By category (dates · events):',
-    ...stats.byCategory.map((c) => `- ${c.name}: ${c.occurrences} · ${c.events}`),
+    'By category:',
+    ...stats.byCategory.map((c) => `- ${c.name}: ${c.occurrences} ${c.occurrences === 1 ? 'date' : 'dates'} · ${c.events} ${c.events === 1 ? 'event' : 'events'}`),
     '',
     'By month (dates):',
     ...stats.byMonth.map((m) => `- ${m.label}: ${m.occurrences}`)

@@ -139,7 +139,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               >
                 {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding.
                     Two lines from tablets up (one on short laptop screens); below that the cells are too narrow for more than a word or two */}
-                <span className="block truncate md:whitespace-normal md:line-clamp-2 short:md:line-clamp-1 md:[overflow-wrap:anywhere]">
+                <span className="block truncate md:whitespace-normal md:line-clamp-2 shorter:md:line-clamp-1 md:[overflow-wrap:anywhere]">
                   {!isContinuation && <span className="hidden lg:inline font-bold tabular-nums mr-1">{timeStr}</span>}
                   {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
                   {ev.title}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Trash2, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat, X, RefreshCw } from 'lucide-react';
+import { Ban, Check, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat, X, RefreshCw } from 'lucide-react';
 import { type Event } from '../types';
 import ModalShell from './ModalShell';
 import PosterLightbox from './PosterLightbox';
@@ -202,7 +202,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
         >
           {note.approved
             ? <Check className="w-4 h-4 shrink-0 text-ccp-green-600 dark:text-ccp-green-400" aria-hidden="true" />
-            : <Trash2 className="w-4 h-4 shrink-0 text-slate-500" aria-hidden="true" />}
+            : <Ban className="w-4 h-4 shrink-0 text-slate-500" aria-hidden="true" />}
           <span className="flex-1 min-w-[12rem] text-slate-700 dark:text-slate-200">
             <span className="font-semibold">{note.approved ? 'Approved' : 'Declined'}</span> “{note.title}”.{' '}
             {note.emailed ? `${note.name} has been emailed.` : note.mailto ? `Let ${note.name} know:` : ''}
@@ -472,7 +472,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
                           className="cta inline-flex items-center justify-center gap-1.5 px-2 min-[400px]:px-3 py-2 rounded text-slate-600 dark:text-slate-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors sm:mr-auto"
                           title="Decline and delete this submission"
                         >
-                          <Trash2 className="hidden min-[400px]:block w-4 h-4 shrink-0" />
+                          <Ban className="hidden min-[400px]:block w-4 h-4 shrink-0" aria-hidden="true" />
                           Decline
                         </button>
                         <button

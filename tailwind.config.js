@@ -135,9 +135,14 @@ export default {
     },
   },
   plugins: [
-    // short: screens no taller than a 1280×720 laptop's window (with short:lg: the month grid's
-    // rows are lower there, so today's week stays on screen). A variant rather than a screen: a
-    // raw screen would switch off the min-[…] breakpoints used across the app
-    plugin(({ addVariant }) => addVariant('short', '@media (max-height: 820px)')),
+    // short: windows up to 900px tall (with short:lg: the month grid's rows are lower there, so
+    // today's week fits without the page scrolling and pushing the banners under the top bar).
+    // shorter: up to 820px, a 1280×720 laptop's window, where event titles also take one line.
+    // Variants rather than screens: a raw screen would switch off the min-[…] breakpoints used
+    // across the app
+    plugin(({ addVariant }) => {
+      addVariant('short', '@media (max-height: 900px)');
+      addVariant('shorter', '@media (max-height: 820px)');
+    }),
   ],
 };

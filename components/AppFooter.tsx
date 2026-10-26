@@ -10,7 +10,7 @@ const AppFooter: React.FC<{ isAdmin: boolean; clearTabBar: boolean }> = ({ isAdm
         <span className="hidden sm:inline"> · </span>
         <span className="block sm:inline">Internal use only</span>
       </p>
-      <p className="hidden lg:block mt-2 text-xs text-slate-400 dark:text-slate-500">
+      <p className="hidden lg:block mt-2 text-xs text-slate-400">
         Keyboard: <kbd className="font-sans font-semibold">/</kbd> search · <kbd className="font-sans font-semibold">←</kbd> <kbd className="font-sans font-semibold">→</kbd> previous / next · <kbd className="font-sans font-semibold">T</kbd> today
         {isAdmin && <> · <kbd className="font-sans font-semibold">C</kbd> new event · <kbd className="font-sans font-semibold">E</kbd> edit open event</>}
         {' '}· <kbd className="font-sans font-semibold">Esc</kbd> close

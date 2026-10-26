@@ -310,7 +310,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
         {WEEKDAY_LABELS.map((dayLabel) => (
           <div
             key={dayLabel}
-            className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 py-1"
+            className="text-[11px] font-bold uppercase tracking-wider text-slate-400 py-1"
           >
             {dayLabel}
           </div>
@@ -401,7 +401,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+          <p className="text-xs text-slate-400 italic">
             Tap dates on the calendar to select them for this event.
           </p>
         )}
@@ -491,7 +491,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
               {sortedShared.map((slot, i) => (
                 <div key={slot.id}>
                   {sharedTimes.length > 1 && (
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
                       Time {i + 1}
                     </p>
                   )}

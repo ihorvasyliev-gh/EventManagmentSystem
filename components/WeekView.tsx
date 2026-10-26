@@ -242,16 +242,16 @@ const WeekView: React.FC<WeekViewProps> = ({
                 type="button"
                 disabled={selectedMobileDayIndex === 0}
                 onClick={() => setSelectedMobileDayIndex(prev => Math.max(0, prev - 1))}
-                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-30 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Previous day"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
               <div className="flex items-center gap-2">
-                <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white whitespace-nowrap">
                   {activeMobileGroup.day.toLocaleDateString(APP_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' })}
-                </span>
+                </h3>
                 {/* Not on the narrowest phones, where it pushed "Add" out; the day strip above marks today too */}
                 {isSameDay(activeMobileGroup.day, today) && (
                   <span className="hidden min-[360px]:inline px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-brand-500 text-white rounded-full">
@@ -264,7 +264,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                 type="button"
                 disabled={selectedMobileDayIndex === 6}
                 onClick={() => setSelectedMobileDayIndex(prev => Math.min(6, prev + 1))}
-                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-30 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Next day"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -287,7 +287,7 @@ const WeekView: React.FC<WeekViewProps> = ({
           {/* Mobile active day events */}
           <div className="p-3 bg-white dark:bg-slate-900/40 rounded-b-xl border-x border-b border-slate-200 dark:border-slate-700 min-h-[16rem] space-y-2.5">
             {activeMobileGroup.events.length === 0 ? (
-              <div className="h-36 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs italic border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+              <div className="h-36 flex flex-col items-center justify-center text-slate-400 text-xs italic border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
                 No events
               </div>
             ) : (
@@ -360,7 +360,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     : 'border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <div className="flex items-center gap-1.5">
+                <h3 className="flex items-center gap-1.5">
                   <span className="text-xs font-bold uppercase tracking-wider">{dayName}</span>
                   <span
                     className={`text-xs font-extrabold w-6 h-6 flex items-center justify-center rounded-full ${
@@ -374,7 +374,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                       Today
                     </span>
                   )}
-                </div>
+                </h3>
 
                 {onAddEventForDate && userRole === UserRole.ADMIN && (
                   <button
@@ -395,7 +395,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               {/* Event Cards in Day Column */}
               <div className="p-2 space-y-2 flex-1 min-h-[18rem] overflow-y-auto max-h-[36rem]">
                 {group.events.length === 0 ? (
-                  <div className="h-28 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs italic border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                  <div className="h-28 flex flex-col items-center justify-center text-slate-400 text-xs italic border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
                     No events
                   </div>
                 ) : (
@@ -417,25 +417,25 @@ const WeekView: React.FC<WeekViewProps> = ({
                         {/* Category & Time */}
                         <div className="flex items-center justify-between gap-1 flex-wrap">
                           {/* Short names: the full ones were cut to "Enterprise & Em…" in these narrow columns */}
-                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
+                          <span className={`text-[11px] xl:text-xs font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
                             {shortCategoryLabel(event.category)}
                           </span>
-                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
-                            <Clock className="w-2.5 h-2.5 text-slate-400" />
+                          <span className="text-[11px] xl:text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-slate-400" />
                             {timeText}
                           </span>
                         </div>
 
                         {/* Title */}
-                        <h4 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere] leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
+                        <h4 className="text-xs xl:text-sm font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere] leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
                           {isMulti && <span className="mr-1 text-brand-600 dark:text-brand-400 font-bold">↔</span>}
                           {event.title}
                         </h4>
 
                         {/* Location */}
                         {event.location && (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                            <MapPin className="w-2.5 h-2.5 flex-shrink-0 text-slate-400" />
+                          <div className="flex items-center gap-1 text-[11px] xl:text-xs text-slate-500 dark:text-slate-400 truncate">
+                            <MapPin className="w-2.5 h-2.5 xl:w-3 xl:h-3 flex-shrink-0 text-slate-400" />
                             <span className="truncate">{event.location}</span>
                           </div>
                         )}

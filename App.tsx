@@ -9,6 +9,7 @@ import CategoryPills from './components/CategoryPills';
 import SubmissionsBanner from './components/SubmissionsBanner';
 import DigestChangedBanner from './components/DigestChangedBanner';
 import UpdateBanner from './components/UpdateBanner';
+import OfflineBanner from './components/OfflineBanner';
 import AppFooter from './components/AppFooter';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './contexts/ToastContext';
@@ -18,6 +19,7 @@ import { filterEvents } from './utils/filterEvents';
 import { getEventLocations, isRecurringEvent } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useSession } from './hooks/useSession';
 import { useEventsSync } from './hooks/useEventsSync';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
@@ -57,7 +59,7 @@ const AppContent: React.FC = () => {
 
   const {
     events, setEvents, recurrenceExceptions, setRecurrenceExceptions,
-    loadingEvents, isRefreshing, refreshEvents, syncAfterChange
+    loadingEvents, isRefreshing, lastSyncedAt, refreshEvents, syncAfterChange
   } = useEventsSync({
     userId: user?.id ?? null,
     onError: useCallback((message: string) => showToast(message, 'error'), [showToast]),
@@ -70,6 +72,7 @@ const AppContent: React.FC = () => {
   // third of the screen (the menu has the same actions)
   const hasTabBar = useMedia('(max-width: 767px) and (min-height: 500px)');
   usePullToRefresh(!!user && isMobile, () => void refreshEvents(true));
+  const isOnline = useOnlineStatus();
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -259,6 +262,19 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 flex flex-col font-sans">
+      {/* Keyboard users: past the top bar, banners, search and categories, straight to the calendar */}
+      <a
+        href="#calendar"
+        onClick={(e) => {
+          e.preventDefault();
+          const calendar = document.getElementById('calendar');
+          calendar?.focus({ preventScroll: true });
+          calendar?.scrollIntoView({ block: 'start' });
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2.5 focus:rounded focus:bg-brand-600 focus:text-white focus:text-sm focus:font-semibold focus:shadow-lg"
+      >
+        Skip to calendar
+      </a>
       <Navbar
         user={user}
         onLogout={handleLogout}
@@ -284,6 +300,8 @@ const AppContent: React.FC = () => {
       />
 
       <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 lg:py-6">
+        <h1 className="sr-only">CCP Event Calendar</h1>
+        {!isOnline && <OfflineBanner lastSyncedAt={lastSyncedAt} />}
         {isAdmin && pendingSubmissions.length > 0 && (
           <SubmissionsBanner submissions={pendingSubmissions} onOpen={openInbox} />
         )}
@@ -338,29 +356,31 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
-        {loadingEvents ? (
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-            <div className="grid grid-cols-7 gap-2 lg:gap-4">
-              {Array.from({ length: 35 }).map((_, idx) => (
-                <CalendarDaySkeleton key={idx} />
-              ))}
+        <div id="calendar" tabIndex={-1} className="scroll-mt-20 focus:outline-none">
+          {loadingEvents ? (
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+              <div className="grid grid-cols-7 gap-2 lg:gap-4">
+                {Array.from({ length: 35 }).map((_, idx) => (
+                  <CalendarDaySkeleton key={idx} />
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          <CalendarView
-            events={filteredEvents}
-            onEventClick={openEvent}
-            onAddEventForDate={isAdmin ? submitPage.openWithDate : undefined}
-            recurrenceExceptions={recurrenceExceptions}
-            userRole={user.role}
-            hasActiveFilters={hasActiveFilters}
-            onClearFilters={clearAllFilters}
-            dateRange={filters.dateRange}
-            location={filters.location}
-            showResults={showResults}
-            todayRequest={todayRequest}
-          />
-        )}
+          ) : (
+            <CalendarView
+              events={filteredEvents}
+              onEventClick={openEvent}
+              onAddEventForDate={isAdmin ? submitPage.openWithDate : undefined}
+              recurrenceExceptions={recurrenceExceptions}
+              userRole={user.role}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearAllFilters}
+              dateRange={filters.dateRange}
+              location={filters.location}
+              showResults={showResults}
+              todayRequest={todayRequest}
+            />
+          )}
+        </div>
       </main>
 
       {modal.isOpen && (

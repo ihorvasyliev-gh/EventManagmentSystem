@@ -99,7 +99,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
     <>
       <div className="grid grid-cols-7 mb-2">
         {WEEKDAYS.map(day => (
-          <div key={day} className="text-center text-[11px] 2xl:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider sm:tracking-widest px-0.5">
+          <div key={day} className="text-center text-[11px] lg:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider sm:tracking-widest px-0.5">
             {day}
           </div>
         ))}
@@ -129,7 +129,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
       </div>
 
       {isMobile && !selectedDay && (
-        <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
+        <p className="mt-3 text-center text-xs text-slate-400">
           Tap a day to see its events
         </p>
       )}

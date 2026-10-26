@@ -8,6 +8,7 @@ import ModalShell from './ModalShell';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { getCategoryDotColor } from './WeekView';
 import { useToast } from '../contexts/ToastContext';
+import { useMedia } from '../hooks/useMedia';
 
 const EXPORT_RANGE_YEARS = 2;
 const FEED_NAME = 'CCP Events';
@@ -37,6 +38,8 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
   // With search or filters on, the export says so and can take everything instead
   const [scope, setScope] = useState<'shown' | 'all'>('shown');
   const { showToast } = useToast();
+
+  const isPhone = useMedia('(max-width: 639px)');
 
   if (!isOpen) return null;
 
@@ -110,12 +113,14 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
     }
   };
 
+  // Phones: no Cancel / Close (the sheet has its own close button and pulls down), and no footer
+  // at all on Subscribe, which has nothing else in it
   const exportFooter = (
     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
       <button
         type="button"
         onClick={onClose}
-        className="cta inline-flex justify-center items-center rounded border border-slate-300 dark:border-slate-600 px-4 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+        className="cta hidden sm:inline-flex justify-center items-center rounded border border-slate-300 dark:border-slate-600 px-4 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
       >
         {activeTab === 'export' ? 'Cancel' : 'Close'}
       </button>
@@ -193,7 +198,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
       title="Export & subscribe"
       subtitle="Download the calendar or keep it synced in your own calendar app"
       icon={<Download className="w-5 h-5" />}
-      footer={exportFooter}
+      footer={isPhone && activeTab !== 'export' ? undefined : exportFooter}
     >
       {/* Tabs */}
       <div className="grid grid-cols-2 mb-5 border-b border-slate-200 dark:border-slate-700" role="tablist">

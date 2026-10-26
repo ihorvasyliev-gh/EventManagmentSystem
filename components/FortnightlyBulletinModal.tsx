@@ -732,7 +732,8 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 No published events in this period. Try a longer range.
               </div>
             ) : (
-              <ul className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/70 max-h-64 overflow-y-auto">
+              // Focusable, so the list scrolls from the keyboard too
+              <ul tabIndex={0} aria-label="Events in this digest" className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/70 max-h-64 overflow-y-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 {groups.map((g) => (
                   <li key={g.event.id} className="flex items-center gap-3 px-3 py-2.5">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(g.event.category)}`} aria-hidden="true" />

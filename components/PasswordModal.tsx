@@ -97,17 +97,17 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, mode, email, onCl
   };
 
   const footer = (
-    <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
+    <div className="flex flex-wrap sm:flex-nowrap sm:items-center gap-2">
       {forced && onSignOut ? (
         <button type="button" onClick={onSignOut} disabled={saving} className="cta inline-flex items-center justify-center gap-2 h-11 px-4 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 sm:mr-auto disabled:opacity-60">
           <LogOut className="w-4 h-4" /> Sign out
         </button>
       ) : (
-        <button type="button" onClick={handleClose} disabled={saving} className="cta h-11 px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 sm:ml-auto disabled:opacity-60">
+        <button type="button" onClick={handleClose} disabled={saving} className="cta h-11 px-4 sm:px-5 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 sm:ml-auto disabled:opacity-60">
           Cancel
         </button>
       )}
-      <button type="submit" form="password-form" disabled={saving} className="cta inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
+      <button type="submit" form="password-form" disabled={saving} className="cta flex-1 sm:flex-none inline-flex items-center justify-center gap-2 h-11 px-5 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-60">
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
         {saving ? 'Saving…' : 'Save new password'}
       </button>

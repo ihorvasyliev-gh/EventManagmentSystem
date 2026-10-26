@@ -19,9 +19,9 @@ const MobileDayPanel: React.FC<MobileDayPanelProps> = ({ day, events, onEventCli
   <div ref={panelRef} className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 animate-fade-in">
     <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-slate-700">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-bold text-slate-900 dark:text-white">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
           {day.toLocaleDateString(APP_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' })}
-        </span>
+        </h3>
         <span className="text-xs text-slate-500 dark:text-slate-400">
           ({events.length} {events.length === 1 ? 'event' : 'events'})
         </span>

@@ -299,8 +299,9 @@ const StaffModal: React.FC<StaffModalProps> = ({ isOpen, onClose, currentUserId 
       </div>
     );
     footer = (
-      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-        <button type="button" onClick={handleClose} className={secondaryButton}>Close</button>
+      // Phones: no Close (the sheet has its own close button and pulls down)
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
+        <button type="button" onClick={handleClose} className={`${secondaryButton} hidden sm:inline-flex`}>Close</button>
         <button type="button" onClick={() => setView('add')} className={primaryButton}>
           <UserPlus className="w-4 h-4" /> Add staff account
         </button>

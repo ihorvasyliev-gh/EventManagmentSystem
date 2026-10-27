@@ -57,19 +57,25 @@ const Tile: React.FC<{ value: number; label: string }> = ({ value, label }) => (
   </div>
 );
 
-/** One row: label, a bar for the size (anchored at the left), and the number written out */
-const BarRow: React.FC<{ label: React.ReactNode; value: number; max: number; detail?: string }> = ({ label, value, max, detail }) => (
-  <tr className="align-middle">
-    <th scope="row" className="py-1.5 pr-3 text-left font-normal text-sm text-slate-700 dark:text-slate-200 w-[45%]">{label}</th>
-    <td className="py-1.5 pr-3 w-[40%]" aria-hidden="true">
-      <div className="h-2.5 rounded-r bg-brand-600 dark:bg-brand-400" style={{ width: `${max > 0 ? Math.max(value > 0 ? 3 : 0, (value / max) * 100) : 0}%` }} />
-    </td>
-    <td className="py-1.5 text-right text-sm tabular-nums text-slate-900 dark:text-white whitespace-nowrap">
-      {value}
-      {detail && <span className="text-slate-500 dark:text-slate-400"> · {detail}</span>}
-    </td>
-  </tr>
-);
+/**
+ * One row: label, a bar for the size (anchored at the left), and the number written out. On
+ * phones the bar goes under the label, so the label and the number keep their room
+ */
+const BarRow: React.FC<{ label: React.ReactNode; value: React.ReactNode; size: number; max: number; barClass?: string }> = ({
+  label, value, size, max, barClass = 'bg-brand-600 dark:bg-brand-400'
+}) => {
+  const bar = <div className={`h-2.5 rounded-r ${barClass}`} style={{ width: `${max > 0 ? Math.max(size > 0 ? 3 : 0, (size / max) * 100) : 0}%` }} />;
+  return (
+    <tr className="align-middle">
+      <th scope="row" className="py-1.5 pr-3 text-left font-normal text-sm text-slate-700 dark:text-slate-200 sm:w-[45%]">
+        {label}
+        <div className="sm:hidden mt-1" aria-hidden="true">{bar}</div>
+      </th>
+      <td className="hidden sm:table-cell py-1.5 pr-3 w-[35%]" aria-hidden="true">{bar}</td>
+      <td className="py-1.5 text-right text-sm tabular-nums text-slate-900 dark:text-white whitespace-nowrap">{value}</td>
+    </tr>
+  );
+};
 
 const Section: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
   <section>
@@ -207,16 +213,22 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
               <p className="text-sm text-slate-500 dark:text-slate-400">No published events in this period.</p>
             ) : (
               <>
-                <Section title="By category" note="Dates held · different events">
+                <Section title="By category">
                   <table className="w-full">
                     <tbody>
                       {stats.byCategory.map((c) => (
                         <BarRow
                           key={c.name}
                           label={<span className="inline-flex items-center gap-2"><span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(c.name)}`} aria-hidden="true" />{c.name}</span>}
-                          value={c.occurrences}
+                          value={
+                            <>
+                              {c.occurrences} {c.occurrences === 1 ? 'date' : 'dates'}
+                              <span className="text-slate-500 dark:text-slate-400"> · {c.events} {c.events === 1 ? 'event' : 'events'}</span>
+                            </>
+                          }
+                          size={c.occurrences}
                           max={maxCategory}
-                          detail={`${c.events} ${c.events === 1 ? 'event' : 'events'}`}
+                          barClass={getCategoryDotColor(c.name)}
                         />
                       ))}
                     </tbody>
@@ -226,7 +238,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
                 <Section title="By month" note="Dates held">
                   <table className="w-full">
                     <tbody>
-                      {stats.byMonth.map((m) => <BarRow key={m.key} label={m.label} value={m.occurrences} max={maxMonth} />)}
+                      {stats.byMonth.map((m) => <BarRow key={m.key} label={m.label} value={m.occurrences} size={m.occurrences} max={maxMonth} />)}
                     </tbody>
                   </table>
                 </Section>
@@ -235,7 +247,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
                   <Section title="Busiest venues" note="Dates held">
                     <table className="w-full">
                       <tbody>
-                        {stats.topVenues.map((v) => <BarRow key={v.name} label={<span className="break-words">{v.name}</span>} value={v.occurrences} max={maxVenue} />)}
+                        {stats.topVenues.map((v) => <BarRow key={v.name} label={<span className="break-words">{v.name}</span>} value={v.occurrences} size={v.occurrences} max={maxVenue} />)}
                       </tbody>
                     </table>
                   </Section>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Calendar as CalendarIcon, ChevronDown, Clock, MapPin, Repeat } from 'lucide-react';
+import { Calendar as CalendarIcon, CalendarRange, ChevronDown, Clock, MapPin, Repeat } from 'lucide-react';
 import { type Event } from '../../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../../utils/date';
 import { isRecurringEvent } from '../../utils/recurrence';
@@ -123,7 +123,8 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
                             </h4>
                             {isMulti && event.endDate && (
                               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
-                                <span>🗓 {event.date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}</span>
+                                <CalendarRange className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span>{event.date.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })} – {event.endDate.toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'short' })}</span>
                               </div>
                             )}
                             {/* One line: the whole description is in the event's window */}

@@ -25,7 +25,8 @@ const Badge: React.FC<{ count: number }> = ({ count }) => (
     </span>
 );
 
-/** Phone tab bar: the most used actions within thumb reach, "create" raised in the middle */
+/** Phone tab bar: the most used actions within thumb reach, "create" raised in the middle. Solid,
+ * so the events scrolling under it never show through its labels */
 const BottomNavigation: React.FC<BottomNavigationProps> = ({
     onHomeClick,
     onCreateClick,
@@ -55,7 +56,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
     return (
         <nav
             aria-label="Quick actions"
-            className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t glass-panel dark-glass pb-safe"
+            className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-slate-200 bg-white dark-panel shadow-[0_-2px_8px_rgba(0,0,0,0.04)] pb-safe"
         >
             <div className="flex items-stretch h-16 max-w-md mx-auto px-1">
                 <button type="button" onClick={onHomeClick} className={`${tab} !text-brand-600 dark:!text-brand-400`} aria-current="page" title="Back to today">
@@ -74,7 +75,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 ) : onMyEventsClick && (
                     <button type="button" onClick={onMyEventsClick} className={tab}>
                         <CalendarCheck className="h-6 w-6" />
-                        <span className="text-[11px] font-medium">My events</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap">My events</span>
                     </button>
                 )}
 
@@ -98,7 +99,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                             <History className="h-6 w-6" />
                             {changeLogCount > 0 && <Badge count={changeLogCount} />}
                         </span>
-                        <span className="text-[11px] font-medium">Changes</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap">Change log</span>
                     </button>
                 )}
             </div>

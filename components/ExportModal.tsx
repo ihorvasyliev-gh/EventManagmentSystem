@@ -5,6 +5,7 @@ import { exportToICal, exportToExcel, downloadFile, downloadBlob, isPublished } 
 import { getEventsWithRelated } from '../services/eventService';
 import { expandRecurringEvents } from '../utils/recurrence';
 import ModalShell from './ModalShell';
+import Tabs from './Tabs';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { getCategoryDotColor } from './WeekView';
 import { useToast } from '../contexts/ToastContext';
@@ -113,7 +114,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
     }
   };
 
-  // Phones: no Cancel / Close (the sheet has its own close button and pulls down), and no footer
+  // Phones: no Close (the sheet has its own close button and pulls down), and no footer
   // at all on Subscribe, which has nothing else in it
   const exportFooter = (
     <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -122,7 +123,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
         onClick={onClose}
         className="cta hidden sm:inline-flex justify-center items-center rounded border border-slate-300 dark:border-slate-600 px-4 py-2.5 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
       >
-        {activeTab === 'export' ? 'Cancel' : 'Close'}
+        Close
       </button>
       {activeTab === 'export' && (
         <button
@@ -200,27 +201,16 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
       icon={<Download className="w-5 h-5" />}
       footer={isPhone && activeTab !== 'export' ? undefined : exportFooter}
     >
-      {/* Tabs */}
-      <div className="grid grid-cols-2 mb-5 border-b border-slate-200 dark:border-slate-700" role="tablist">
-        {([
-          { id: 'export', label: 'Download', icon: <Download className="h-4 w-4" /> },
-          { id: 'subscribe', label: 'Subscribe', icon: <Link2 className="h-4 w-4" /> }
-        ] as const).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`relative inline-flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-current ${
-              activeTab === t.id ? 'text-brand-600 dark:text-brand-300 after:opacity-100' : 'text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-300 after:opacity-0'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Export"
+        className="mb-5"
+        value={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'export', label: 'Download', icon: <Download className="h-4 w-4" aria-hidden="true" /> },
+          { id: 'subscribe', label: 'Subscribe', icon: <Link2 className="h-4 w-4" aria-hidden="true" /> }
+        ]}
+      />
 
       {activeTab === 'export' ? (
         <div className="space-y-4">

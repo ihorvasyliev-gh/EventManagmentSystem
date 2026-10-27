@@ -82,4 +82,5 @@ test('period statistics count dates, events, categories, months and venues (publ
   assert.deepEqual(stats.byCategory.map((c) => [c.name, c.occurrences, c.events]), [['Education & Training', 3, 1], ['Community & Family', 1, 1]]);
   assert.deepEqual(stats.byMonth.map((m) => m.occurrences), [3, 1, 0]);
   assert.match(statsSummaryText(stats, 'Q1 2026'), /2 events on 4 dates at 1 venue/);
+  assert.match(statsSummaryText(stats, 'Q1 2026'), /- Education & Training: 3 dates · 1 event\n- Community & Family: 1 date · 1 event/);
 });

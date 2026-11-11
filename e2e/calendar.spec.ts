@@ -22,6 +22,8 @@ test('a search lists its results across every date, not only the month on screen
   await expect(results.getByText('Coding club graduation')).toBeVisible();
   await expect(results.getByText('Coding club', { exact: true })).toBeVisible();
   await expect(results.getByText('Coffee morning')).toHaveCount(0);
+  // The words searched for are marked in each result
+  await expect(results.locator('mark').first()).toHaveText('club');
   // Past results wait behind a button
   await expect(results.getByText('Book club')).toHaveCount(0);
   await results.getByRole('button', { name: 'Show past results (1)' }).click();
@@ -108,4 +110,61 @@ test('an admin can keep a new event as a draft, off the calendar, instead of pub
   await expect(page.getByText('Saved as a draft: not on the calendar until you publish it.')).toBeVisible();
   await page.getByRole('button', { name: 'Save as draft' }).last().click();
   await expect.poll(() => sent).toMatchObject({ title: 'Board away day', publish: false });
+});
+
+test('the calendar title opens a list of months: any month in two clicks, or with the keyboard', async ({ page }) => {
+  const nextYear = new Date().getFullYear() + 1;
+  await mockSupabase(page, { events: [eventRow({ id: id(1), title: 'Coffee morning', date: daysFromNow(2) })] });
+  await signIn(page);
+  const title = page.locator('#calendar h2').getByRole('button');
+  await title.click();
+  const picker = page.getByRole('dialog', { name: 'Choose a month' });
+  await expect(picker).toBeVisible();
+  await expectAccessible(page);
+  await picker.getByRole('button', { name: 'Next year' }).click();
+  await picker.getByRole('button', { name: `March ${nextYear}` }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('#calendar h2')).toContainText(`March ${nextYear}`);
+
+  // Keyboard: opens on the month shown, the arrows move between months, Enter picks
+  await title.press('Enter');
+  await expect(picker.getByRole('button', { name: `March ${nextYear}` })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
+  await expect(picker.getByRole('button', { name: `July ${nextYear}` })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#calendar h2')).toContainText(`July ${nextYear}`);
+  await expect(title).toBeFocused();
+
+  // Escape closes it without moving the calendar
+  await title.click();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('#calendar h2')).toContainText(`July ${nextYear}`);
+});
+
+test('coming back from the event form, the calendar is still on the month it was left on', async ({ page }) => {
+  await mockSupabase(page, { events: [eventRow({ id: id(1), title: 'Coffee morning', date: daysFromNow(2) })] });
+  await signIn(page);
+  await expect(page.getByText('Coffee morning').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Next month' }).click();
+  await page.getByRole('button', { name: 'Next month' }).click();
+  const shown = await page.locator('#calendar h2').innerText();
+
+  await page.getByRole('button', { name: 'New event' }).first().click();
+  await expect(page.getByLabel('Event name')).toBeVisible();
+  await page.goBack();
+  await expect(page.locator('#calendar h2')).toContainText(shown);
+});
+
+test('the event window and the event form are fetched ahead of the first click', async ({ page }) => {
+  await mockSupabase(page, { events: [eventRow({ id: id(1), title: 'Coffee morning', date: daysFromNow(2) })] });
+  const fetched = Promise.all([
+    page.waitForResponse((r) => /\/assets\/EventModal-.+\.js$/.test(r.url()) && r.ok()),
+    page.waitForResponse((r) => /\/assets\/SubmitEventPage-.+\.js$/.test(r.url()) && r.ok())
+  ]);
+  await signIn(page);
+  await expect(page.getByText('Coffee morning').first()).toBeVisible();
+  await fetched;
 });

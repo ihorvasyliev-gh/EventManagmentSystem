@@ -1,7 +1,8 @@
-import React from 'react';
-import { ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon, List as ListIcon } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon, List as ListIcon } from 'lucide-react';
 import { type ViewMode } from '../../types';
 import { APP_LOCALE } from '../../utils/date';
+import MonthPicker from './MonthPicker';
 
 interface CalendarHeaderProps {
   viewMode: ViewMode;
@@ -12,6 +13,9 @@ interface CalendarHeaderProps {
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
+  today: Date;
+  /** Shows the month picked from the title's list of months */
+  onJumpToMonth: (firstOfMonth: Date) => void;
 }
 
 const VIEWS = [
@@ -25,17 +29,38 @@ const VIEWS = [
  * On phones the views get a row of their own, with their names, so the period isn't cut short and
  * every button is a full 44px to tap.
  */
-const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeChange, title, currentDate, onPrev, onNext, onToday }) => (
+const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeChange, title, currentDate, onPrev, onNext, onToday, today, onJumpToMonth }) => {
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const closePicker = useCallback(() => setIsPickerOpen(false), []);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  return (
   <div className="px-3 pt-2 sm:px-4 sm:py-3 lg:px-6 flex flex-wrap sm:flex-nowrap items-center justify-between border-b border-slate-100 dark:border-slate-800 gap-x-2 gap-y-1 sm:gap-4">
-    <h2 className="min-w-0 flex-1 text-base sm:text-xl lg:text-2xl font-medium text-slate-900 dark:text-white truncate">
-      {viewMode === 'week' ? title : (
-        <>
-          {/* The full month where it fits beside the buttons */}
-          <span className="min-[360px]:hidden">{currentDate.toLocaleString(APP_LOCALE, { month: 'short', year: 'numeric' })}</span>
-          <span className="hidden min-[360px]:inline">{title}</span>
-        </>
-      )}
+    <h2 className="min-w-0 flex-1 flex text-base sm:text-xl lg:text-2xl font-medium text-slate-900 dark:text-white">
+      {/* The title opens the list of months: any month in two clicks */}
+      <button
+        ref={titleRef}
+        type="button"
+        onClick={() => setIsPickerOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={isPickerOpen}
+        title="Choose a month"
+        className="group min-w-0 min-h-[44px] sm:min-h-0 -mx-1.5 px-1.5 sm:py-0.5 flex items-center gap-1 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      >
+        <span className="truncate">
+          {viewMode === 'week' ? title : (
+            <>
+              {/* The full month where it fits beside the buttons */}
+              <span className="min-[360px]:hidden">{currentDate.toLocaleString(APP_LOCALE, { month: 'short', year: 'numeric' })}</span>
+              <span className="hidden min-[360px]:inline">{title}</span>
+            </>
+          )}
+        </span>
+        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
     </h2>
+    {isPickerOpen && titleRef.current && (
+      <MonthPicker anchor={titleRef.current} currentDate={currentDate} today={today} onPick={onJumpToMonth} onClose={closePicker} />
+    )}
     <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
       <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
         <button
@@ -81,6 +106,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
       ))}
     </div>
   </div>
-);
+  );
+};
 
 export default CalendarHeader;

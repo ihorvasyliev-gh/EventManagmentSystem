@@ -11,10 +11,12 @@ interface ResultsListProps {
   today: Date;
   onEventClick: (event: Event) => void;
   onClearFilters?: () => void;
+  /** The words searched for, marked in the results */
+  query?: string;
 }
 
 /** Search and filter results across all dates, upcoming first, the past ones folded away below */
-const ResultsList: React.FC<ResultsListProps> = ({ upcoming, past, today, onEventClick, onClearFilters }) => {
+const ResultsList: React.FC<ResultsListProps> = ({ upcoming, past, today, onEventClick, onClearFilters, query }) => {
   // Nothing coming up: the past results are what there is, so they start open
   const [showPast, setShowPast] = useState(upcoming.length === 0);
 
@@ -39,7 +41,7 @@ const ResultsList: React.FC<ResultsListProps> = ({ upcoming, past, today, onEven
   return (
     <div className="divide-y divide-slate-100 dark:divide-slate-800">
       {upcoming.length > 0 ? (
-        <AgendaDayGroups events={upcoming} today={today} onEventClick={onEventClick} markSeries />
+        <AgendaDayGroups events={upcoming} today={today} onEventClick={onEventClick} markSeries highlight={query} />
       ) : (
         <p className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">Nothing coming up matches.</p>
       )}
@@ -49,7 +51,7 @@ const ResultsList: React.FC<ResultsListProps> = ({ upcoming, past, today, onEven
           open={showPast}
           onToggle={() => setShowPast((open) => !open)}
         >
-          <AgendaDayGroups events={past} today={today} onEventClick={onEventClick} markSeries />
+          <AgendaDayGroups events={past} today={today} onEventClick={onEventClick} markSeries highlight={query} />
         </FoldedEvents>
       )}
     </div>

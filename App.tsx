@@ -16,6 +16,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { type Event, type EventFilters, UserRole } from './types';
 import { filterEvents } from './utils/filterEvents';
+import { eventNeighbours } from './utils/eventNeighbours';
 import { getEventLocations, isRecurringEvent } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
@@ -33,10 +34,12 @@ import { useChangeLogBadge } from './hooks/useChangeLogBadge';
 import { useSentDigest } from './hooks/useSentDigest';
 import { useReminderEmail } from './hooks/useReminderEmail';
 import { loadOrReload } from './utils/staleChunk';
+import { usePreloadWindows } from './hooks/usePreloadWindows';
 
 // Windows and pages load when first opened; after a deploy an old tab reloads instead of crashing
+// `preload` fetches a window's files ahead of its first opening (see usePreloadWindows)
 const lazyWithReload = <T extends React.ComponentType<any>>(load: () => Promise<{ default: T }>) =>
-  lazy(() => loadOrReload(load));
+  Object.assign(lazy(() => loadOrReload(load)), { preload: (): Promise<unknown> => load() });
 const EventModal = lazyWithReload(() => import('./components/EventModal'));
 const ExportModal = lazyWithReload(() => import('./components/ExportModal'));
 const SubmissionsModal = lazyWithReload(() => import('./components/SubmissionsModal'));
@@ -51,6 +54,13 @@ const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'))
 const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
 const ChangeLogModal = lazyWithReload(() => import('./components/ChangeLogModal'));
 const MyEventsModal = lazyWithReload(() => import('./components/MyEventsModal'));
+
+// Opened many times a day by everyone: fetched as soon as the calendar is up, so the first click
+// on an event (or on New event) opens at once, and works where the signal is poor or gone
+const PRELOAD_FIRST = [EventModal, SubmitEventPage];
+// The other everyday windows follow, by role
+const PRELOAD_ADMIN = [SubmissionsModal, FortnightlyBulletinModal, ExportModal];
+const PRELOAD_STAFF = [MyEventsModal, FortnightlyBulletinModal, ExportModal];
 
 const AppContent: React.FC = () => {
   const { showToast } = useToast();
@@ -72,6 +82,7 @@ const AppContent: React.FC = () => {
   // third of the screen (the menu has the same actions)
   const hasTabBar = useMedia('(max-width: 767px) and (min-height: 500px)');
   usePullToRefresh(!!user && isMobile, () => void refreshEvents(true));
+  usePreloadWindows(!!user && !loadingEvents, PRELOAD_FIRST, isAdmin ? PRELOAD_ADMIN : PRELOAD_STAFF);
   const isOnline = useOnlineStatus();
 
   // Search and Filter State
@@ -166,6 +177,14 @@ const AppContent: React.FC = () => {
     return filterEvents(events, { ...filters, search: searchQuery }, user?.role, user?.id, user?.email);
   }, [events, filters, searchQuery, user?.role, user?.id, user?.email]);
 
+  // The event window's Previous / Next: the events around the open one, among those being shown
+  const openEventNeighbours = useMemo(
+    () => (modal.isOpen && modal.event
+      ? eventNeighbours(filteredEvents, modal.event, { dateRange: filters.dateRange, location: filters.location, exceptions: recurrenceExceptions })
+      : { previous: null, next: null }),
+    [modal.isOpen, modal.event, filteredEvents, filters.dateRange, filters.location, recurrenceExceptions]
+  );
+
   const hasActiveFilters = Boolean(
     searchQuery.trim() || filters.category || filters.status || filters.dateRange ||
     filters.location || filters.submitterEmail || filters.creatorId || filters.tags?.length
@@ -215,14 +234,27 @@ const AppContent: React.FC = () => {
     if (userId) window.scrollTo({ top: 0, behavior: 'instant' });
   }, [userId]);
 
+  // The event form takes the calendar's place on screen. Coming back, the calendar is where it
+  // was left: the same month or week, scrolled to the same spot (not back at today, at the top)
+  const calendarDateRef = React.useRef<Date | null>(null);
+  const rememberCalendarDate = useCallback((date: Date) => {
+    calendarDateRef.current = date;
+  }, []);
+  useEffect(() => {
+    if (!userId) calendarDateRef.current = null;
+  }, [userId]);
+
   // Coming back from the submit page: pick up whatever was just submitted
   const wasSubmitPageOpenRef = React.useRef(submitPage.isOpen);
+  const { takeScrollBefore } = submitPage;
   useEffect(() => {
     if (wasSubmitPageOpenRef.current && !submitPage.isOpen && user) {
       void refreshEvents(true);
+      const top = takeScrollBefore();
+      if (top > 0) window.scrollTo({ top, behavior: 'instant' });
     }
     wasSubmitPageOpenRef.current = submitPage.isOpen;
-  }, [submitPage.isOpen, user, refreshEvents]);
+  }, [submitPage.isOpen, user, refreshEvents, takeScrollBefore]);
 
   if (submitPage.isOpen) {
     return (
@@ -377,7 +409,10 @@ const AppContent: React.FC = () => {
               dateRange={filters.dateRange}
               location={filters.location}
               showResults={showResults}
+              searchQuery={searchQuery}
               todayRequest={todayRequest}
+              initialDate={calendarDateRef.current}
+              onDateChange={rememberCalendarDate}
             />
           )}
         </div>
@@ -399,6 +434,9 @@ const AppContent: React.FC = () => {
             onEdit={handleEditEvent}
             recurrenceExceptions={recurrenceExceptions}
             getShareLink={eventShareLink}
+            previousEvent={openEventNeighbours.previous}
+            nextEvent={openEventNeighbours.next}
+            onNavigate={openEvent}
           />
         </Suspense>
       )}

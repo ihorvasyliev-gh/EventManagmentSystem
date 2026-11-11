@@ -174,3 +174,40 @@ test('editing a submission from the inbox opens the event form set to publish it
   await expect(page.getByText('"Coffee morning for parents" is saved and published')).toBeVisible();
   expect(saves[0]).toMatchObject({ title: 'Coffee morning for parents', status: 'published', submitter_email: 'yvonne@partnershipcork.ie' });
 });
+
+test('the event window goes to the event before and after, by its buttons and the arrow keys', async ({ page }) => {
+  const uid = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+  await mockSupabase(page, {
+    events: [
+      eventRow({ id: uid(1), title: 'Coffee morning', date: daysFromNow(1) }),
+      eventRow({ id: uid(2), title: 'Coding club', date: daysFromNow(2) }),
+      eventRow({ id: uid(3), title: 'Book club', date: daysFromNow(40) })
+    ]
+  });
+  await signIn(page);
+  await page.getByRole('group', { name: 'Calendar view' }).getByRole('button', { name: 'Agenda' }).click();
+  await page.getByRole('heading', { name: 'Coding club' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+  await expectAccessible(page);
+
+  // Next: the following event, even in a later month; nothing after the last one
+  await dialog.getByRole('button', { name: 'Next event: Book club' }).click();
+  await expect(dialog.getByRole('heading', { name: 'Book club' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Next event' })).toHaveAttribute('aria-disabled', 'true');
+
+  // The arrow keys do the same, and stop at the first event
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByRole('heading', { name: 'Coffee morning' })).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByRole('heading', { name: 'Coffee morning' })).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(dialog.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+
+  // The calendar behind stayed where it was
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Coding club' })).toBeVisible();
+});

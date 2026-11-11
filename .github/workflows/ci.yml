@@ -33,7 +33,9 @@ jobs:
       - run: npm run build
 
   e2e:
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: it moved to Ubuntu 26.04, which the pinned Playwright (1.56.1) can't install
+    # Chromium on. Move both together.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

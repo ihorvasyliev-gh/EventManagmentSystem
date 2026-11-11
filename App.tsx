@@ -16,6 +16,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { type Event, type EventFilters, UserRole } from './types';
 import { filterEvents } from './utils/filterEvents';
+import { eventNeighbours } from './utils/eventNeighbours';
 import { getEventLocations, isRecurringEvent } from './utils/recurrence';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
@@ -175,6 +176,14 @@ const AppContent: React.FC = () => {
   const filteredEvents = useMemo(() => {
     return filterEvents(events, { ...filters, search: searchQuery }, user?.role, user?.id, user?.email);
   }, [events, filters, searchQuery, user?.role, user?.id, user?.email]);
+
+  // The event window's Previous / Next: the events around the open one, among those being shown
+  const openEventNeighbours = useMemo(
+    () => (modal.isOpen && modal.event
+      ? eventNeighbours(filteredEvents, modal.event, { dateRange: filters.dateRange, location: filters.location, exceptions: recurrenceExceptions })
+      : { previous: null, next: null }),
+    [modal.isOpen, modal.event, filteredEvents, filters.dateRange, filters.location, recurrenceExceptions]
+  );
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() || filters.category || filters.status || filters.dateRange ||
@@ -425,6 +434,9 @@ const AppContent: React.FC = () => {
             onEdit={handleEditEvent}
             recurrenceExceptions={recurrenceExceptions}
             getShareLink={eventShareLink}
+            previousEvent={openEventNeighbours.previous}
+            nextEvent={openEventNeighbours.next}
+            onNavigate={openEvent}
           />
         </Suspense>
       )}

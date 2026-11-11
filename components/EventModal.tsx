@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { type Event, UserRole, type Attachment, type EventHistoryEntry } from '../types';
-import { X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { fetchEventDetails } from '../services/eventService';
 import EventDetails from './event-modal/EventDetails';
 import EventModalFooter from './event-modal/EventModalFooter';
@@ -32,6 +32,11 @@ interface EventModalProps {
   getShareLink?: (event: Event) => string;
   /** Days deleted from recurring series (event id → days) */
   recurrenceExceptions?: Map<string, Date[]>;
+  /** The events just before and after this one by date (null at either end of the calendar) */
+  previousEvent?: Event | null;
+  nextEvent?: Event | null;
+  /** Shows another event in this window (Previous / Next, and the ← → keys) */
+  onNavigate?: (event: Event) => void;
 }
 
 // The other upcoming dates of a repeating or multi-date event (the calendar shows one at a time)
@@ -51,7 +56,10 @@ const EventModal: React.FC<EventModalProps> = ({
   onDuplicate,
   onEdit,
   getShareLink,
-  recurrenceExceptions
+  recurrenceExceptions,
+  previousEvent = null,
+  nextEvent = null,
+  onNavigate
 }) => {
   const { showToast } = useToast();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -100,9 +108,32 @@ const EventModal: React.FC<EventModalProps> = ({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, showDeleteDialog, canEdit, onEdit, event]);
 
+  // ← / → show the event before / after this one, while nothing is open on top of the details
+  const hasLayerOpen = showDeleteDialog || showPosterPreview || showCalendarDropdown;
+  useEffect(() => {
+    if (!isOpen || hasLayerOpen || !onNavigate) return;
+    const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const to = e.key === 'ArrowLeft' ? previousEvent : e.key === 'ArrowRight' ? nextEvent : null;
+      if (to) {
+        e.preventDefault();
+        onNavigate(to);
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isOpen, hasLayerOpen, onNavigate, previousEvent, nextEvent]);
+
+  // Another event in the same window starts at its top
+  const bodyRef = useRef<HTMLDivElement>(null);
+
   // Opening: the attachments and history of the event
   useEffect(() => {
     setShowPosterPreview(false);
+    setShowCalendarDropdown(false);
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
     if (!isOpen || !event) return;
     // Initial values from props (might be incomplete if lazy loaded)
     setAttachments(event.attachments || []);
@@ -198,13 +229,34 @@ const EventModal: React.FC<EventModalProps> = ({
             <h3 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-white" id="modal-title">
               Event Details
             </h3>
-            <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {/* The event before and the one after, by date: reading through a week without closing the window */}
+              {onNavigate && (previousEvent || nextEvent) && (
+                <div className="flex items-center mr-1 sm:mr-2" role="group" aria-label="Other events">
+                  {([[previousEvent, 'Previous event', '←', ChevronLeft], [nextEvent, 'Next event', '→', ChevronRight]] as const).map(([to, label, key, Icon]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => to && onNavigate(to)}
+                      // Not `disabled`: at the last event the button keeps the keyboard's place
+                      aria-disabled={!to}
+                      aria-label={to ? `${label}: ${to.title}` : label}
+                      title={to ? `${label} (${key}): ${to.title}` : undefined}
+                      className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 aria-disabled:opacity-30 aria-disabled:hover:bg-transparent aria-disabled:hover:text-slate-500 aria-disabled:cursor-default transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button onClick={requestClose} aria-label="Close" className="p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Body */}
-          <div className="px-4 sm:px-6 py-4 sm:py-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-4">
+          <div ref={bodyRef} className="px-4 sm:px-6 py-4 sm:py-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-4">
             {event && (
               <EventDetails
                 event={event}

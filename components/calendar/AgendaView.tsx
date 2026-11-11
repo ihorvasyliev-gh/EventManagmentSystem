@@ -5,6 +5,7 @@ import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../../utils
 import { isRecurringEvent } from '../../utils/recurrence';
 import { getCategoryColor, getCategoryDotColor } from '../WeekView';
 import { clickableProps, PendingBadge } from './shared';
+import Highlight from './Highlight';
 
 interface AgendaDayGroupsProps {
   events: Event[];
@@ -13,12 +14,14 @@ interface AgendaDayGroupsProps {
   onEventClick: (event: Event) => void;
   /** Search results: mark repeating events, which are listed once at their next date */
   markSeries?: boolean;
+  /** Search results: the words searched for, marked where they are in the title, description and place */
+  highlight?: string;
 }
 
 const monthLabel = (date: Date) => date.toLocaleDateString(APP_LOCALE, { month: 'long', year: 'numeric' });
 
 /** Events as a list under a sticky header per day, with the month named whenever it changes */
-export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today, onEventClick, markSeries = false }) => {
+export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today, onEventClick, markSeries = false, highlight }) => {
   const groups = new Map<string, Event[]>();
   for (const event of events) {
     const dateKey = event.date.toDateString();
@@ -119,7 +122,7 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
                             </div>
                             {/* Its own line: in the badges' row a short title sat beside them and a long one under them */}
                             <h4 className="mt-1 text-sm font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere]">
-                              {event.title}
+                              <Highlight text={event.title} query={highlight} />
                             </h4>
                             {isMulti && event.endDate && (
                               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 my-1 rounded text-[11px] font-semibold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
@@ -130,13 +133,13 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
                             {/* One line: the whole description is in the event's window */}
                             {event.description && (
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-                                {event.description}
+                                <Highlight text={event.description} query={highlight} snippet />
                               </p>
                             )}
                             {event.location && (
                               <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 mt-1">
                                 <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                                <span className="truncate">{event.location}</span>
+                                <span className="truncate"><Highlight text={event.location} query={highlight} /></span>
                               </div>
                             )}
                           </div>

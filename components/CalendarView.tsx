@@ -58,8 +58,14 @@ interface CalendarViewProps {
   location?: string;
   /** Show the events as search results: one list across all dates instead of the calendar */
   showResults?: boolean;
+  /** The words searched for, marked in the results */
+  searchQuery?: string;
   /** Goes back to today whenever this number changes (the logo, the Calendar tab) */
   todayRequest?: number;
+  /** Where to open (the period shown before the event form took the calendar's place); today when not given */
+  initialDate?: Date | null;
+  /** Told the date the calendar is at, whenever it moves */
+  onDateChange?: (date: Date) => void;
 }
 
 /** Months the Agenda shows before it is scrolled further */
@@ -77,9 +83,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   dateRange,
   location,
   showResults = false,
-  todayRequest = 0
+  searchQuery,
+  todayRequest = 0,
+  initialDate,
+  onDateChange
 }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => initialDate ?? new Date());
+  useEffect(() => {
+    onDateChange?.(currentDate);
+  }, [currentDate, onDateChange]);
   const [viewMode, setViewModeState] = useState<ViewMode>(
     () => readStoredViewMode(window.matchMedia('(max-width: 640px)').matches)
       ?? (window.matchMedia('(max-width: 640px)').matches ? 'agenda' : 'grid')
@@ -174,6 +186,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }, [viewMode, nextMonth]);
 
   const goToday = useCallback(() => setCurrentDate(new Date()), []);
+  // From the list of months: the month's first day, or today in the current month (so Week shows this week)
+  const jumpToMonth = useCallback((firstOfMonth: Date) => {
+    const now = new Date();
+    const isThisMonth = now.getFullYear() === firstOfMonth.getFullYear() && now.getMonth() === firstOfMonth.getMonth();
+    setCurrentDate(isThisMonth ? now : firstOfMonth);
+  }, []);
 
   // The logo and the Calendar tab bring the calendar back to today
   useEffect(() => {
@@ -331,6 +349,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           today={today}
           onEventClick={onEventClick}
           onClearFilters={onClearFilters}
+          query={searchQuery}
         />
       </section>
     );
@@ -346,6 +365,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         onPrev={prevPeriod}
         onNext={nextPeriod}
         onToday={goToday}
+        today={today}
+        onJumpToMonth={jumpToMonth}
       />
 
       {viewMode === 'week' && (

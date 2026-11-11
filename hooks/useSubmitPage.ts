@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Event } from '../types';
 
 export const isSubmitUrl = (): boolean =>
@@ -20,7 +20,17 @@ export const useSubmitPage = () => {
   const [editing, setEditing] = useState<Event | null>(null);
   const [publishOnSave, setPublishOnSave] = useState(false);
 
+  // How far the calendar was scrolled when the form opened over it, to go back to the same spot
+  const scrollBeforeRef = useRef(0);
+  /** Where the page was scrolled to before the form opened (asked once, on coming back) */
+  const takeScrollBefore = useCallback(() => {
+    const top = scrollBeforeRef.current;
+    scrollBeforeRef.current = 0;
+    return top;
+  }, []);
+
   const openWith = useCallback((date: Date | null, copyOf: Event | null = null, toEdit: Event | null = null, publish = false) => {
+    scrollBeforeRef.current = window.scrollY;
     setInitialDate(date);
     setTemplate(copyOf);
     setEditing(toEdit);
@@ -54,5 +64,5 @@ export const useSubmitPage = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  return { isOpen, initialDate, template, editing, publishOnSave, open, openWith, openWithDate, openToEdit, close };
+  return { isOpen, initialDate, template, editing, publishOnSave, open, openWith, openWithDate, openToEdit, close, takeScrollBefore };
 };

@@ -13,6 +13,9 @@
  * its events changed; `layout` and `flyers` let a later update look the same.
  * An optional `list` (JSON, see utils/digestList.ts) is kept beside the PDF as <name>.json:
  * the digest's page shows it as a list that reads well on a phone.
+ * An optional `uploadId` (a UUID made by the browser) names the upload: the browser sends the
+ * same request again when it got no answer (a dropped connection), and the second one then
+ * replaces the first instead of sharing the digest twice.
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
@@ -44,6 +47,7 @@ const LIST_MAX_CHARS = 1024 * 1024;
 export const digestListKey = (pdfKey: string): string => `${pdfKey.replace(/\.pdf$/i, '')}.json`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Deletes digests uploaded more than DIGEST_KEEP_DAYS ago; returns their keys */
 export const deleteOldDigests = async (bucket: DigestBucket, now = new Date()): Promise<string[]> => {
@@ -90,7 +94,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if (file.size > DIGEST_MAX_BYTES) return fail('The digest PDF is too large to share as a link.', 413);
 
   const name = (file.name || 'events-digest.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');
-  const key = `${DIGEST_PREFIX}${crypto.randomUUID()}-${name}`;
+  const uploadId = form.get('uploadId');
+  const id = typeof uploadId === 'string' && UUID_RE.test(uploadId) ? uploadId : crypto.randomUUID();
+  const key = `${DIGEST_PREFIX}${id}-${name}`;
   try {
     await env.BUCKET.put(key, file.stream(), { httpMetadata: { contentType: 'application/pdf' } });
   } catch (err) {

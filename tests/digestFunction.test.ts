@@ -266,3 +266,24 @@ test('an update says which digest it updates; admins are told the latest digest,
   const res = await getVersions({ request: askVersions(sent), env: { BUCKET: bucket } });
   assert.equal((await res.json() as { latest: Ref }).latest.key, second, 'the email that went out shows the latest');
 });
+
+test('the same upload sent twice (a retry after a dropped connection) is one digest, not two', async () => {
+  mockFetch(authRoutes);
+  const { bucket, uploaded } = digestBucket();
+  const uploadId = '0b7e6c1a-4a53-4a8e-9d0b-0f6a7c1d2e3f';
+  const share = () => onRequestPost({
+    request: send(pdf, 'admin-token', { ...issueOf('2026-10-16', ['a', 'b']), update: '1', uploadId }),
+    env: { ...env, BUCKET: bucket }
+  });
+  const first = await (await share()).json() as { url: string };
+  const second = await (await share()).json() as { url: string };
+  assert.equal(second.url, first.url, 'the retry answers with the same link');
+  assert.ok(first.url.includes(`/digests/${uploadId}-`));
+  assert.equal([...uploaded.keys()].filter((k) => k.endsWith('.pdf')).length, 1);
+  const [issue] = await readIssues(bucket);
+  assert.equal(issue.versions?.length, 1, 'recorded once');
+
+  // Anything that isn't a UUID is ignored: the server names the upload itself
+  const res = await onRequestPost({ request: send(pdf, 'admin-token', { uploadId: '../meta/x' }), env: { ...env, BUCKET: bucket } });
+  assert.match((await res.json() as { url: string }).url, /^\/api\/file\/digests\/[0-9a-f-]{36}-CCP-/);
+});

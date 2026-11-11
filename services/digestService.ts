@@ -56,7 +56,10 @@ export const shareDigestPdf = async (
   if (options.layout) form.append('layout', options.layout);
   if (options.flyers !== undefined) form.append('flyers', options.flyers ? '1' : '0');
   if (options.update) form.append('update', '1');
-  const { url, expiresAt } = await callApi<SharedDigest>('/api/digest', { method: 'POST', form });
+  // Names this upload, so sending it again after a dropped connection replaces it instead of
+  // sharing a second copy: that makes the retry safe
+  form.append('uploadId', crypto.randomUUID());
+  const { url, expiresAt } = await callApi<SharedDigest>('/api/digest', { method: 'POST', form, retry: true });
   return { url: digestPageUrl(url, window.location.origin), expiresAt };
 };
 

@@ -96,7 +96,8 @@ export const recordIssue = async (bucket: IssueBucket, issue: DigestIssue, versi
   let entry = issues.find((i) => i.issued === issue.issued);
   if (entry) entry.ids = [...new Set([...entry.ids, ...issue.ids])].slice(0, MAX_IDS);
   else issues.push(entry = { issued: issue.issued, ids: issue.ids });
-  if (version) entry.versions = [...(entry.versions ?? []), version].slice(-MAX_VERSIONS);
+  // The same upload sent twice (a retry after a dropped connection) is one version
+  if (version) entry.versions = [...(entry.versions ?? []).filter((v) => v.key !== version.key), version].slice(-MAX_VERSIONS);
   issues.sort((a, b) => a.issued.localeCompare(b.issued));
   await bucket.put(ISSUES_KEY, new Blob([JSON.stringify(issues.slice(-MAX_ISSUES))]), { httpMetadata: { contentType: 'application/json' } });
 };

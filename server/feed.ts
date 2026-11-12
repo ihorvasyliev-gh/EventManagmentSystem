@@ -3,6 +3,7 @@
  * iCalendar text calendar apps subscribe to. Pure functions, so they can be tested.
  */
 import { foldICSLine } from '../utils/icsFold.ts';
+import { categoryFromKey, categoryKey } from '../constants/categories.ts';
 
 export interface FeedEvent {
     id: string;
@@ -226,6 +227,8 @@ export function buildICS(events: FeedEvent[], options: ICSOptions = {}): string 
         `X-WR-CALNAME:${escapeICS(name)}`,
         ...(options.description ? [`DESCRIPTION:${escapeICS(options.description)}`, `X-WR-CALDESC:${escapeICS(options.description)}`] : []),
         'X-WR-TIMEZONE:Europe/Dublin',
+        // The calendar's colour where the app takes one from the feed (Apple): CCP raspberry
+        'X-APPLE-CALENDAR-COLOR:#B90B4F',
         // How often to check for changes, for the apps that listen (Apple; Outlook and Google keep their own pace)
         'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
         'X-PUBLISHED-TTL:PT1H',
@@ -274,7 +277,7 @@ export function buildICS(events: FeedEvent[], options: ICSOptions = {}): string 
 /** The subscribed calendar's name: "CCP Events", or with the categories it is limited to */
 export function calendarName(categories: string[]): string {
     if (categories.length === 0) return DEFAULT_CALENDAR_NAME;
-    if (categories.length <= 2) return `${DEFAULT_CALENDAR_NAME}: ${categories.join(' & ')}`;
+    if (categories.length <= 2) return `${DEFAULT_CALENDAR_NAME}: ${categories.join(', ')}`;
     return `${DEFAULT_CALENDAR_NAME} (${categories.length} categories)`;
 }
 
@@ -312,28 +315,32 @@ export function exceptionsFromRows(rows: Array<{ event_id: string; exception_dat
     return map;
 }
 
-/** Category names as given in `?category=A&category=B` or `?category=A,B` (trimmed, no repeats) */
+/**
+ * Category names from `?category=health-wellbeing,other` (also `?category=A&category=B`, and the
+ * full names older addresses carry): official names in their proper spelling, others as given,
+ * no repeats
+ */
 export function categoryNames(params: URLSearchParams): string[] {
     const seen = new Set<string>();
     const names: string[] = [];
     for (const raw of params.getAll('category').flatMap((v) => v.split(','))) {
-        const name = raw.trim();
-        if (name && !seen.has(name.toLowerCase())) {
-            seen.add(name.toLowerCase());
-            names.push(name);
+        const key = categoryKey(raw);
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            names.push(categoryFromKey(raw) ?? raw.trim());
         }
     }
     return names;
 }
 
-/** Category names from `?category=A&category=B` or `?category=A,B` (lower-cased), or null for all */
+/** The keys of the categories asked for (see categoryKey), or null for all */
 export function requestedCategories(params: URLSearchParams): Set<string> | null {
-    const names = categoryNames(params).map((v) => v.toLowerCase());
-    return names.length > 0 ? new Set(names) : null;
+    const keys = categoryNames(params).map(categoryKey);
+    return keys.length > 0 ? new Set(keys) : null;
 }
 
 export function inCategories(ev: Pick<FeedEvent, 'category'>, categories: Set<string> | null): boolean {
-    return !categories || categories.has((ev.category ?? '').trim().toLowerCase());
+    return !categories || categories.has(categoryKey(ev.category ?? ''));
 }
 
 /** One occurrence of an event as a single-event invite (per-date end and address for a series) */

@@ -128,28 +128,81 @@ test('the public subscribe page works without signing in and links Outlook to th
   const origin = new URL(page.url()).origin;
   const address = page.getByLabel('Or copy the calendar address');
   await expect(address).toHaveValue(`${origin}/api/calendar`);
-  const outlook = page.getByRole('link', { name: /^Outlook \(work or school account\)/ });
+  // A Windows computer: Outlook first, and no link that does nothing here
+  const outlook = page.getByRole('link', { name: /Outlook \(work or school account\)/ });
+  await expect(outlook).toContainText('Best for this device');
   await expect(outlook).toHaveAttribute('href', new RegExp(`^https://outlook\\.office\\.com/calendar/0/addfromweb\\?url=${encodeURIComponent(`${origin}/api/calendar`)}&name=CCP%20Events$`));
   await expect(page.getByRole('link', { name: /^Outlook\.com \(personal account\)/ })).toHaveAttribute('href', /^https:\/\/outlook\.live\.com\/calendar\/0\/addfromweb\?/);
+  await expect(page.getByRole('link', { name: /^Classic Outlook on Windows/ })).toHaveAttribute('href', `webcal://${new URL(origin).host}/api/calendar`);
+  await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveCount(0);
+  await page.getByText('More calendars (Apple Calendar)').click();
   await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveAttribute('href', `webcal://${new URL(origin).host}/api/calendar`);
 
+  // Categories go into every address as short keys: nothing to escape, so nothing an app can garble
   await page.getByText('Education & Training').click();
-  await expect(address).toHaveValue(`${origin}/api/calendar?category=Education%20%26%20Training`);
+  await expect(address).toHaveValue(`${origin}/api/calendar?category=education-training`);
   await expect(outlook).toHaveAttribute('href', /name=CCP%20Events%3A%20Education%20%26%20Training$/);
+  await expect(page.getByText('CCP Events: Education & Training', { exact: true })).toBeVisible();
   // The address keeps the categories, so the page can be shared as it is, and the preview follows them
-  await expect(page).toHaveURL(/\/subscribe\?category=Education%20%26%20Training$/);
-  await expect.poll(() => previews.at(-1)).toContain('category=Education%20%26%20Training&preview=');
+  await expect(page).toHaveURL(/\/subscribe\?category=education-training$/);
+  await expect.poll(() => previews.at(-1)).toContain('category=education-training&preview=');
+
+  // Pressing a calendar says what to do in the window it opens
+  await page.context().route(/calendar\.google\.com/, (route) => route.fulfill({ contentType: 'text/html', body: '<title>Google Calendar</title>' }));
+  const google = page.getByRole('link', { name: /^Google Calendar/ });
+  await expect(google).toHaveAttribute('href', `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(`webcal://${new URL(origin).host}/api/calendar?category=education-training`)}`);
+  const [tab] = await Promise.all([page.waitForEvent('popup'), google.click()]);
+  await tab.close();
+  await expect(page.getByText('Google Calendar opened in a new tab.')).toBeVisible();
+  await expect(page.getByText('Press Add when it asks.', { exact: false })).toBeVisible();
 
   await page.getByText('How does it stay up to date?').click();
   await expect(page.getByText('Events show as')).toBeVisible();
+  await expectAccessible(page);
   await assertNoCsp();
+});
+
+test.describe('the public subscribe page on an iPhone', () => {
+  test.use({
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    viewport: { width: 390, height: 844 },
+    hasTouch: true
+  });
+
+  test('Apple Calendar comes first, and classic Outlook is under More calendars', async ({ page }) => {
+    await page.route('**/api/calendar?*', (route) =>
+      route.fulfill({ json: { events: [{ title: 'Jobs fair', start: daysFromNow(2), end: daysFromNow(2, 13), location: 'City Hall', category: 'Enterprise & Employment' }] } })
+    );
+    await page.goto('/subscribe');
+    const links = page.locator('main a[href]');
+    await expect(links.first()).toContainText('Best for this device');
+    await expect(links.first()).toContainText('Apple Calendar');
+    await expect(links.first()).toHaveAttribute('href', /^webcal:\/\//);
+    await expect(page.getByRole('link', { name: /^Outlook \(work or school account\)/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Google Calendar/ })).toContainText('Works best on a computer');
+    await expect(page.getByRole('link', { name: /^Classic Outlook on Windows/ })).toHaveCount(0);
+    await expect(page.getByText('More calendars (Classic Outlook on Windows)')).toBeVisible();
+    await expect(page.getByText('Jobs fair')).toBeVisible();
+    await expectAccessible(page);
+    // Nothing is wider than the screen
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
 });
 
 test('a shared subscribe link opens with its categories ticked', async ({ page }) => {
   await page.route('**/api/calendar?*', (route) => route.fulfill({ json: { events: [] } }));
-  await page.goto('/subscribe?category=Health%20%26%20Wellbeing,Nonsense');
+  await page.goto('/subscribe?category=health-wellbeing,nonsense');
   const origin = new URL(page.url()).origin;
-  await expect(page.getByLabel('Or copy the calendar address')).toHaveValue(`${origin}/api/calendar?category=Health%20%26%20Wellbeing`);
+  await expect(page.getByLabel('Or copy the calendar address')).toHaveValue(`${origin}/api/calendar?category=health-wellbeing`);
   await expect(page.getByLabel('Health & Wellbeing')).toBeChecked();
   await expect(page.getByText('Nothing coming up in these categories yet.', { exact: false })).toBeVisible();
+});
+
+test('a subscribe link shared before the short category keys still ticks its categories', async ({ page }) => {
+  await page.route('**/api/calendar?*', (route) => route.fulfill({ json: { events: [] } }));
+  await page.goto('/subscribe?category=Health%20%26%20Wellbeing,Other');
+  const origin = new URL(page.url()).origin;
+  await expect(page.getByLabel('Health & Wellbeing')).toBeChecked();
+  await expect(page.getByLabel('Other', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('Or copy the calendar address')).toHaveValue(`${origin}/api/calendar?category=health-wellbeing,other`);
 });

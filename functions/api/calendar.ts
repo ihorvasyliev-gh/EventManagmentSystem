@@ -2,7 +2,7 @@
  * Cloudflare Pages Function — Live ICS Calendar Feed
  *
  *   GET /api/calendar                      every published event (past year, recurrences expanded)
- *   GET /api/calendar?category=Training    only some categories (repeat the parameter or use commas)
+ *   GET /api/calendar?category=health-wellbeing,other   only some categories (keys or full names)
  *   GET /api/calendar?preview=5            the next few events of that feed as JSON (the /subscribe page)
  *   GET /api/calendar?event_id=…&date=…    one event (one occurrence of a series) as an invite
  *

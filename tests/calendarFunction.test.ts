@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/calendar.ts';
 import { onRequestGet as publishedEvents } from '../functions/api/published-events.ts';
-import { feedFilter, requestedCategories } from '../server/feed.ts';
+import { feedFilter, requestedCategories, categoryNames } from '../server/feed.ts';
 import { mockFetch, json, env } from './support/mockFetch.ts';
 
 const ID = '10000000-0000-0000-0000-000000000001';
@@ -56,6 +56,27 @@ test('feed helpers: filter text and category parsing', () => {
     'status=eq.published&or=(date.gte.2026-01-01T00:00:00.000Z,end_date.gte.2026-01-01T00:00:00.000Z,recurrence_type.neq.none)');
   assert.deepEqual([...requestedCategories(new URLSearchParams('category=A,%20B&category=c'))!], ['a', 'b', 'c']);
   assert.equal(requestedCategories(new URLSearchParams('')), null);
+  // A category's key and its full name (as older addresses have it) are the same category
+  assert.deepEqual([...requestedCategories(new URLSearchParams('category=health-wellbeing,Health%20%26%20Wellbeing,other'))!], ['health-wellbeing', 'other']);
+  assert.deepEqual(categoryNames(new URLSearchParams('category=health-wellbeing,OTHER,Old%20name')), ['Health & Wellbeing', 'Other', 'Old name']);
+});
+
+test('a category key in the address gives the same feed as the full name', async () => {
+  const rows = [row(), row({ id: '10000000-0000-0000-0000-000000000002', title: 'Job fair', category: 'Enterprise & Employment' }), row({ id: '10000000-0000-0000-0000-000000000003', title: 'No category', category: null })];
+  const feed = async (query: string) => {
+    feedCalls(rows);
+    return (await onRequestGet({ request: new Request(`https://app.test/api/calendar?category=${query}`), env })).text();
+  };
+  const byKey = await feed('enterprise-employment');
+  assert.match(byKey, /SUMMARY:Job fair/);
+  assert.doesNotMatch(byKey, /Culture Night|No category/);
+  assert.match(byKey, /X-WR-CALNAME:CCP Events: Enterprise & Employment/);
+  assert.equal(byKey, await feed('Enterprise%20%26%20Employment'));
+  // Two categories, by key
+  const two = await feed('enterprise-employment,community-family');
+  assert.match(two, /SUMMARY:Job fair/);
+  assert.match(two, /SUMMARY:Culture Night/);
+  assert.match(two, /X-WR-CALNAME:CCP Events: Enterprise & Employment\\, Community & Family/);
 });
 
 test('the public form gets published events without anyone\'s details', async () => {
@@ -105,7 +126,9 @@ test('the feed is stable between refreshes, shows events as free, and answers "n
 test('the feed is named after its categories, and a single invite stays busy', async () => {
   feedCalls([row()]);
   const res = await onRequestGet({ request: new Request('https://app.test/api/calendar?category=Community%20%26%20Family'), env });
-  assert.match(await res.text(), /X-WR-CALNAME:CCP Events: Community & Family/);
+  const named = await res.text();
+  assert.match(named, /X-WR-CALNAME:CCP Events: Community & Family/);
+  assert.match(named, /X-APPLE-CALENDAR-COLOR:#B90B4F/, 'CCP raspberry where the app takes a colour from the feed');
 
   mockFetch([({ url }) => (url.includes('/rest/v1/events?') ? page([row()]) : undefined)]);
   const invite = await onRequestGet({ request: new Request(`https://app.test/api/calendar?event_id=${ID}`), env });

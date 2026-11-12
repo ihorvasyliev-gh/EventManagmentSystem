@@ -218,16 +218,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, events, allE
           </fieldset>
         </div>
       ) : (
-        <div className="space-y-4">
-          <SubscribeOptions />
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            For people without an account:{' '}
-            <a href="/subscribe" target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 dark:text-brand-300 underline underline-offset-2">
-              the public subscribe page
-            </a>{' '}
-            ({window.location.host}/subscribe) — share its link.
-          </p>
-        </div>
+        <SubscribeOptions compact />
       )}
     </ModalShell>
   );

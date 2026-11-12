@@ -66,3 +66,91 @@ test('the public form gets published events without anyone\'s details', async ()
   assert.doesNotMatch(read, /submitter|tags|creator|poster/);
   assert.match(read, /status=eq\.published/);
 });
+
+const feedCalls = (rows: unknown[]) => mockFetch([
+  ({ url }) => (url.includes('/rest/v1/events?') ? page(rows) : undefined),
+  ({ url }) => (url.includes('/rest/v1/recurrence_exceptions?') ? page([]) : undefined)
+]);
+
+test('the feed is stable between refreshes, shows events as free, and answers "not modified"', async () => {
+  feedCalls([row({ updated_at: '2026-03-01T10:00:00Z' })]);
+  const first = await onRequestGet({ request: new Request('https://app.test/api/calendar'), env });
+  const ics = await first.text();
+  assert.equal(first.status, 200);
+  assert.match(ics, /DTSTAMP:20260301T100000Z/);
+  assert.match(ics, /LAST-MODIFIED:20260301T100000Z/);
+  assert.match(ics, /TRANSP:TRANSPARENT/);
+  assert.match(ics, /X-MICROSOFT-CDO-BUSYSTATUS:FREE/);
+  assert.match(ics, /X-WR-CALNAME:CCP Events\r\n/);
+  const etag = first.headers.get('ETag')!;
+  assert.ok(etag);
+
+  feedCalls([row({ updated_at: '2026-03-01T10:00:00Z' })]);
+  const again = await onRequestGet({ request: new Request('https://app.test/api/calendar'), env });
+  assert.equal(await again.text(), ics, 'same events, same text');
+
+  feedCalls([row({ updated_at: '2026-03-01T10:00:00Z' })]);
+  const notModified = await onRequestGet({ request: new Request('https://app.test/api/calendar', { headers: { 'If-None-Match': etag } }), env });
+  assert.equal(notModified.status, 304);
+
+  // An edit makes it newer: a later SEQUENCE and a new ETag
+  feedCalls([row({ title: 'Culture Night (moved)', updated_at: '2026-03-02T10:00:00Z' })]);
+  const edited = await onRequestGet({ request: new Request('https://app.test/api/calendar', { headers: { 'If-None-Match': etag } }), env });
+  assert.equal(edited.status, 200);
+  const seq = (text: string) => Number(text.match(/SEQUENCE:(\d+)/)![1]);
+  assert.ok(seq(await edited.clone().text()) > seq(ics));
+  assert.notEqual(edited.headers.get('ETag'), etag);
+});
+
+test('the feed is named after its categories, and a single invite stays busy', async () => {
+  feedCalls([row()]);
+  const res = await onRequestGet({ request: new Request('https://app.test/api/calendar?category=Community%20%26%20Family'), env });
+  assert.match(await res.text(), /X-WR-CALNAME:CCP Events: Community & Family/);
+
+  mockFetch([({ url }) => (url.includes('/rest/v1/events?') ? page([row()]) : undefined)]);
+  const invite = await onRequestGet({ request: new Request(`https://app.test/api/calendar?event_id=${ID}`), env });
+  assert.doesNotMatch(await invite.text(), /TRANSPARENT/);
+});
+
+test('text is escaped and line breaks of every kind become \\n', async () => {
+  feedCalls([row({ title: 'Talk; Q&A, part 1', description: 'Line one\r\nLine two\rLine three\nEnd\u0007', location: 'Room 1, City Hall' })]);
+  const ics = await (await onRequestGet({ request: new Request('https://app.test/api/calendar'), env })).text();
+  const unfolded = ics.replace(/\r\n /g, '');
+  assert.match(unfolded, /SUMMARY:Talk\\; Q&A\\, part 1/);
+  assert.match(unfolded, /DESCRIPTION:Line one\\nLine two\\nLine three\\nEnd\r\n/);
+  assert.match(unfolded, /LOCATION:Room 1\\, City Hall/);
+  // Every line ends in CRLF and none is longer than 75 octets
+  for (const line of ics.split('\r\n')) assert.ok(new TextEncoder().encode(line).length <= 75);
+  assert.doesNotMatch(ics.replace(/\r\n/g, ''), /[\r\n]/);
+});
+
+test('HEAD answers like GET without a body', async () => {
+  feedCalls([row()]);
+  const res = await onRequestGet({ request: new Request('https://app.test/api/calendar', { method: 'HEAD' }), env });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('Content-Type'), 'text/calendar; charset=utf-8');
+  assert.equal(await res.text(), '');
+});
+
+test('the preview lists the next events of the feed, without past ones or anyone\'s details', async () => {
+  const soon = new Date(Date.now() + 2 * 86400000).toISOString();
+  const later = new Date(Date.now() + 5 * 86400000).toISOString();
+  feedCalls([
+    row({ id: '10000000-0000-0000-0000-000000000003', title: 'Later', date: later, end_date: null }),
+    row({ title: 'Past', date: '2026-01-01T10:00:00Z', end_date: '2026-01-01T11:00:00Z' }),
+    row({ id: '10000000-0000-0000-0000-000000000004', title: 'Soon', date: soon, end_date: null })
+  ]);
+  const res = await onRequestGet({ request: new Request('https://app.test/api/calendar?preview=5'), env });
+  assert.equal(res.status, 200);
+  const { events } = await res.json() as { events: Array<Record<string, unknown>> };
+  assert.deepEqual(events.map((e) => e.title), ['Soon', 'Later']);
+  assert.deepEqual(Object.keys(events[0]).sort(), ['category', 'end', 'location', 'start', 'title']);
+});
+
+test('when the database can\'t be reached the feed says "try later" instead of an empty calendar', async () => {
+  mockFetch([() => json({ message: 'down' }, 500)]);
+  const res = await onRequestGet({ request: new Request('https://app.test/api/calendar'), env });
+  assert.equal(res.status, 503);
+  assert.ok(res.headers.get('Retry-After'));
+  assert.equal(res.headers.get('Cache-Control'), 'no-store');
+});

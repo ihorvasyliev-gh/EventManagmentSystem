@@ -145,7 +145,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/submit` | `POST` | anyone | The `/submit` form: event and flyer in one request (draft; admins can publish). Up to 30 per network in 15 minutes (admins unlimited) |
 | `/api/edit-event` | `POST` | admins, staff (own events) | Saves changes to an event (and a new flyer) in one request, checked like `/api/submit`; only admins change the status. Refuses if someone saved the event meanwhile, and logs what changed |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
-| `/api/calendar` | `GET` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter). `?event_id=…&date=…` gives one invite |
+| `/api/calendar` | `GET`, `HEAD` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=` to filter, and the calendar is named after them). Events show as *free*; each carries when it was last changed, so the text is stable and `If-None-Match` gets *304*. `?preview=N` gives the next N as JSON for `/subscribe`. `?event_id=…&date=…` gives one invite |
 | `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
 | `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
 | `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
@@ -157,7 +157,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |
 | `/api/client-error` | `POST` | anyone | Error reports from browsers (stored in `client_errors`) |
 
-**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab, where you can pick categories, or share the public page [`/subscribe`](https://ccp-event-calendar.pages.dev/subscribe): the same options, no account needed. The feed is public and has published events only: title, start and end, description, venue and category (never contacts, submitters or flyers).
+**To subscribe:** share the public page [`/subscribe`](https://ccp-event-calendar.pages.dev/subscribe) (no account). It has one-click links for Outlook (work or school, and personal Outlook.com), Apple Calendar, Google Calendar and classic Outlook, the feed address, step-by-step help for each app, how it updates and how to remove it, and the next few events. Ticked categories go into its address (`/subscribe?category=…`), so a link can be shared for some categories only; the app's **Export → Subscribe** tab copies that link. By hand: paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → Subscribe from web*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). The feed is public and has published events only: title, start and end, description, venue and category (never contacts, submitters or flyers). Calendar apps refresh it on their own schedule: Outlook within a few hours, Google within a day.
 
 **Errors in people's browsers** are reported to `/api/client-error` and land in the `client_errors` table (Supabase → Table Editor), one row per error per day with a count.
 

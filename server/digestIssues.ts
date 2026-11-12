@@ -5,6 +5,7 @@
  * cleanup never removes it, and /api/file refuses to serve anything under meta/.
  */
 import type { FileBucket } from './files.ts';
+import { parseDigestList } from '../utils/digestList.ts';
 
 export const ISSUES_KEY = 'meta/digest-issues.json';
 /** About half a year of weekly digests */
@@ -87,15 +88,20 @@ export const readIssues = async (bucket: IssueBucket): Promise<DigestIssue[]> =>
   }
 };
 
+/** Where a digest's list of events is kept: beside its PDF, as .json */
+export const digestListKey = (pdfKey: string): string => `${pdfKey.replace(/\.pdf$/i, '')}.json`;
+
 /**
- * Adds a shared digest; sharing again the same day (or updating that day's issue) adds its
- * events to that day's issue. `version` is the PDF shared, recorded with the issue.
+ * Adds a shared digest; sharing again the same day adds its events to that day's issue. An update
+ * doesn't: the email and the WhatsApp text went out without the events it added, so next week's
+ * digest still marks them NEW. `version` is the PDF shared, recorded with the issue.
  */
 export const recordIssue = async (bucket: IssueBucket, issue: DigestIssue, version?: DigestVersionRecord): Promise<void> => {
   const issues = await readIssues(bucket);
   let entry = issues.find((i) => i.issued === issue.issued);
-  if (entry) entry.ids = [...new Set([...entry.ids, ...issue.ids])].slice(0, MAX_IDS);
-  else issues.push(entry = { issued: issue.issued, ids: issue.ids });
+  if (entry && !version?.update) entry.ids = [...new Set([...entry.ids, ...issue.ids])].slice(0, MAX_IDS);
+  // An update of an issue that wasn't recorded: what it carries is all there is to go by
+  else if (!entry) issues.push(entry = { issued: issue.issued, ids: issue.ids });
   // The same upload sent twice (a retry after a dropped connection) is one version
   if (version) entry.versions = [...(entry.versions ?? []).filter((v) => v.key !== version.key), version].slice(-MAX_VERSIONS);
   issues.sort((a, b) => a.issued.localeCompare(b.issued));
@@ -103,7 +109,27 @@ export const recordIssue = async (bucket: IssueBucket, issue: DigestIssue, versi
 };
 
 /** The latest digest shared before `before` (a day), or null when there is none */
-export const previousIssue = (issues: DigestIssue[], before: string): DigestIssue | null => {
-  const found = issues.filter((i) => i.issued < before).at(-1);
-  return found ? { issued: found.issued, ids: found.ids } : null;
+export const previousIssue = (issues: DigestIssue[], before: string): DigestIssue | null =>
+  issues.filter((i) => i.issued < before).at(-1) ?? null;
+
+/**
+ * The events an issue's readers got: what the PDFs shared as it carried, not its updates. Until
+ * November 2026 an update added its events to the issue's ids as well; the lists kept beside its
+ * PDFs tell them apart. When any of those lists can't be had, the ids as recorded.
+ */
+export const sharedIds = async (bucket: IssueBucket, issue: DigestIssue): Promise<string[]> => {
+  const versions = issue.versions ?? [];
+  const shared = versions.filter((v) => !v.update);
+  if (!shared.length || shared.length === versions.length) return issue.ids;
+  try {
+    const lists = await Promise.all(shared.map(async (v) => {
+      const object = await bucket.get(digestListKey(v.key));
+      return object ? parseDigestList(JSON.parse(await object.text())) : null;
+    }));
+    if (lists.some((list) => !list)) return issue.ids;
+    const had = new Set(lists.flatMap((list) => list!.entries.flatMap((e) => (e.id ? [e.id] : []))));
+    return issue.ids.filter((id) => had.has(id));
+  } catch {
+    return issue.ids;
+  }
 };

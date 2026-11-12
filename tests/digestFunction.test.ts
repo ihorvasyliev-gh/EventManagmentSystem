@@ -226,9 +226,9 @@ test('every link to a week\'s digest shows its newest PDF, and the archive has e
   // The week before keeps its own digest
   assert.equal((await versions(legacy)).latest.key, legacy);
 
-  // What it carried counts for next week's NEW marks either way
+  // Next week's NEW marks count from what went out: the event the update added ('b') stays NEW
   const issue = (await readIssues(bucket)).find((i) => i.issued === '2026-10-23');
-  assert.deepEqual(issue?.ids, ['a', 'b']);
+  assert.deepEqual(issue?.ids, ['a']);
   assert.deepEqual(issue?.versions, [{ key: friday, layout: 'compact', flyers: false }, { key: update, update: true }]);
 });
 
@@ -286,4 +286,52 @@ test('the same upload sent twice (a retry after a dropped connection) is one dig
   // Anything that isn't a UUID is ignored: the server names the upload itself
   const res = await onRequestPost({ request: send(pdf, 'admin-token', { uploadId: '../meta/x' }), env: { ...env, BUCKET: bucket } });
   assert.match((await res.json() as { url: string }).url, /^\/api\/file\/digests\/[0-9a-f-]{36}-CCP-/);
+});
+
+const listOf = (ids: string[]) => JSON.stringify({
+  version: 1,
+  period: '6 – 20 November 2026',
+  entries: ids.map((id) => ({ id, day: 'Tuesday 10 November', title: `Event ${id}` }))
+});
+
+test('events an update added are still NEW in next week\'s digest: its readers got the email without them', async () => {
+  mockFetch(authRoutes);
+  const { bucket } = digestBucket();
+  const share = (fields: Record<string, string>) => onRequestPost({ request: send(pdf, 'admin-token', fields), env: { ...env, BUCKET: bucket } });
+  const nextWeek = async () => {
+    const res = await getIssues({ request: askIssue('2026-11-09'), env: { ...env, BUCKET: bucket } });
+    return (await res.json() as { issue: { issued: string; ids: string[] } | null }).issue;
+  };
+
+  // Friday's email went out with a and b; on Monday c and d were added and the digest updated, twice
+  assert.equal((await share({ ...issueOf('2026-11-06', ['a', 'b']), list: listOf(['a', 'b']) })).status, 201);
+  assert.equal((await share({ ...issueOf('2026-11-06', ['a', 'b', 'c']), list: listOf(['a', 'b', 'c']), update: '1' })).status, 201);
+  assert.equal((await share({ ...issueOf('2026-11-06', ['a', 'b', 'c', 'd']), list: listOf(['a', 'b', 'c', 'd']), update: '1' })).status, 201);
+  assert.deepEqual(await nextWeek(), { issued: '2026-11-06', ids: ['a', 'b'] });
+
+  // Shared again that Friday (not an update), with e: that went out too
+  assert.equal((await share({ ...issueOf('2026-11-06', ['a', 'e']), list: listOf(['a', 'e']) })).status, 201);
+  assert.deepEqual(await nextWeek(), { issued: '2026-11-06', ids: ['a', 'b', 'e'] });
+});
+
+test('an issue an update added to before the fix still counts only what went out, by the lists kept beside its PDFs', async () => {
+  mockFetch(authRoutes);
+  const sent = 'digests/0f0f0f0f-0000-0000-0000-000000000001-CCP-Upcoming-Events-2026-11-06-to-2026-11-20.pdf';
+  const update = 'digests/0f0f0f0f-0000-0000-0000-000000000002-CCP-Upcoming-Events-2026-11-06-to-2026-11-20.pdf';
+  const { bucket } = digestBucket({ [sent]: new Date('2026-11-06T09:00:00Z'), [update]: new Date('2026-11-09T10:00:00Z') });
+  // As recorded until now: the update's events added to the issue's
+  const recorded = [{ issued: '2026-11-06', ids: ['a', 'b', 'c'], versions: [{ key: sent }, { key: update, update: true }] }];
+  await bucket.put(ISSUES_KEY, new Blob([JSON.stringify(recorded)]));
+  const nextWeek = async () => {
+    const res = await getIssues({ request: askIssue('2026-11-09'), env: { ...env, BUCKET: bucket } });
+    return (await res.json() as { issue: unknown }).issue;
+  };
+
+  // Without the list of what went out there is nothing to tell them apart by
+  assert.deepEqual(await nextWeek(), { issued: '2026-11-06', ids: ['a', 'b', 'c'] });
+  await bucket.put(digestListKey(sent), new Blob([listOf(['a', 'b'])]));
+  assert.deepEqual(await nextWeek(), { issued: '2026-11-06', ids: ['a', 'b'] });
+  // A list that can't be read counts as none
+  await bucket.put(digestListKey(sent), new Blob(['not json']));
+  assert.deepEqual(await nextWeek(), { issued: '2026-11-06', ids: ['a', 'b', 'c'] });
 });

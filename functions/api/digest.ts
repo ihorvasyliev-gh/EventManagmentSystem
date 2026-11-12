@@ -10,7 +10,8 @@
  * digest carried, so next week's digest marks NEW only the events this one didn't have, and
  * that the PDF is that day's issue: every link to the week's digest shows its newest PDF
  * (server/digestVersions.ts). `update=1` makes it an update of the issue `issued` names, after
- * its events changed; `layout` and `flyers` let a later update look the same.
+ * its events changed (the events it adds stay NEW for next week); `layout` and `flyers` let a
+ * later update look the same.
  * An optional `list` (JSON, see utils/digestList.ts) is kept beside the PDF as <name>.json:
  * the digest's page shows it as a list that reads well on a phone.
  * An optional `uploadId` (a UUID made by the browser) names the upload: the browser sends the
@@ -20,11 +21,11 @@
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
 import { contentMatchesType } from '../../server/files.ts';
-import { parseIssue, recordIssue, isDigestLayout } from '../../server/digestIssues.ts';
+import { parseIssue, recordIssue, isDigestLayout, digestListKey } from '../../server/digestIssues.ts';
 import { type DigestBucket, DIGEST_PREFIX, listDigestObjects } from '../../server/digestVersions.ts';
 import { parseDigestList } from '../../utils/digestList.ts';
 
-export { type DigestBucket, DIGEST_PREFIX };
+export { type DigestBucket, DIGEST_PREFIX, digestListKey };
 
 interface Env extends SupabaseEnv {
   BUCKET?: DigestBucket;
@@ -42,9 +43,6 @@ export const DIGEST_KEEP_DAYS = 183;
 export const DIGEST_MAX_BYTES = 40 * 1024 * 1024;
 /** The events as a list: text only, far below this */
 const LIST_MAX_CHARS = 1024 * 1024;
-
-/** Where a digest's list is kept: beside its PDF, as .json */
-export const digestListKey = (pdfKey: string): string => `${pdfKey.replace(/\.pdf$/i, '')}.json`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

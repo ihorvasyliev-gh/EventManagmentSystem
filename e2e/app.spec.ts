@@ -112,3 +112,18 @@ test('an admin resets a forgotten password from Staff accounts', async ({ page }
   await dialog.getByRole('button', { name: 'Reset password' }).last().click();
   await expect(page.getByText('Kp7m-3xQa-9tVw')).toBeVisible();
 });
+
+test('the public subscribe page works without signing in and links Outlook to the feed', async ({ page }) => {
+  const assertNoCsp = await watchCsp(page);
+  await page.goto('/subscribe');
+  await expect(page.getByRole('heading', { name: 'Add CCP events to your calendar' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
+  await expectAccessible(page);
+  const origin = new URL(page.url()).origin;
+  await expect(page.getByLabel('Or copy the feed address')).toHaveValue(`${origin}/api/calendar`);
+  const outlook = page.getByRole('link', { name: /^Outlook Microsoft 365/ });
+  await expect(outlook).toHaveAttribute('href', new RegExp(`addfromweb\\?url=${encodeURIComponent(`${origin}/api/calendar`)}`));
+  await page.getByText('Education & Training').click();
+  await expect(page.getByLabel('Or copy the feed address')).toHaveValue(`${origin}/api/calendar?category=Education%20%26%20Training`);
+  await assertNoCsp();
+});

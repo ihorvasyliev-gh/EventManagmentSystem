@@ -47,6 +47,9 @@ const FortnightlyBulletinModal = lazyWithReload(() => import('./components/Fortn
 // A shared digest's page (/digest/…): anyone with the link, no account, no calendar
 const DigestViewPage = lazyWithReload(() => import('./pages/DigestViewPage'));
 const isDigestPage = () => window.location.pathname.startsWith('/digest/');
+// The public page to subscribe to the calendar (/subscribe): no account
+const SubscribePage = lazyWithReload(() => import('./pages/SubscribePage'));
+const isSubscribePage = () => /^\/subscribe\/?$/.test(window.location.pathname);
 const SubmitEventPage = lazyWithReload(() => import('./pages/SubmitEventPage'));
 const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
 const EmailRecipientsModal = lazyWithReload(() => import('./components/EmailRecipientsModal'));
@@ -579,7 +582,13 @@ const App: React.FC = () => {
               <DigestViewPage />
             </Suspense>
           ) : (
-            <AppContent />
+            isSubscribePage() ? (
+              <Suspense fallback={null}>
+                <SubscribePage />
+              </Suspense>
+            ) : (
+              <AppContent />
+            )
           )}
           <UpdateBanner />
         </ToastProvider>

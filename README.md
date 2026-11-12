@@ -8,7 +8,7 @@
 
 React 19 · TypeScript · Supabase · Cloudflare Pages
 
-[Live calendar](https://ccp-event-calendar.pages.dev/) · [Submit an event](https://ccp-event-calendar.pages.dev/submit) · [Coordinator guide](docs/GUIDE_FOR_ELIZABETH.md) · [Staff guide](docs/GUIDE_FOR_STAFF.md)
+[Live calendar](https://ccp-event-calendar.pages.dev/) · [Submit an event](https://ccp-event-calendar.pages.dev/submit) · [Subscribe in Outlook](https://ccp-event-calendar.pages.dev/subscribe) · [Coordinator guide](docs/GUIDE_FOR_ELIZABETH.md) · [Staff guide](docs/GUIDE_FOR_STAFF.md)
 
 </div>
 
@@ -157,7 +157,7 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/staff-password` | `POST` | admins | Reset someone's password to a temporary one |
 | `/api/client-error` | `POST` | anyone | Error reports from browsers (stored in `client_errors`) |
 
-**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab, where you can pick categories.
+**To subscribe:** paste `https://<your-site>/api/calendar` into Outlook (*Add calendar → From Internet*), Google Calendar (*Other calendars → From URL*) or Apple Calendar (*File → New Calendar Subscription*). You can also copy the link from the app's **Export → Subscribe** tab, where you can pick categories, or share the public page [`/subscribe`](https://ccp-event-calendar.pages.dev/subscribe): the same options, no account needed. The feed is public and has published events only: title, start and end, description, venue and category (never contacts, submitters or flyers).
 
 **Errors in people's browsers** are reported to `/api/client-error` and land in the `client_errors` table (Supabase → Table Editor), one row per error per day with a count.
 

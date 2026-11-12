@@ -22,6 +22,7 @@ export interface FeedEvent {
     recurrence_custom_end_dates?: string[] | null;
     recurrence_custom_locations?: (string | null)[] | null;
     created_at: string;
+    updated_at?: string | null;
 }
 
 // ─── Recurrence expansion (server-side, standalone) ───────────────────
@@ -173,57 +174,108 @@ export function expandRecurring(
 
 // ─── ICS generation ───────────────────────────────────────────────────
 
+/** Text value: escapes per RFC 5545 §3.3.11, any line break as \n, other control characters dropped */
 function escapeICS(text: string): string {
     return text
         .replace(/\\/g, '\\\\')
         .replace(/,/g, '\\,')
         .replace(/;/g, '\\;')
-        .replace(/\r?\n/g, '\\n');
+        .replace(/\r\n|\r|\n/g, '\\n')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '');
 }
 
 function formatDateUTC(date: Date): string {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
 
-export function buildICS(events: FeedEvent[]): string {
+// SEQUENCE counts in minutes from this day, so it only goes up as an event is edited
+const SEQUENCE_EPOCH = Date.UTC(2024, 0, 1);
+
+export interface ICSOptions {
+    /** The calendar's name in the app that subscribes (default "CCP Events") */
+    name?: string;
+    /** A line about the calendar (X-WR-CALDESC) */
+    description?: string;
+    /**
+     * Subscription feed: events show as free time, so a calendar of everything on at CCP doesn't
+     * fill the subscriber's day with busy blocks. A single invite (added to go to it) stays busy.
+     */
+    showAsFree?: boolean;
+    /** When nothing in the event says when it was last changed (default: now) */
+    now?: Date;
+}
+
+export const DEFAULT_CALENDAR_NAME = 'CCP Events';
+
+/**
+ * The iCalendar text. Each event's DTSTAMP, LAST-MODIFIED and SEQUENCE come from when it was
+ * last changed, so the same events give the same text (the feed can answer "not modified") and
+ * an edited event is newer than the copy a calendar app holds.
+ */
+export function buildICS(events: FeedEvent[], options: ICSOptions = {}): string {
+    const now = options.now ?? new Date();
+    const name = options.name ?? DEFAULT_CALENDAR_NAME;
     const lines: string[] = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:-//CCP Events//EN',
+        'PRODID:-//Cork City Partnership//CCP Events//EN',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
-        'X-WR-CALNAME:CCP Events',
+        `NAME:${escapeICS(name)}`,
+        `X-WR-CALNAME:${escapeICS(name)}`,
+        ...(options.description ? [`DESCRIPTION:${escapeICS(options.description)}`, `X-WR-CALDESC:${escapeICS(options.description)}`] : []),
         'X-WR-TIMEZONE:Europe/Dublin',
-        'REFRESH-INTERVAL;VALUE=DURATION:PT6H',
-        'X-PUBLISHED-TTL:PT6H',
+        // How often to check for changes, for the apps that listen (Apple; Outlook and Google keep their own pace)
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
     ];
 
     for (const ev of events) {
         const start = new Date(ev.date);
-        const end = ev.end_date ? new Date(ev.end_date) : new Date(start.getTime() + 60 * 60 * 1000); // +1 hour default
+        if (isNaN(start.getTime())) continue;
+        const ownEnd = ev.end_date ? new Date(ev.end_date) : null;
+        // No end, or one that isn't after the start: an hour
+        const end = ownEnd && ownEnd.getTime() > start.getTime() ? ownEnd : new Date(start.getTime() + 60 * 60 * 1000);
+        const changedRaw = ev.updated_at || ev.created_at;
+        const changed = changedRaw && !isNaN(new Date(changedRaw).getTime()) ? new Date(changedRaw) : now;
+        const sequence = Math.max(0, Math.floor((changed.getTime() - SEQUENCE_EPOCH) / 60000));
 
         lines.push('BEGIN:VEVENT');
         lines.push(`UID:${ev.id}@ccp-events`);
-        lines.push(`DTSTAMP:${formatDateUTC(new Date())}`);
+        lines.push(`DTSTAMP:${formatDateUTC(changed)}`);
+        lines.push(`LAST-MODIFIED:${formatDateUTC(changed)}`);
         lines.push(`DTSTART:${formatDateUTC(start)}`);
         lines.push(`DTEND:${formatDateUTC(end)}`);
-        lines.push(`SUMMARY:${escapeICS(ev.title)}`);
-        if (ev.description) {
-            lines.push(`DESCRIPTION:${escapeICS(ev.description)}`);
+        lines.push(`SUMMARY:${escapeICS(ev.title || 'CCP event')}`);
+        if (ev.description?.trim()) {
+            lines.push(`DESCRIPTION:${escapeICS(ev.description.trim())}`);
         }
-        if (ev.location) {
-            lines.push(`LOCATION:${escapeICS(ev.location)}`);
+        if (ev.location?.trim()) {
+            lines.push(`LOCATION:${escapeICS(ev.location.trim())}`);
         }
-        if (ev.category) {
-            lines.push(`CATEGORIES:${escapeICS(ev.category)}`);
+        if (ev.category?.trim()) {
+            lines.push(`CATEGORIES:${escapeICS(ev.category.trim())}`);
         }
-        lines.push('SEQUENCE:0');
+        lines.push(`SEQUENCE:${sequence}`);
         lines.push('STATUS:CONFIRMED');
+        lines.push('CLASS:PUBLIC');
+        if (options.showAsFree) {
+            lines.push('TRANSP:TRANSPARENT');
+            lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
+        }
         lines.push('END:VEVENT');
     }
 
     lines.push('END:VCALENDAR');
     return lines.map(foldICSLine).join('\r\n') + '\r\n';
+}
+
+/** The subscribed calendar's name: "CCP Events", or with the categories it is limited to */
+export function calendarName(categories: string[]): string {
+    if (categories.length === 0) return DEFAULT_CALENDAR_NAME;
+    if (categories.length <= 2) return `${DEFAULT_CALENDAR_NAME}: ${categories.join(' & ')}`;
+    return `${DEFAULT_CALENDAR_NAME} (${categories.length} categories)`;
 }
 
 
@@ -234,7 +286,7 @@ export const FEED_COLUMNS = [
     'id', 'title', 'description', 'date', 'end_date', 'location', 'status', 'category',
     'recurrence_type', 'recurrence_interval', 'recurrence_end_date', 'recurrence_occurrences',
     'recurrence_days_of_week', 'recurrence_custom_dates', 'recurrence_custom_end_dates',
-    'recurrence_custom_locations', 'created_at',
+    'recurrence_custom_locations', 'created_at', 'updated_at',
 ].join(',');
 
 /** How far back the subscription feed goes; older events only bloat every calendar's refresh */
@@ -260,12 +312,23 @@ export function exceptionsFromRows(rows: Array<{ event_id: string; exception_dat
     return map;
 }
 
+/** Category names as given in `?category=A&category=B` or `?category=A,B` (trimmed, no repeats) */
+export function categoryNames(params: URLSearchParams): string[] {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const raw of params.getAll('category').flatMap((v) => v.split(','))) {
+        const name = raw.trim();
+        if (name && !seen.has(name.toLowerCase())) {
+            seen.add(name.toLowerCase());
+            names.push(name);
+        }
+    }
+    return names;
+}
+
 /** Category names from `?category=A&category=B` or `?category=A,B` (lower-cased), or null for all */
 export function requestedCategories(params: URLSearchParams): Set<string> | null {
-    const names = params.getAll('category')
-        .flatMap((v) => v.split(','))
-        .map((v) => v.trim().toLowerCase())
-        .filter(Boolean);
+    const names = categoryNames(params).map((v) => v.toLowerCase());
     return names.length > 0 ? new Set(names) : null;
 }
 

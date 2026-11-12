@@ -115,15 +115,41 @@ test('an admin resets a forgotten password from Staff accounts', async ({ page }
 
 test('the public subscribe page works without signing in and links Outlook to the feed', async ({ page }) => {
   const assertNoCsp = await watchCsp(page);
+  const previews: string[] = [];
+  await page.route('**/api/calendar?*', (route) => {
+    previews.push(route.request().url());
+    return route.fulfill({ json: { events: [{ title: 'Jobs fair', start: daysFromNow(2), end: null, location: 'City Hall', category: 'Enterprise & Employment' }] } });
+  });
   await page.goto('/subscribe');
   await expect(page.getByRole('heading', { name: 'Add CCP events to your calendar' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
+  await expect(page.getByText('Jobs fair')).toBeVisible();
   await expectAccessible(page);
   const origin = new URL(page.url()).origin;
-  await expect(page.getByLabel('Or copy the feed address')).toHaveValue(`${origin}/api/calendar`);
-  const outlook = page.getByRole('link', { name: /^Outlook Microsoft 365/ });
-  await expect(outlook).toHaveAttribute('href', new RegExp(`addfromweb\\?url=${encodeURIComponent(`${origin}/api/calendar`)}`));
+  const address = page.getByLabel('Or copy the calendar address');
+  await expect(address).toHaveValue(`${origin}/api/calendar`);
+  const outlook = page.getByRole('link', { name: /^Outlook \(work or school account\)/ });
+  await expect(outlook).toHaveAttribute('href', new RegExp(`^https://outlook\\.office\\.com/calendar/0/addfromweb\\?url=${encodeURIComponent(`${origin}/api/calendar`)}&name=CCP%20Events$`));
+  await expect(page.getByRole('link', { name: /^Outlook\.com \(personal account\)/ })).toHaveAttribute('href', /^https:\/\/outlook\.live\.com\/calendar\/0\/addfromweb\?/);
+  await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveAttribute('href', `webcal://${new URL(origin).host}/api/calendar`);
+
   await page.getByText('Education & Training').click();
-  await expect(page.getByLabel('Or copy the feed address')).toHaveValue(`${origin}/api/calendar?category=Education%20%26%20Training`);
+  await expect(address).toHaveValue(`${origin}/api/calendar?category=Education%20%26%20Training`);
+  await expect(outlook).toHaveAttribute('href', /name=CCP%20Events%3A%20Education%20%26%20Training$/);
+  // The address keeps the categories, so the page can be shared as it is, and the preview follows them
+  await expect(page).toHaveURL(/\/subscribe\?category=Education%20%26%20Training$/);
+  await expect.poll(() => previews.at(-1)).toContain('category=Education%20%26%20Training&preview=');
+
+  await page.getByText('How does it stay up to date?').click();
+  await expect(page.getByText('Events show as')).toBeVisible();
   await assertNoCsp();
+});
+
+test('a shared subscribe link opens with its categories ticked', async ({ page }) => {
+  await page.route('**/api/calendar?*', (route) => route.fulfill({ json: { events: [] } }));
+  await page.goto('/subscribe?category=Health%20%26%20Wellbeing,Nonsense');
+  const origin = new URL(page.url()).origin;
+  await expect(page.getByLabel('Or copy the calendar address')).toHaveValue(`${origin}/api/calendar?category=Health%20%26%20Wellbeing`);
+  await expect(page.getByLabel('Health & Wellbeing')).toBeChecked();
+  await expect(page.getByText('Nothing coming up in these categories yet.', { exact: false })).toBeVisible();
 });

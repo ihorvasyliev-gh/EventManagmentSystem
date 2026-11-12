@@ -3,14 +3,15 @@
  * URL: GET /api/digest-issues?before=YYYY-MM-DD
  *   →   { issue: { issued, ids } | null, latest: { issued, key, base, layout?, flyers? } | null }
  *
- * `issue`: the last digest shared before that day. The digest marks NEW the events that weren't
- * in it, so staff and admins see the same marks.
+ * `issue`: the last digest shared before that day, with the events it went out with (not those
+ * its updates added). The digest marks NEW the events that weren't in it, so staff and admins see
+ * the same marks.
  * `latest`: the latest issue (server/digestVersions.ts), so an admin can update it once its
  * events change: `key` is what its links show, `base` the PDF that went out.
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
-import { isIssueDay, readIssues, previousIssue } from '../../server/digestIssues.ts';
+import { isIssueDay, readIssues, previousIssue, sharedIds } from '../../server/digestIssues.ts';
 import { type DigestBucket, type SentDigest, listDigestObjects, digestVersions, digestWeeks, sentDigestOf } from '../../server/digestVersions.ts';
 
 interface Env extends SupabaseEnv {
@@ -41,5 +42,7 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
   } catch (err) {
     console.error('Listing the shared digests failed:', err);
   }
-  return json({ issue: previousIssue(issues, before), latest });
+  const previous = previousIssue(issues, before);
+  const issue = previous && { issued: previous.issued, ids: await sharedIds(env.BUCKET, previous) };
+  return json({ issue, latest });
 };

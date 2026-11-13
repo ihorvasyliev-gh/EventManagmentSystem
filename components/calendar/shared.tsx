@@ -3,7 +3,7 @@ import React from 'react';
 import { Clock, MapPin } from 'lucide-react';
 import { type Event } from '../../types';
 import { isMultiDayEvent, formatClock, APP_LOCALE } from '../../utils/date';
-import { getCategoryColor } from '../WeekView';
+import { getCategoryColor, getCategoryAccent } from '../WeekView';
 
 /** Makes a clickable card reachable and usable from the keyboard */
 export const clickableProps = (onActivate: () => void) => ({
@@ -59,7 +59,7 @@ export const DayEventCard: React.FC<DayEventCardProps> = ({ event, onOpen, class
     : '';
 
   return (
-    <div {...clickableProps(onOpen)} className={className}>
+    <div {...clickableProps(onOpen)} className={`${className} ${getCategoryAccent(event.category)}`}>
       <div className="flex items-center justify-between gap-1 flex-wrap">
         <span className="flex items-center gap-1 flex-wrap">
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>

@@ -9,7 +9,7 @@ import { getCategoryRgb, type Rgb } from '../../../constants/categoryColors';
 import { createGoogleCalendarUrl, createOutlookWebUrl, createGoogleMapsUrl } from '../links';
 import { BRAND, INK, BODY, MUTED, FAINT, BORDER, BG, PLACE, WHITE, GREEN_DARK, GREEN_TINT, GREEN_TINT_BORDER } from '../theme';
 import type { Block, DigestContext } from './context';
-import { otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
+import { otherDatesOf, type CalendarLinkEvent } from './calendarButtons';
 import { seriesDates } from './seriesDates';
 
 const columns = (M: number) => ({
@@ -35,9 +35,23 @@ export const drawTableHead = ({ doc, geo: { M, CW }, kit: { font, color, fill, s
   spaced('CATEGORY', COL.category, y + 4.6, 0.4);
 };
 
+/** "+ Outlook · + Google" as text links from `x` on the baseline `y`: the table has no buttons */
+const calendarTextLinks = ({ doc, kit: { font, color } }: DigestContext, calendarEvent: CalendarLinkEvent, x: number, y: number, fs: number) => {
+  font('semibold', fs);
+  color(BRAND);
+  doc.text('+ Outlook', x, y);
+  const ow = doc.getTextWidth('+ Outlook');
+  doc.link(x, y - 2.6, ow, 3.4, { url: createOutlookWebUrl(calendarEvent) });
+  color(FAINT);
+  doc.text('·', x + ow + 1.6, y);
+  color(BRAND);
+  doc.text('+ Google', x + ow + 3.6, y);
+  doc.link(x + ow + 3.6, y - 2.6, doc.getTextWidth('+ Google'), 3.4, { url: createGoogleCalendarUrl(calendarEvent) });
+};
+
 export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupIndex: number, dayKey: string): Block => {
   const { doc, screenOnly, geo: { M, CW } } = ctx;
-  const { font, txt, color, stroke, spaced, fitLines, truncate, drawLinkedLines, pill, drawPin, categoryMark } = ctx.kit;
+  const { font, txt, color, stroke, spaced, fitLines, truncate, drawLinkedLines, pill, categoryMark } = ctx.kit;
   const COL = columns(M);
   const ev = group.event;
   const cat = getCategoryRgb(ev.category);
@@ -59,7 +73,6 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
   const seriesLayout = series ? seriesDates(ctx, series, COL.category - 3 - COL.event, 6.6) : null;
   const otherDates = series ? [] : otherDatesOf(group);
   const A_ROW = 3.9;
-  const A_BTN_FS = 5;
   font('semibold', 6.6);
   const aDateW = Math.max(0, ...otherDates.map((o) => doc.getTextWidth(o.date))) + 3;
   font('regular', 6.6);
@@ -107,18 +120,7 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
         drawLinkedLines([descLine], txt(ev.description || ''), COL.event, ly, 0, MUTED);
       }
       ly += 3.5;
-      screenOnly(() => {
-        font('semibold', 6.4);
-        color(BRAND);
-        doc.text('+ Outlook', COL.event, ly);
-        const ow = doc.getTextWidth('+ Outlook');
-        doc.link(COL.event, ly - 2.6, ow, 3.4, { url: createOutlookWebUrl(ev) });
-        color(FAINT);
-        doc.text('·', COL.event + ow + 1.6, ly);
-        color(BRAND);
-        doc.text('+ Google', COL.event + ow + 3.6, ly);
-        doc.link(COL.event + ow + 3.6, ly - 2.6, doc.getTextWidth('+ Google'), 3.4, { url: createGoogleCalendarUrl(ev) });
-      });
+      screenOnly(() => calendarTextLinks(ctx, ev, COL.event, ly, 6.4));
 
       // Venue
       if (venueLines.length) {
@@ -131,15 +133,16 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
       // Also on
       if (alsoRows) {
         const left = COL.event;
-        const right = COL.category - 3;
         let ay = y + mainH + 1.5 + 2.4;
         font('bold', 5.8);
         color(BRAND);
         const labelW = spaced('ALSO ON', left, ay, 0.3);
         seriesLayout?.draw(left, ay, left + labelW + 2, ay + A_ROW, A_ROW);
+        // Each date reads along the table's own columns: its day and time under the event, with the
+        // same "+ Outlook · + Google" links as the row, and a venue of its own under the venue
         const timeX = left + aDateW;
-        const placeX = timeX + aTimeW;
-        const placeW = right - rowButtonsWidth(ctx, A_BTN_FS) - 2 - placeX - 3.4;
+        const linksX = timeX + aTimeW;
+        const placeW = M + CW - 2 - COL.venue;
         otherDates.forEach((o) => {
           ay += A_ROW;
           font('semibold', 6.6);
@@ -149,14 +152,13 @@ export const compactRow = (ctx: DigestContext, group: DigestEventGroup, groupInd
           color(BODY);
           doc.text(o.time, timeX, ay);
           const place = txt(o.place);
-          if (place && placeW > 8) {
-            drawPin(placeX, ay, PLACE);
+          if (place) {
             color(PLACE);
             const shown = truncate(place, placeW);
-            doc.text(shown, placeX + 3.4, ay);
-            doc.link(placeX, ay - 2.7, doc.getTextWidth(shown) + 3.4, 3.5, { url: createGoogleMapsUrl(o.place) });
+            doc.text(shown, COL.venue, ay);
+            doc.link(COL.venue, ay - 2.7, doc.getTextWidth(shown), 3.5, { url: createGoogleMapsUrl(o.place) });
           }
-          rowButtons(ctx, right, ay, o.calendarEvent, A_BTN_FS, 3.2);
+          screenOnly(() => calendarTextLinks(ctx, o.calendarEvent, linksX, ay, 6));
         });
       }
 

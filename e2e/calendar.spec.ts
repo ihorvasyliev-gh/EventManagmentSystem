@@ -168,3 +168,38 @@ test('the event window and the event form are fetched ahead of the first click',
   await expect(page.getByText('Coffee morning').first()).toBeVisible();
   await fetched;
 });
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`the month grid names the months beside it, and Week is one grid with today marked (${theme})`, async ({ page }) => {
+    // A date in the past, so the mocked session token is still valid by the page's clock
+    await page.clock.install({ time: new Date('2026-03-10T12:00:00Z') });
+    await page.emulateMedia({ colorScheme: theme });
+    await mockSupabase(page, {
+      events: [
+        eventRow({ id: id(1), title: 'Coffee morning', date: '2026-03-10T10:00:00Z', end_date: '2026-03-10T12:00:00Z' }),
+        eventRow({ id: id(2), title: 'Job fair', date: '2026-03-09T10:00:00Z', category: 'Enterprise & Employment' }),
+        eventRow({ id: id(3), title: 'Easter camp', date: '2026-04-01T10:00:00Z', category: 'Education & Training' })
+      ]
+    });
+    await signIn(page);
+    await expect(page.getByText('Coffee morning').first()).toBeVisible();
+
+    // March 2026 starts on a Sunday: its first week begins in February and its last ends in April
+    await expect(page.getByRole('button', { name: /^Monday,? 23 February/ })).toHaveText('23 Feb');
+    await expect(page.getByRole('button', { name: /^Wednesday,? 1 April/ })).toHaveText('1 Apr');
+    await expect(page.getByRole('button', { name: /^Sunday,? 1 March/ })).toHaveText('1');
+    await expectAccessible(page);
+
+    await page.getByRole('group', { name: 'Calendar view' }).getByRole('button', { name: 'Week' }).click();
+    const today = page.locator('[aria-current="date"]');
+    await expect(today).toHaveCount(1);
+    await expect(today.getByRole('heading', { name: /Tuesday,? 10 March/ })).toBeVisible();
+    await expect(today.getByRole('button', { name: /Coffee morning/ })).toBeVisible();
+    // Yesterday's event is still there to open, in its own day
+    await expect(today.getByRole('button', { name: /Job fair/ })).toHaveCount(0);
+    await page.getByRole('button', { name: /Job fair/ }).click();
+    await expect(page.getByRole('dialog', { name: 'Event Details' })).toContainText('Job fair');
+    await page.keyboard.press('Escape');
+    await expectAccessible(page);
+  });
+}

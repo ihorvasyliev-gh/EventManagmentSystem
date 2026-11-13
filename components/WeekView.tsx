@@ -86,6 +86,17 @@ const DOT_CLASSES: Record<string, string> = {
   other: 'bg-cat-other-400'
 };
 
+// The left edge of an event's card, in its category's colour (the month grid's chips and the agenda's bar)
+const ACCENT_CLASSES: Record<string, string> = {
+  enterprise: 'border-l-cat-enterprise-500 dark:border-l-cat-enterprise-400',
+  community: 'border-l-cat-community-500 dark:border-l-cat-community-400',
+  education: 'border-l-cat-education-500 dark:border-l-cat-education-400',
+  special: 'border-l-cat-special-500 dark:border-l-cat-special-400',
+  info: 'border-l-cat-info-500 dark:border-l-cat-info-400',
+  health: 'border-l-cat-health-500 dark:border-l-cat-health-400',
+  other: 'border-l-cat-other-400 dark:border-l-cat-other-500'
+};
+
 export const getCategoryColor = (category?: EventCategory): string => {
   if (!category) return 'bg-brand-50 text-brand-800 border-brand-500 dark:bg-brand-900 dark:text-brand-100 dark:border-brand-400';
   return CHIP_CLASSES[CATEGORY_TONE[category] ?? 'other'];
@@ -95,6 +106,10 @@ export const getCategoryDotColor = (category?: EventCategory): string => {
   if (!category) return 'bg-brand-500';
   return DOT_CLASSES[CATEGORY_TONE[category]] ?? 'bg-brand-500';
 };
+
+/** A 3px left edge in the category's colour, for a card that has a border */
+export const getCategoryAccent = (category?: EventCategory): string =>
+  `border-l-[3px] ${category ? ACCENT_CLASSES[CATEGORY_TONE[category] ?? 'other'] : 'border-l-brand-500 dark:border-l-brand-400'}`;
 
 const formatTimeRange = (event: Event): string => {
   const startStr = formatClock(event.date);
@@ -184,7 +199,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   const activeMobileGroup = eventsByDay[selectedMobileDayIndex] || eventsByDay[0];
 
   return (
-    <div className="p-2 sm:p-4 lg:p-6 transition-colors text-slate-900 dark:text-slate-100">
+    <div className="p-2 sm:p-4 lg:px-6 transition-colors text-slate-900 dark:text-slate-100">
       {/* Mobile: 7-day pill strip / tabs */}
       <div className="block lg:hidden mb-4">
         <div className="grid grid-cols-7 gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
@@ -303,7 +318,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     tabIndex={0}
                     onClick={() => onEventClick(event)}
                     onKeyDown={cardKeyDown(event)}
-                    className={`p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px] ${event.status === 'draft' ? 'border-dashed' : ''}`}
+                    className={`p-3 rounded-xl border border-slate-200 dark:border-slate-700 ${getCategoryAccent(event.category)} bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px] ${event.status === 'draft' ? 'border-dashed' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="flex items-center gap-1 flex-wrap min-w-0 max-w-full">
@@ -337,40 +352,45 @@ const WeekView: React.FC<WeekViewProps> = ({
         </div>
       </div>
 
-      {/* Desktop / Tablet: 7 Day Columns Grid */}
-      <div className="hidden lg:grid lg:grid-cols-7 gap-2 xl:gap-3">
+      {/* Large screens: the week as one grid of seven days, in the month grid's look */}
+      <div className="hidden lg:grid lg:grid-cols-7 border-t border-l border-slate-100 dark:border-slate-800">
         {eventsByDay.map((group, idx) => {
           const isToday = isSameDay(group.day, today);
+          const isPast = group.day < today;
           const dayName = group.day.toLocaleDateString(APP_LOCALE, { weekday: 'short' });
+          const fullDay = group.day.toLocaleDateString(APP_LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
 
           return (
             <div
               key={idx}
-              className={`flex flex-col rounded-xl border transition-colors ${
+              aria-current={isToday ? 'date' : undefined}
+              className={`flex flex-col min-w-0 border-r border-b border-slate-100 dark:border-slate-800 transition-colors ${
                 isToday
-                  ? 'border-brand-300 dark:border-brand-700 bg-brand-50/20 dark:bg-brand-950/20'
-                  : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30'
+                  ? 'bg-brand-50/60 dark:bg-brand-900/25'
+                  : isPast
+                  ? 'bg-slate-50/70 dark:bg-slate-900/60'
+                  : ''
               }`}
             >
-              {/* Day Header */}
+              {/* The day: its number first, as in the agenda; today under a raspberry line */}
               <div
-                className={`p-2.5 rounded-t-xl border-b flex items-center justify-between ${
-                  isToday
-                    ? 'border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'
-                    : 'border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300'
+                className={`relative flex items-center justify-between gap-1 pl-2.5 pr-1.5 xl:pl-3 py-2 border-b border-slate-100 dark:border-slate-800 ${
+                  isToday ? 'before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-brand-600 dark:before:bg-brand-400' : ''
                 }`}
               >
-                <h3 className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider">{dayName}</span>
+                <h3 className="flex items-baseline gap-1.5 min-w-0" aria-label={fullDay}>
                   <span
-                    className={`text-xs font-extrabold w-6 h-6 flex items-center justify-center rounded-full ${
-                      isToday ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-900 dark:text-white'
+                    className={`text-xl xl:text-2xl font-bold tabular-nums ${
+                      isToday ? 'text-brand-600 dark:text-brand-300' : isPast ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'
                     }`}
                   >
                     {group.day.getDate()}
                   </span>
+                  <span className={`text-[11px] xl:text-xs font-bold uppercase tracking-wider ${isToday ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                    {dayName}
+                  </span>
                   {isToday && (
-                    <span className="hidden xl:inline text-[11px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-brand-500 text-white">
+                    <span className="hidden xl:inline self-center ml-0.5 text-[11px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-brand-600 dark:bg-brand-400 text-white dark:text-slate-900">
                       Today
                     </span>
                   )}
@@ -383,7 +403,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                       e.stopPropagation();
                       onAddEventForDate(group.day);
                     }}
-                    className="p-1 rounded-md text-slate-400 hover:text-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/50 dark:hover:text-brand-400 transition-all min-w-[24px] min-h-[24px] flex items-center justify-center"
+                    className="p-1.5 rounded-md text-slate-400 hover:text-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/50 dark:hover:text-brand-300 transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center"
                     title={`Add event for ${dayName}`}
                     aria-label={`Add event for ${dayName}`}
                   >
@@ -392,12 +412,11 @@ const WeekView: React.FC<WeekViewProps> = ({
                 )}
               </div>
 
-              {/* Event Cards in Day Column */}
-              <div className="p-2 space-y-2 flex-1 min-h-[18rem] overflow-y-auto max-h-[36rem]">
+              {/* The day's events, in columns that reach the bottom of the window; past days lose most of
+                  their colour, as in the month grid */}
+              <div className={`p-1.5 xl:p-2 space-y-1.5 xl:space-y-2 flex-1 min-h-[max(14rem,calc(100vh_-_25rem))] ${isPast && !isToday ? 'grayscale-[70%] hover:grayscale-0 focus-within:grayscale-0' : ''}`}>
                 {group.events.length === 0 ? (
-                  <div className="h-28 flex flex-col items-center justify-center text-slate-400 text-xs italic border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
-                    No events
-                  </div>
+                  <p className="pt-5 text-center text-xs text-slate-400">No events</p>
                 ) : (
                   group.events.map(event => {
                     const colorClass = getCategoryColor(event.category);
@@ -412,30 +431,29 @@ const WeekView: React.FC<WeekViewProps> = ({
                         tabIndex={0}
                         onClick={() => onEventClick(event)}
                         onKeyDown={cardKeyDown(event)}
-                        className={`p-2 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:border-brand-400 dark:hover:border-brand-500 shadow-xs hover:shadow transition-all cursor-pointer space-y-1 touch-manipulation group ${statusClass}`}
+                        className={`p-2 rounded-md border border-slate-200 dark:border-slate-700/80 ${getCategoryAccent(event.category)} bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-1 touch-manipulation group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                       >
                         {/* Category & Time */}
-                        <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <div className="flex items-center justify-between gap-x-1.5 gap-y-1 flex-wrap">
                           {/* Short names: the full ones were cut to "Enterprise & Em…" in these narrow columns */}
                           <span className={`text-[11px] xl:text-xs font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
                             {shortCategoryLabel(event.category)}
                           </span>
-                          <span className="text-[11px] xl:text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
-                            <Clock className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-slate-400" />
+                          <span className="text-[11px] xl:text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {timeText}
                           </span>
                         </div>
 
-                        {/* Title */}
-                        <h4 className="text-xs xl:text-sm font-semibold text-slate-900 dark:text-white line-clamp-2 [overflow-wrap:anywhere] leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
-                          {isMulti && <span className="mr-1 text-brand-600 dark:text-brand-400 font-bold">↔</span>}
+                        {/* Title: these columns are tall, so it gets the lines it needs */}
+                        <h4 className="text-xs xl:text-sm font-semibold text-slate-900 dark:text-white line-clamp-4 [overflow-wrap:anywhere] leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-300">
+                          {isMulti && <><span className="text-brand-600 dark:text-brand-400 font-bold">↔</span>{' '}</>}
                           {event.title}
                         </h4>
 
                         {/* Location */}
                         {event.location && (
-                          <div className="flex items-center gap-1 text-[11px] xl:text-xs text-slate-500 dark:text-slate-400 truncate">
-                            <MapPin className="w-2.5 h-2.5 xl:w-3 xl:h-3 flex-shrink-0 text-slate-400" />
+                          <div className="flex items-center gap-1 text-[11px] xl:text-xs text-slate-500 dark:text-slate-400">
+                            <MapPin className="w-3 h-3 flex-shrink-0 text-slate-400" />
                             <span className="truncate">{event.location}</span>
                           </div>
                         )}

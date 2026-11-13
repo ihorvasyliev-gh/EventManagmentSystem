@@ -66,7 +66,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
         <button
           type="button"
           onClick={onPrev}
-          className="w-11 h-11 sm:w-8 sm:h-8 min-w-0 min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-500 dark:text-slate-400 transition-all shadow-sm"
+          className="w-11 h-11 sm:w-8 sm:h-8 min-w-0 min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 hover:shadow-sm active:bg-white dark:active:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 transition-all"
           aria-label={viewMode === 'week' ? 'Previous week' : 'Previous month'}
         >
           <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
@@ -74,7 +74,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
         <button
           type="button"
           onClick={onNext}
-          className="w-11 h-11 sm:w-8 sm:h-8 min-w-0 min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-500 dark:text-slate-400 transition-all shadow-sm"
+          className="w-11 h-11 sm:w-8 sm:h-8 min-w-0 min-h-0 flex items-center justify-center hover:bg-white dark:hover:bg-slate-700 hover:shadow-sm active:bg-white dark:active:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 transition-all"
           aria-label={viewMode === 'week' ? 'Next week' : 'Next month'}
         >
           <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />

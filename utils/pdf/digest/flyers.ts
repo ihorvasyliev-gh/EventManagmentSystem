@@ -54,7 +54,8 @@ export const drawFlyerPage = (ctx: DigestContext, items: FlyerItem[], pageOf: Ma
       h = boxH;
       w = h * flyer.aspectRatio;
     }
-    const x = colX + (COL_W - w) / 2;
+    // Against the page's margins: the left column's flyers from the left, the right column's to the right
+    const x = i % 2 === 0 ? colX : colX + COL_W - w;
     try {
       doc.addImage(flyer.dataUrl, flyer.format, x, rowY, w, h, flyer.alias, 'FAST');
       stroke(BORDER, 0.3);

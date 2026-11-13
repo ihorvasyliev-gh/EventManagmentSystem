@@ -83,6 +83,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
   // just enough to show it
   const todayCellRef = useRef<HTMLDivElement>(null);
   const showsToday = today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth();
+  const todayColumn = (today.getDay() + 6) % 7;
   useEffect(() => {
     if (isMobile || !showsToday) return;
     const cell = todayCellRef.current;
@@ -98,15 +99,22 @@ const MonthGrid: React.FC<MonthGridProps> = ({
   return (
     <>
       <div className="grid grid-cols-7 mb-2">
-        {WEEKDAYS.map(day => (
-          <div key={day} className="text-center text-[11px] lg:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider sm:tracking-widest px-0.5">
+        {WEEKDAYS.map((day, i) => (
+          // Today's weekday in raspberry, over today's column
+          <div
+            key={day}
+            className={`text-center text-[11px] lg:text-xs uppercase tracking-wider sm:tracking-widest px-0.5 ${
+              showsToday && i === todayColumn ? 'font-bold text-brand-600 dark:text-brand-300' : 'font-semibold text-slate-500 dark:text-slate-400'
+            }`}
+          >
             {day}
           </div>
         ))}
       </div>
       <div className="grid grid-cols-7 border-t border-l border-slate-100 dark:border-slate-800">
-        {calendarDays.map((day) => {
+        {calendarDays.map((day, index) => {
           const isToday = isSameDay(day, today);
+          const isOutside = day.getMonth() !== currentDate.getMonth();
           return (
             <MonthDayCell
               key={day.toISOString()}
@@ -115,7 +123,8 @@ const MonthGrid: React.FC<MonthGridProps> = ({
               dayEvents={eventsByDayKey.get(toDayKey(day)) || NO_EVENTS}
               isToday={isToday}
               isPast={day < today}
-              isOutside={day.getMonth() !== currentDate.getMonth()}
+              isOutside={isOutside}
+              showMonth={isOutside && (index === 0 || day.getDate() === 1)}
               isMobile={isMobile}
               isSelected={isMobile && !!selectedDay && isSameDay(day, selectedDay)}
               canAdd={canAdd}

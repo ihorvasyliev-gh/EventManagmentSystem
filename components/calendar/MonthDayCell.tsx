@@ -13,6 +13,8 @@ interface MonthDayCellProps {
   isPast: boolean;
   /** A day of the month before or after, completing the first or last week */
   isOutside: boolean;
+  /** Name the month beside the date: where the grid crosses into another month */
+  showMonth?: boolean;
   isMobile: boolean;
   /** Phones: the day whose events show under the grid */
   isSelected: boolean;
@@ -34,6 +36,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
   isToday,
   isPast,
   isOutside,
+  showMonth = false,
   isMobile,
   isSelected,
   canAdd,
@@ -48,6 +51,9 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
   const dayName = day.toLocaleDateString(APP_LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
   const dayLabel = `${dayName}, ${dayEvents.length === 0 ? 'no events' : dayEvents.length === 1 ? '1 event' : `${dayEvents.length} events`}`;
   const muted = (isPast || isOutside) && !isToday;
+  // Another month's days sit on grey, so the month on screen keeps its shape; its own past days stay
+  // on white and only lose their colour
+  const outside = isOutside && !isToday;
 
   return (
     <div
@@ -56,20 +62,21 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
       onClick={() => {
         if (isMobile || hasEvents || canAdd) activate();
       }}
-      className={`min-h-[3.25rem] sm:min-h-[6.5rem] lg:min-h-[7rem] short:lg:min-h-[5.5rem] scroll-mt-20 scroll-mb-4 group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-2 transition-colors ${
+      className={`min-h-[3.25rem] sm:min-h-[6.5rem] lg:min-h-[7rem] short:lg:min-h-[5.5rem] scroll-mt-20 scroll-mb-4 group border-b border-r border-slate-100 dark:border-slate-800 p-1 sm:p-1.5 lg:p-2 transition-colors ${
         isMobile ? 'cursor-pointer active:bg-slate-100 dark:active:bg-slate-800/60' : `hover:bg-slate-50/50 dark:hover:bg-slate-800/50 ${hasEvents || canAdd ? 'cursor-pointer' : ''}`
       } ${
         isSelected
           ? 'bg-brand-50/70 dark:bg-brand-900/30 ring-2 ring-brand-500 ring-inset'
           : isToday
-          ? 'bg-brand-50/60 dark:bg-brand-900/25 ring-2 ring-brand-600/80 dark:ring-brand-400/80 ring-inset'
-          : muted
-          ? 'bg-slate-50/70 dark:bg-slate-900/60'
+          // Phones: the ring is for the day picked, so today keeps its tint and its filled date only
+          ? `bg-brand-50/60 dark:bg-brand-900/25 ${isMobile ? '' : 'ring-2 ring-brand-600/80 dark:ring-brand-400/80 ring-inset'}`
+          : outside
+          ? 'bg-slate-50/70 dark:bg-black/20'
           : 'bg-white dark:bg-slate-900/0'
       }`}
     >
       <div className={`flex items-center ${isMobile ? 'justify-center' : 'justify-between'} gap-1 mb-1 sm:mb-2 ${
-        isToday ? 'text-brand-700 dark:text-brand-300' : muted ? 'text-slate-400' : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200'
+        isToday ? 'text-brand-700 dark:text-brand-300' : muted ? 'text-slate-400' : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white'
       }`}>
         {/* The day itself is a button, so the keyboard and screen readers can open (or pick) it too */}
         <button
@@ -82,7 +89,10 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
           {isToday ? (
             <span className="bg-brand-600 dark:bg-brand-400 text-white dark:text-slate-900 px-2 py-0.5 sm:py-1 rounded-full font-bold text-xs sm:text-sm shadow-sm">{day.getDate()}</span>
           ) : (
-            <span className="px-1">{day.getDate()}</span>
+            <span className="px-1 whitespace-nowrap">
+              {day.getDate()}
+              {showMonth && <span className="hidden sm:inline font-medium"> {day.toLocaleDateString(APP_LOCALE, { month: 'short' })}</span>}
+            </span>
           )}
         </button>
         {!isMobile && canAdd && onAddEventForDate && (
@@ -106,7 +116,7 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               {dayEvents.slice(0, 3).map((ev, i) => (
                 <span
                   key={ev.instanceKey ?? `${ev.id}-${i}`}
-                  className={`w-2 h-2 rounded-full ${getCategoryDotColor(ev.category)}`}
+                  className={`w-1.5 h-1.5 min-[360px]:w-2 min-[360px]:h-2 rounded-full ${getCategoryDotColor(ev.category)}`}
                 />
               ))}
             </div>
@@ -134,14 +144,14 @@ const MonthDayCell: React.FC<MonthDayCellProps> = ({
               <div
                 key={ev.instanceKey ?? ev.id}
                 {...clickableProps(() => onEventClick(ev))}
-                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[11px] lg:text-xs xl:text-[13px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
+                className={`w-full min-w-0 text-left ${colorClass} border-l-2 text-[11px] lg:text-xs xl:text-[13px] px-1 lg:px-1.5 py-0.5 sm:py-1 rounded-sm leading-snug font-semibold transition-all hover:opacity-80 cursor-pointer touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${statusClass}`}
                 title={itemTitle}
               >
                 {/* The clamp sits inside the padding: on the padded chip itself the next line showed through the bottom padding.
-                    Two lines from tablets up (one on short laptop screens); below that the cells are too narrow for more than a word or two */}
-                <span className="block truncate md:whitespace-normal md:line-clamp-2 shorter:md:line-clamp-1 md:[overflow-wrap:anywhere]">
+                    Two lines wherever the grid shows titles (one on short laptop screens) */}
+                <span className="block truncate sm:whitespace-normal sm:line-clamp-2 shorter:sm:line-clamp-1 sm:[overflow-wrap:anywhere]">
                   {!isContinuation && <span className="hidden lg:inline font-bold tabular-nums mr-1">{timeStr}</span>}
-                  {rangeStr && <span className="mr-0.5 opacity-75 font-bold">↔</span>}
+                  {rangeStr && <><span className="opacity-75 font-bold">↔</span>{' '}</>}
                   {ev.title}
                 </span>
               </div>

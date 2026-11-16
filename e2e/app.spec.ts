@@ -138,6 +138,7 @@ test('the public subscribe page works without signing in and links Outlook to th
   const outlookApp = page.getByRole('link', { name: /^Outlook app on Windows/ });
   await outlookApp.click();
   await expect(page.getByText('Calendar address copied.')).toBeVisible();
+  await expect(page.getByText('Nothing opened?')).toHaveCount(0);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/api/calendar`);
   await expect(page).toHaveURL(/\/subscribe/);
   await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveCount(0);

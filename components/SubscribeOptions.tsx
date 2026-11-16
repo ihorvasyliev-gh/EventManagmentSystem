@@ -67,8 +67,13 @@ export const SubscribeHelp: React.FC = () => (
   <>
     <Help title="Adding it by hand in Outlook">
       <p><strong className="text-slate-800 dark:text-slate-100">Outlook on the web, new Outlook for Windows, Outlook for Mac:</strong> open Calendar → <em>Add calendar</em> → <em>Subscribe from web</em> → paste the address → give it a name → <em>Import</em>.</p>
-      <p><strong className="text-slate-800 dark:text-slate-100">Classic Outlook for Windows:</strong> open Calendar → <em>Add Calendar</em> → <em>From Internet…</em> → paste the address → <em>OK</em> → <em>Yes</em>.</p>
+      <p><strong className="text-slate-800 dark:text-slate-100">Classic Outlook for Windows:</strong> open Calendar → <em>Add Calendar</em> → <em>From Internet…</em> → paste the address → <em>OK</em> (and <em>Yes</em> if it asks). It is added unticked: tick it in the calendar list on the left.</p>
       <p><strong className="text-slate-800 dark:text-slate-100">Outlook on your phone:</strong> the app can't add it itself. Add it once in Outlook on the web (the Outlook button above) and it appears in the app too.</p>
+    </Help>
+    <Help title="Added it, but can't see the events in Outlook?">
+      <p><strong className="text-slate-800 dark:text-slate-100">Classic Outlook for Windows</strong> (the older app) lists a new calendar unticked, also one you added in the new Outlook or on the web. Open Calendar, find <em>CCP Events</em> in the list on the left (under <em>Other Calendars</em>, <em>My Calendars</em> or <em>Shared Calendars</em>) and tick its box.</p>
+      <p><strong className="text-slate-800 dark:text-slate-100">Not in the list?</strong> Give it a minute; if it still isn't there, close Outlook and open it again. You add the calendar once: when it is in the new Outlook or Outlook on the web, classic Outlook gets it too.</p>
+      <p><strong className="text-slate-800 dark:text-slate-100">“Sorry, something went wrong” or “The set of folders cannot be opened”?</strong> Outlook was still setting the calendar up. Wait a minute and look in the list before adding it again.</p>
     </Help>
     <Help title="Adding it by hand in Google or Apple Calendar">
       <p><strong className="text-slate-800 dark:text-slate-100">Google Calendar:</strong> on a computer, open calendar.google.com → <em>+</em> next to <em>Other calendars</em> → <em>From URL</em> → paste → <em>Add calendar</em>. Google's phone app can't add it, but shows it once added.</p>

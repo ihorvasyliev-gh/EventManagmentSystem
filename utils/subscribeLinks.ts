@@ -77,9 +77,14 @@ export function subscribeLinks(categories: string[], origin: string, device: Dev
   const addFromWeb = (host: string) =>
     `https://${host}/calendar/0/addfromweb?url=${encodeURIComponent(feedUrl)}&name=${encodeURIComponent(feedNameFor(categories))}`;
   const onPhone = device === 'ios' || device === 'android';
+  // Classic Outlook for Windows lists a calendar it has just been given without a tick, so its
+  // events don't show: also one added in the new Outlook or on the web with the same account
+  const tickIt = `tick “${feedNameFor(categories)}” in the calendar list on the left`;
   const outlookNext = {
     title: 'Outlook opened in a new tab',
-    text: 'Sign in there if it asks, then press Import. The calendar appears in your calendar list.',
+    text: `Sign in there if it asks, then press Import. The calendar appears in your calendar list.${
+      device === 'windows' ? ` In the older (classic) Outlook app it arrives unticked: ${tickIt} to see its events.` : ''
+    }`,
   };
   return {
     'outlook-work': {
@@ -119,7 +124,7 @@ export function subscribeLinks(categories: string[], origin: string, device: Dev
       hint: device === 'windows' ? 'Copies the calendar address to paste into the Outlook app' : 'Copies the calendar address to paste into Outlook on a Windows computer',
       next: {
         title: 'Calendar address copied',
-        text: 'In Outlook open Calendar → Add calendar → Subscribe from web, paste it and press Import. In classic Outlook: Add Calendar → From Internet, paste it and press OK.',
+        text: `In Outlook open Calendar → Add calendar → Subscribe from web, paste it and press Import. In classic Outlook: Add Calendar → From Internet, paste it and press OK, then ${tickIt}: it is added unticked, and can take a minute to appear.`,
       },
     },
   };

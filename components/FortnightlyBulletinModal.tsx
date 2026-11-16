@@ -361,7 +361,9 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     const recipients = recipientsFor('digest');
     // Handed over still inside the click, as promises: Safari allows nothing later
     const copied = await copyFormattedEmail(
-      link.then((pdfUrl) => generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl })),
+      // NEW as in the PDF: what the last digest before this week didn't have
+      Promise.all([link, previousIssue.current]).then(([pdfUrl, previous]) =>
+        generateDigestEmailHtml(periodEvents, startDate, endDate, { baseUrl, pdfUrl, previousIssue: previous })),
       link.then((pdfUrl) => generateDigestEmail(periodEvents, startDate, endDate, { baseUrl, pdfUrl }).body)
     );
     const [pdfUrl, to] = await Promise.all([link, recipients]);

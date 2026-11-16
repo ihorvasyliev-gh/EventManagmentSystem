@@ -48,6 +48,9 @@ test('an admin shares the digest as a link: copied, in the WhatsApp text and in 
   });
   expect(email.html).toContain(`href="http://localhost:4173${PAGE}"`);
   expect(email.html).toContain('Click here for details');
+  // …and a button to the public page where the calendar is added to the reader's own
+  expect(email.html).toContain('href="http://localhost:4173/subscribe"');
+  expect(email.text).toContain('http://localhost:4173/subscribe');
   expect(email.html).toContain('Coffee morning');
   expect(email.text).toContain(`http://localhost:4173${PAGE}`);
   expect(uploads).toHaveLength(1);

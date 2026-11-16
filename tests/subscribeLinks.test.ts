@@ -43,9 +43,12 @@ test('each calendar’s link hands it the feed', () => {
   assert.equal(`${personal.origin}${personal.pathname}`, 'https://outlook.live.com/calendar/0/addfromweb');
   assert.equal(personal.searchParams.get('url'), feed);
 
-  // Apple Calendar and classic Outlook take the address itself, as webcal://
+  // Apple Calendar takes the address itself, as webcal://
   assert.equal(links.apple.href, 'webcal://cal.test/api/calendar?category=health-wellbeing');
-  assert.equal(links['outlook-classic'].href, links.apple.href);
+  // The Outlook app on Windows gets the https address to paste: the new Outlook turns a webcal://
+  // link into "//cal.test/…" and calls it invalid
+  assert.equal(links['outlook-classic'].copies, feed);
+  assert.doesNotMatch(links['outlook-classic'].href, /^webcal:/);
   assert.equal(links.apple.newTab, false);
 
   const google = new URL(links.google.href);
@@ -73,7 +76,7 @@ test('the device decides which calendars are offered, and which comes first', ()
   assert.equal(APPS_BY_DEVICE.ios.main[0], 'apple');
   assert.equal(APPS_BY_DEVICE.android.main[0], 'google');
   assert.equal(APPS_BY_DEVICE.windows.main[0], 'outlook-work');
-  // A webcal:// link only does something where an app takes it: Apple's devices, and Windows with classic Outlook
+  // A webcal:// link only does something on Apple's devices; the Outlook app is offered first only on Windows
   assert.ok(!APPS_BY_DEVICE.android.main.includes('apple') && !APPS_BY_DEVICE.windows.main.includes('apple'));
   for (const device of ['ios', 'android', 'mac', 'other'] as const) assert.ok(!APPS_BY_DEVICE[device].main.includes('outlook-classic'));
   // Nothing is lost: every calendar is on every device, once

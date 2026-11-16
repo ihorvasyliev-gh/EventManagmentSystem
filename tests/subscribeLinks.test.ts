@@ -55,6 +55,14 @@ test('each calendar’s link hands it the feed', () => {
   assert.equal(`${google.origin}${google.pathname}`, 'https://calendar.google.com/calendar/render');
   assert.equal(google.searchParams.get('cid'), 'webcal://cal.test/api/calendar?category=health-wellbeing');
 
+  // Classic Outlook lists a new calendar unticked (also one added on the web): the words after
+  // either Outlook button say to tick it, by the name it has there
+  assert.match(links['outlook-classic'].next.text, /tick “CCP Events: Health & Wellbeing” in the calendar list/);
+  assert.match(links['outlook-work'].next.text, /classic\) Outlook app it arrives unticked: tick “CCP Events: Health & Wellbeing”/);
+  assert.match(subscribeLinks([], ORIGIN, 'windows')['outlook-personal'].next.text, /tick “CCP Events” in the calendar list/);
+  // Not on a phone or a Mac, where there is no classic Outlook to look in
+  for (const device of ['ios', 'android', 'mac'] as const) assert.doesNotMatch(subscribeLinks([], ORIGIN, device)['outlook-work'].next.text, /unticked/);
+
   // Every event: no query at all
   assert.equal(new URL(subscribeLinks([], ORIGIN, 'windows')['outlook-work'].href).searchParams.get('url'), 'https://cal.test/api/calendar');
   assert.equal(new URL(subscribeLinks([], ORIGIN, 'windows')['outlook-work'].href).searchParams.get('name'), 'CCP Events');

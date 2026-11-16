@@ -138,6 +138,8 @@ test('the public subscribe page works without signing in and links Outlook to th
   const outlookApp = page.getByRole('link', { name: /^Outlook app on Windows/ });
   await outlookApp.click();
   await expect(page.getByText('Calendar address copied.')).toBeVisible();
+  // Classic Outlook adds a calendar unticked, so its events don't show until it is ticked
+  await expect(page.getByText('then tick “CCP Events” in the calendar list on the left', { exact: false })).toBeVisible();
   await expect(page.getByText('Nothing opened?')).toHaveCount(0);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/api/calendar`);
   await expect(page).toHaveURL(/\/subscribe/);
@@ -165,6 +167,8 @@ test('the public subscribe page works without signing in and links Outlook to th
 
   await page.getByText('How does it stay up to date?').click();
   await expect(page.getByText('Events show as')).toBeVisible();
+  await page.getByText("Added it, but can't see the events in Outlook?").click();
+  await expect(page.getByText('lists a new calendar unticked', { exact: false })).toBeVisible();
   await expectAccessible(page);
   await assertNoCsp();
 });

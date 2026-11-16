@@ -58,6 +58,12 @@ export interface SubscribeLink {
   hint: string;
   /** Opens a web page (a new tab); otherwise it hands the address to a calendar app on the device */
   newTab: boolean;
+  /**
+   * Copies the feed's https address instead of following the link, to paste into the app. For
+   * the Outlook app on Windows: webcal:// there opens whichever Outlook took it last, and the new
+   * Outlook's "Subscribe from web" drops the scheme ("//host/…") and calls the address invalid.
+   */
+  copies?: string;
   /** What to do in the window the link opens */
   next: { title: string; text: string };
 }
@@ -65,7 +71,7 @@ export interface SubscribeLink {
 /** The link that adds the feed to each calendar, with the words for the device it is shown on */
 export function subscribeLinks(categories: string[], origin: string, device: Device): Record<AppId, SubscribeLink> {
   const feedUrl = feedUrlFor(categories, origin);
-  // webcal:// opens the calendar app that registers for it (Apple Calendar, classic Outlook);
+  // webcal:// opens the calendar app that registers for it (Apple Calendar);
   // Outlook on the web and Google get their own links (Android has no webcal app at all)
   const webcalUrl = feedUrl.replace(/^https?:/, 'webcal:');
   const addFromWeb = (host: string) =>
@@ -108,10 +114,13 @@ export function subscribeLinks(categories: string[], origin: string, device: Dev
       },
     },
     'outlook-classic': {
-      id: 'outlook-classic', href: webcalUrl, newTab: false,
-      name: 'Classic Outlook on Windows',
-      hint: device === 'windows' ? 'Opens the Outlook app on this computer; only on this computer' : 'Only on a Windows computer with the Outlook app',
-      next: { title: 'Outlook asks to add the calendar', text: 'Press Yes when Outlook asks to add this Internet Calendar and subscribe to updates.' },
+      id: 'outlook-classic', href: feedUrl, newTab: false, copies: feedUrl,
+      name: 'Outlook app on Windows',
+      hint: device === 'windows' ? 'Copies the calendar address to paste into the Outlook app' : 'Copies the calendar address to paste into Outlook on a Windows computer',
+      next: {
+        title: 'Calendar address copied',
+        text: 'In Outlook open Calendar → Add calendar → Subscribe from web, paste it and press Import. In classic Outlook: Add Calendar → From Internet, paste it and press OK.',
+      },
     },
   };
 }

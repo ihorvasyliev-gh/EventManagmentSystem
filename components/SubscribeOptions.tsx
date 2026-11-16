@@ -148,9 +148,16 @@ const SubscribeOptions: React.FC<SubscribeOptionsProps> = ({ initialCategories =
 
   const linkProps = (app: SubscribeLink) => ({
     href: app.href,
-    onClick: () => setOpened(app.id),
+    onClick: (e: React.MouseEvent) => {
+      if (app.copies) {
+        e.preventDefault();
+        copy(app.id, app.copies);
+      }
+      setOpened(app.id);
+    },
     ...(app.newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
   });
+  const LinkIcon = (app: SubscribeLink) => (app.copies ? (copied === app.id ? Check : Copy) : ExternalLink);
 
   const chip = (on: boolean) =>
     `inline-flex items-center gap-2 min-h-[40px] sm:min-h-[34px] px-3 py-1.5 rounded border text-[13px] sm:text-xs font-medium select-none transition-colors ${
@@ -170,7 +177,7 @@ const SubscribeOptions: React.FC<SubscribeOptionsProps> = ({ initialCategories =
         <span className="block text-sm font-semibold text-slate-900 dark:text-white">{app.name}</span>
         <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{app.hint}</span>
       </span>
-      <ExternalLink className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-brand-600 dark:group-hover:text-brand-300" aria-hidden="true" />
+      {React.createElement(LinkIcon(app), { className: 'h-4 w-4 shrink-0 text-slate-400 group-hover:text-brand-600 dark:group-hover:text-brand-300', 'aria-hidden': true })}
     </a>
   );
 

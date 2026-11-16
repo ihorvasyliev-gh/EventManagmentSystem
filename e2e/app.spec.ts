@@ -113,7 +113,8 @@ test('an admin resets a forgotten password from Staff accounts', async ({ page }
   await expect(page.getByText('Kp7m-3xQa-9tVw')).toBeVisible();
 });
 
-test('the public subscribe page works without signing in and links Outlook to the feed', async ({ page }) => {
+test('the public subscribe page works without signing in and links Outlook to the feed', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const assertNoCsp = await watchCsp(page);
   const previews: string[] = [];
   await page.route('**/api/calendar?*', (route) => {
@@ -133,7 +134,12 @@ test('the public subscribe page works without signing in and links Outlook to th
   await expect(outlook).toContainText('Best for this device');
   await expect(outlook).toHaveAttribute('href', new RegExp(`^https://outlook\\.office\\.com/calendar/0/addfromweb\\?url=${encodeURIComponent(`${origin}/api/calendar`)}&name=CCP%20Events$`));
   await expect(page.getByRole('link', { name: /^Outlook\.com \(personal account\)/ })).toHaveAttribute('href', /^https:\/\/outlook\.live\.com\/calendar\/0\/addfromweb\?/);
-  await expect(page.getByRole('link', { name: /^Classic Outlook on Windows/ })).toHaveAttribute('href', `webcal://${new URL(origin).host}/api/calendar`);
+  // The Outlook app gets the https address to paste: the new Outlook calls a webcal:// link invalid
+  const outlookApp = page.getByRole('link', { name: /^Outlook app on Windows/ });
+  await outlookApp.click();
+  await expect(page.getByText('Calendar address copied.')).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/api/calendar`);
+  await expect(page).toHaveURL(/\/subscribe/);
   await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveCount(0);
   await page.getByText('More calendars (Apple Calendar)').click();
   await expect(page.getByRole('link', { name: /^Apple Calendar/ })).toHaveAttribute('href', `webcal://${new URL(origin).host}/api/calendar`);
@@ -169,7 +175,7 @@ test.describe('the public subscribe page on an iPhone', () => {
     hasTouch: true
   });
 
-  test('Apple Calendar comes first, and classic Outlook is under More calendars', async ({ page }) => {
+  test('Apple Calendar comes first, and the Outlook app for Windows is under More calendars', async ({ page }) => {
     await page.route('**/api/calendar?*', (route) =>
       route.fulfill({ json: { events: [{ title: 'Jobs fair', start: daysFromNow(2), end: daysFromNow(2, 13), location: 'City Hall', category: 'Enterprise & Employment' }] } })
     );
@@ -180,8 +186,8 @@ test.describe('the public subscribe page on an iPhone', () => {
     await expect(links.first()).toHaveAttribute('href', /^webcal:\/\//);
     await expect(page.getByRole('link', { name: /^Outlook \(work or school account\)/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^Google Calendar/ })).toContainText('Works best on a computer');
-    await expect(page.getByRole('link', { name: /^Classic Outlook on Windows/ })).toHaveCount(0);
-    await expect(page.getByText('More calendars (Classic Outlook on Windows)')).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Outlook app on Windows/ })).toHaveCount(0);
+    await expect(page.getByText('More calendars (Outlook app on Windows)')).toBeVisible();
     await expect(page.getByText('Jobs fair')).toBeVisible();
     await expectAccessible(page);
     // Nothing is wider than the screen

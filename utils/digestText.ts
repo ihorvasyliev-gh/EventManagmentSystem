@@ -104,7 +104,8 @@ const EMAIL_LIST_LIMIT = 20;
 
 /**
  * Covering email for the PDF (the routine sends it to the Board and staff every fortnight):
- * subject, greeting, one line per event and how to send in an event. No sign-off: the sender's
+ * subject, greeting, one line per event, where to add the calendar to your own and how to send
+ * in an event. No sign-off: the sender's
  * own email signature follows. `listLimit` caps how many events are named. With `pdfUrl` the email links to
  * the PDF instead of saying it is attached.
  */
@@ -154,6 +155,10 @@ export const generateDigestEmail = (
       `${options.pdfUrl ? 'Click the link above for' : 'The attached PDF has'} each event's description, venue with a map, contacts, and buttons to add it to your Outlook or Google calendar.`
         + (options.pdfUrl ? ' If anything changes after this email, the link always shows the latest version.' : '')
     );
+  }
+  const subscribeUrl = toAbsoluteHttpUrl('/subscribe', options.baseUrl);
+  if (subscribeUrl) {
+    lines.push('', `Want our events in your own calendar? Add the CCP calendar to your Outlook once and every event appears there automatically: ${subscribeUrl}`);
   }
   const submitUrl = toAbsoluteHttpUrl('/submit', options.baseUrl);
   if (submitUrl) {

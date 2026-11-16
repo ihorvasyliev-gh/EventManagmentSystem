@@ -24,6 +24,8 @@ export const BORDER = '#E6E6E6';
 const SOFT = '#F6F6F6';
 /** The brand colour, faded, behind the heading */
 const BRAND_TINT = '#F9E9EF';
+/** The logo's green, faded, behind a callout and a NEW mark */
+export const GREEN_TINT = '#EAF2E9';
 export const FONT = "Lato, 'Segoe UI', Arial, Helvetica, sans-serif";
 
 /** Side padding: room on a desktop without wasting a phone's narrow screen */
@@ -43,13 +45,30 @@ export const smallPrint = (html: string) => p(html, `font-size:13px;line-height:
 /**
  * Bulletproof button: Outlook ignores padding and most styling on a link (pasted in, it showed
  * a tight box in one Outlook and a stretched, underlined one in another), so the cell carries
- * the colour and padding, and the inner span keeps the text white and not underlined
+ * the colour and padding, and the inner span keeps the text white and not underlined. `colour`
+ * is the cell's: the brand's for an email's main button, another for a second one, so the
+ * main one stays the main one.
  */
-export const emailButton = (href: string, label: string): string => `
+export const emailButton = (href: string, label: string, colour = BRAND): string => `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 10px;">
   <tr>
-    <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:4px;padding:12px 24px;">
+    <td bgcolor="${colour}" style="background:${colour};border-radius:4px;padding:12px 24px;">
       <a href="${esc(href)}" target="_blank" style="font-family:${FONT};font-size:16px;line-height:20px;font-weight:bold;color:#ffffff;text-decoration:none;"><span style="color:#ffffff;text-decoration:none;">${esc(label)}</span></a>
+    </td>
+  </tr>
+</table>`;
+
+/**
+ * A box for something else the reader can do, after the email's own text: a line (HTML) over a
+ * button, on the green of the logo with a green bar, so it is told apart from the brand's band
+ * at the top and the grey note at the bottom. The colour is the cell's, so the box survives the
+ * new Outlook's paste.
+ */
+export const emailCallout = (html: string, button: { href: string; label: string }): string => `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 0;">
+  <tr>
+    <td bgcolor="${GREEN_TINT}" style="background:${GREEN_TINT};border-left:4px solid ${GREEN};border-radius:0 8px 8px 0;padding:14px 16px 6px;font-family:${FONT};font-size:14px;line-height:21px;color:${BODY};">
+      <div style="margin:0 0 6px;">${html}</div>${emailButton(button.href, button.label, PLACE)}
     </td>
   </tr>
 </table>`;

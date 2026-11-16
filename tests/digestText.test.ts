@@ -44,6 +44,7 @@ test('email lists published events in date order with time, venue and repeat dat
   assert.ok(!body.includes('Not approved yet'));
   assert.ok(!body.includes('Outside the period'));
   assert.ok(body.includes(`${BASE}/submit (no login needed)`));
+  assert.ok(body.includes(`Want our events in your own calendar? Add the CCP calendar to your Outlook once and every event appears there automatically: ${BASE}/subscribe\n`));
   // No sign-off: the sender's email signature follows
   assert.ok(body.endsWith('and it will be in the next update.'));
 });

@@ -260,7 +260,10 @@ const SubscribeOptions: React.FC<SubscribeOptionsProps> = ({ initialCategories =
               <CircleCheck className="h-5 w-5 shrink-0 text-ccp-green-600 dark:text-ccp-green-400" aria-hidden="true" />
               <span>
                 <strong className="font-semibold text-slate-900 dark:text-white">{links[opened].next.title}.</strong> {links[opened].next.text}
-                <span className="block mt-1 text-xs text-slate-600 dark:text-slate-300">Nothing opened? Copy the calendar address below and add it by hand{compact ? '' : ' (steps under Help)'}.</span>
+                {/* A button that copies opens nothing, so there is nothing to have failed */}
+                {!links[opened].copies && (
+                  <span className="block mt-1 text-xs text-slate-600 dark:text-slate-300">Nothing opened? Copy the calendar address below and add it by hand{compact ? '' : ' (steps under Help)'}.</span>
+                )}
               </span>
             </div>
           )}

@@ -49,13 +49,17 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
     return w;
   };
 
-  /** Wraps text to at most `maxLines`, ending the last line with an ellipsis if it was cut */
+  /** Wraps text to at most `maxLines`, ending the last line with an ellipsis after a whole word if it was cut */
   const fitLines = (text: string, width: number, maxLines: number): string[] => {
     if (!text) return [];
     const lines: string[] = doc.splitTextToSize(text, width);
     if (lines.length <= maxLines) return lines;
     const kept = lines.slice(0, maxLines);
-    let last = kept[maxLines - 1];
+    // Whole words where the line has room for "…" after one; otherwise letters off the end
+    const words = kept[maxLines - 1].trimEnd().split(' ');
+    const end = (ws: string[]) => `${ws.join(' ').replace(/[\s,;:–—-]+$/, '')}…`;
+    while (words.length > 1 && doc.getTextWidth(end(words)) > width) words.pop();
+    let last = end(words).slice(0, -1);
     while (last.length > 1 && doc.getTextWidth(`${last}…`) > width) last = last.slice(0, -1);
     kept[maxLines - 1] = `${last.trimEnd()}…`;
     return kept;

@@ -16,9 +16,16 @@ import { type Rgb } from '../../../constants/categoryColors';
 import type { Block, DigestContext } from './context';
 import { calendarLinks, otherDatesOf, rowButtons, rowButtonsWidth } from './calendarButtons';
 import { seriesDates } from './seriesDates';
+import { layoutDescription, type DescriptionLine } from './description';
 import { eventContacts, formatContact } from '../../contacts';
 
 const TILE_H = 15;
+
+// Description: at most this many lines (a description sent in through the form, up to 2,000
+// characters, fits in full); a paragraph gap is half a line; list items are indented this much
+const DESC_MAX_LINES = 30;
+const DESC_GAP = 0.5;
+const BULLET_INDENT = 3.2;
 
 // Under the thumbnail when the flyer is also printed large at the end: "FLYER · P. 5"
 const FLYER_TAG_H = 4.4;
@@ -56,7 +63,7 @@ const dateTile = (ctx: DigestContext, day: Date, y: number, mode: 'first' | 'con
 /** Measures and returns the executive card for one event group */
 export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, groupIndex: number, density: Density): Block => {
   const { doc, flyers, screenOnly, geo: { CARD_X, CARD_W } } = ctx;
-  const { font, txt, color, fill, stroke, spaced, fitLines, truncate, drawLinkedLines, pill, leaf, drawPin, categoryMark } = ctx.kit;
+  const { font, txt, color, fill, stroke, spaced, truncate, drawLinkedLines, pill, leaf, drawPin, categoryMark } = ctx.kit;
   const ev = group.event;
   const cat = getCategoryRgb(ev.category);
   const flyer = flyers.get(ev.id);
@@ -89,8 +96,11 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
 
   // Description
   font('regular', 8.3);
-  const desc = txt(ev.description || '', true);
-  const descLines = fitLines(desc, mainW, 16);
+  const desc = layoutDescription(
+    txt(ev.description || '', true),
+    (t, w) => doc.splitTextToSize(t, w),
+    mainW, BULLET_INDENT, DESC_MAX_LINES, DESC_GAP
+  );
   const DESC_LH = 3.85;
 
   // "Also on": one row per other date with its time, its venue when it differs (links to
@@ -132,7 +142,7 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
   let contentH = 4.2;                                              // time & category row
   contentH += titleLines.length * TITLE_LH - 0.6;
   if (venueLines.length) contentH += 2.2 + venueLines.length * VENUE_LH;
-  if (descLines.length) contentH += 3 + descLines.length * DESC_LH;
+  if (desc.lines.length) contentH += 3 + desc.height * DESC_LH;
   if (contacts.length) contentH += 2.4 + 3.3 + (contacts.length - 1) * CONTACT_LH;
   if (alsoH) contentH += 3 + alsoH;
 
@@ -223,12 +233,30 @@ export const executiveCard = (ctx: DigestContext, group: DigestEventGroup, group
         cy += (venueLines.length - 1) * VENUE_LH;
       }
 
-      // Description (printed in full up to 16 lines)
-      if (descLines.length) {
-        cy += 3 + DESC_LH;
+      // Description: in full up to DESC_MAX_LINES, paragraphs a half line apart, lists as bullets
+      if (desc.lines.length) {
+        cy += 3;
         font('regular', 8.3);
-        drawLinkedLines(descLines, desc, mainX, cy, DESC_LH, BODY);
-        cy += (descLines.length - 1) * DESC_LH;
+        let ly = cy;
+        let block: DescriptionLine[] = [];
+        const flush = () => {
+          if (!block.length) return;
+          const x = block[0].indent ? mainX + BULLET_INDENT : mainX;
+          const top = ly - (block.length - 1) * DESC_LH;
+          if (block[0].bullet) {
+            fill(cat.accent);
+            doc.circle(mainX + 1.1, top - 1.05, 0.55, 'F');
+          }
+          drawLinkedLines(block.map((l) => l.text), block.map((l) => l.text).join(' '), x, top, DESC_LH, BODY);
+          block = [];
+        };
+        desc.lines.forEach((line, i) => {
+          if (i > 0 && line.block !== desc.lines[i - 1].block) flush();
+          ly += (line.gap ? DESC_LH * DESC_GAP : 0) + DESC_LH;
+          block.push(line);
+        });
+        flush();
+        cy = ly;
       }
 
       // Contacts

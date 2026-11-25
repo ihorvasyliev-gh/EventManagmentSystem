@@ -68,7 +68,8 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
       updatedAt: null as string | null,
       updatedBy: null as string | null
     },
-    recipientRequests: [] as string[]
+    recipientRequests: [] as string[],
+    customCategories: [] as Array<{ name: string; shortLabel?: string; icon: string; color: string; createdAt?: string; createdBy?: string }>
   };
 
   await page.routeWebSocket(/\/realtime\/v1\/websocket/, () => {
@@ -150,6 +151,33 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
       state.emailRecipients = { recipients, updatedAt: '2026-10-24T14:20:00Z', updatedBy: profile.full_name };
     }
     return json(route, state.emailRecipients);
+  });
+  await page.route('**/api/categories**', (route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string; icon: string; color: string };
+      const added = { ...body, createdAt: '2026-11-25T14:00:00Z', createdBy: profile.full_name };
+      state.customCategories = [...state.customCategories, added];
+      return json(route, { category: added, custom: state.customCategories, updatedAt: added.createdAt, updatedBy: profile.full_name }, 201);
+    }
+    if (method === 'PATCH') {
+      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string | null; icon?: string; color?: string };
+      state.customCategories = state.customCategories.map((c) => {
+        if (c.name !== body.name) return c;
+        const next = { ...c, ...(body.icon ? { icon: body.icon } : {}), ...(body.color ? { color: body.color } : {}) };
+        if (body.shortLabel === null) delete next.shortLabel;
+        else if (body.shortLabel) next.shortLabel = body.shortLabel;
+        return next;
+      });
+      const updated = state.customCategories.find((c) => c.name === body.name);
+      return json(route, { category: updated, custom: state.customCategories, updatedAt: '2026-11-25T14:05:00Z', updatedBy: profile.full_name });
+    }
+    if (method === 'DELETE') {
+      const name = new URL(route.request().url()).searchParams.get('name') ?? '';
+      state.customCategories = state.customCategories.filter((c) => c.name !== name);
+      return json(route, { deleted: name, custom: state.customCategories, updatedAt: '2026-11-25T14:10:00Z', updatedBy: profile.full_name });
+    }
+    return json(route, { custom: state.customCategories, updatedAt: null, updatedBy: null });
   });
   return state;
 };

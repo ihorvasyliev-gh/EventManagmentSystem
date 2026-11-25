@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { type User, UserRole } from '../types';
-import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing, Mails } from 'lucide-react';
+import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing, Mails, Tag } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { lockBodyScroll } from '../utils/scrollLock';
@@ -29,6 +29,8 @@ interface NavbarProps {
   onOpenStaff?: () => void;
   /** Admins: who the digest and reminder emails go to */
   onOpenEmailRecipients?: () => void;
+  /** Admins: manage event categories and icons */
+  onOpenCategories?: () => void;
   /** Admins: event statistics for Board reports */
   onOpenStats?: () => void;
   /** Admins: who changed which event (staff change their own events without review) */
@@ -67,6 +69,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onOpenSubmitEvent,
   onOpenStaff,
   onOpenEmailRecipients,
+  onOpenCategories,
   onOpenStats,
   onOpenChangeLog,
   changeLogCount = 0,
@@ -309,6 +312,11 @@ const Navbar: React.FC<NavbarProps> = ({
                         <Mails className="h-4 w-4 text-slate-400" /> Email recipients
                       </button>
                     )}
+                    {isAdmin && onOpenCategories && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenCategories)} className={accountItem}>
+                        <Tag className="h-4 w-4 text-slate-400" /> Categories
+                      </button>
+                    )}
                     {isAdmin && onOpenStats && (
                       <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenStats)} className={accountItem}>
                         <BarChart3 className="h-4 w-4 text-slate-400" /> Statistics
@@ -432,6 +440,13 @@ const Navbar: React.FC<NavbarProps> = ({
                     <Mails className="h-5 w-5 text-slate-400" />
                     <span className="flex-1">Email recipients</span>
                     <span className="text-xs text-slate-400">To · CC · BCC</span>
+                  </button>
+                )}
+                {isAdmin && onOpenCategories && (
+                  <button type="button" onClick={closeMenuAnd(onOpenCategories)} className={menuItem}>
+                    <Tag className="h-5 w-5 text-slate-400" />
+                    <span className="flex-1">Categories</span>
+                    <span className="text-xs text-slate-400">Names · Icons</span>
                   </button>
                 )}
                 {isAdmin && onOpenStats && (

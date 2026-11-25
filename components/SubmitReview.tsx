@@ -2,7 +2,8 @@ import React from 'react';
 import {
   ArrowLeft, CalendarDays, CheckCircle2, Clock, ImageIcon, Info, Mail, MapPin, Pencil, Repeat, Send, User, AlertCircle
 } from 'lucide-react';
-import { getCategoryDotColor } from './WeekView';
+import { getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 import ThemeToggle from './ThemeToggle';
 import OverlapList from './OverlapList';
 import type { OverlapEntry } from '../utils/duplicateDetection';
@@ -194,7 +195,7 @@ const SubmitReview: React.FC<SubmitReviewProps> = ({ summary, overlaps, formatWh
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-[0.12em] bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200">
-                  <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(summary.category)}`} /> {summary.category}
+                  <CategoryIcon category={summary.category} className={`w-3.5 h-3.5 shrink-0 ${getCategoryIconColor(summary.category)}`} /> {summary.category}
                 </span>
                 <h2 className="mt-2 text-xl sm:text-2xl font-semibold leading-tight text-slate-900 dark:text-white break-words">{summary.title}</h2>
               </div>

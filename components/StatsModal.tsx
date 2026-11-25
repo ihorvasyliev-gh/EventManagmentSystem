@@ -8,7 +8,8 @@ import { downloadBlob } from '../utils/export';
 import { useToast } from '../contexts/ToastContext';
 import { formatLocalDate } from '../utils/date';
 import { copyText } from '../utils/clipboard';
-import { getCategoryDotColor } from './WeekView';
+import { getCategoryDotColor, getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 
 interface StatsModalProps {
   isOpen: boolean;
@@ -219,7 +220,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
                       {stats.byCategory.map((c) => (
                         <BarRow
                           key={c.name}
-                          label={<span className="inline-flex items-center gap-2"><span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(c.name)}`} aria-hidden="true" />{c.name}</span>}
+                          label={<span className="inline-flex items-center gap-2"><CategoryIcon category={c.name} className={`w-3.5 h-3.5 shrink-0 ${getCategoryIconColor(c.name)}`} />{c.name}</span>}
                           value={
                             <>
                               {c.occurrences} {c.occurrences === 1 ? 'date' : 'dates'}

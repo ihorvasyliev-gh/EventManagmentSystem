@@ -13,6 +13,9 @@
  */
 import { API_SECURITY_HEADERS, edgeCache, textResponse } from '../../server/http.ts';
 import { supabaseConfig, selectAll, type SupabaseConfig, type SupabaseEnv } from '../../server/supabase.ts';
+import type { IssueBucket } from '../../server/digestIssues.ts';
+import { readCategories } from '../../server/categories.ts';
+import { mergeCategories } from '../../constants/categories.ts';
 import {
     type FeedEvent, FEED_COLUMNS, FEED_HISTORY_DAYS, FEED_FUTURE_YEARS, feedFilter, exceptionsFromRows, expandRecurring,
     buildICS, requestedCategories, categoryNames, calendarName, inCategories, occurrenceOf,
@@ -100,7 +103,7 @@ const fetchExceptionsFor = async (
 
 interface Context {
     request: Request;
-    env: SupabaseEnv;
+    env: SupabaseEnv & { BUCKET?: IssueBucket };
     waitUntil?: (promise: Promise<unknown>) => void;
 }
 
@@ -198,8 +201,11 @@ export const onRequestGet = async ({ request, env, waitUntil }: Context): Promis
             return res;
         }
 
+        const knownCategories = categories && env.BUCKET
+            ? mergeCategories((await readCategories(env.BUCKET).catch(() => ({ custom: [] }))).custom)
+            : undefined;
         const ics = buildICS(expanded, {
-            name: calendarName(categoryNames(params)),
+            name: calendarName(categoryNames(params, knownCategories)),
             description: CALENDAR_DESCRIPTION,
             showAsFree: true,
             now,

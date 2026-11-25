@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, Suspense, lazy } from 'react';
 import { MapPin, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { submitEvent, saveEventChanges, getPublishedEventsForSubmitters, type SubmissionData } from '../services/submissionService';
 import { type User as AuthUser, UserRole, type Event, type EventStatus } from '../types';
@@ -11,7 +11,6 @@ import { useEventSchedule } from '../hooks/useEventSchedule';
 import { useToday } from '../hooks/useToday';
 import { getEventLocations } from '../utils/recurrence';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
-import { EVENT_CATEGORIES, type EventCategoryName } from '../constants/categories';
 import { detectOccurrenceConflicts, formatConflictDate, getOccurrencesAroundDates } from '../utils/conflictDetection';
 import { formatOccurrenceLabel } from '../utils/digestGrouping';
 import OverlapList from '../components/OverlapList';
@@ -35,8 +34,10 @@ import {
 } from '../components/submit/draft';
 import { usePosterFile } from '../hooks/usePosterFile';
 import TurnstileWidget, { TURNSTILE_ENABLED, type TurnstileHandle } from '../components/TurnstileWidget';
+import { loadOrReload } from '../utils/staleChunk';
 
-const CATEGORIES = EVENT_CATEGORIES;
+const CategoriesModal = lazy(() => loadOrReload(() => import('../components/CategoriesModal')));
+
 const DESCRIPTION_SOFT_LIMIT = 600;
 /** The server refuses longer descriptions (server/submission.ts) */
 const DESCRIPTION_MAX = 2000;
@@ -99,10 +100,9 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   const source = editing ?? template;
   const [restoredDraft] = useState<SavedDraft | null>(() => {
     if (source) {
-      const category = CATEGORIES.find((c) => c === source.category);
       return {
         title: source.title,
-        category: category ?? '',
+        category: source.category?.trim() ?? '',
         dates: [],
         location: source.location,
         description: source.description,
@@ -119,8 +119,9 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
   // starts with none picked, so it isn't sent off under the first category by mistake
   const [category, setCategory] = useState<string>(() => {
     if (editing) return editing.category ?? '';
-    return restoredDraft && CATEGORIES.some((c) => c === restoredDraft.category) ? restoredDraft.category : '';
+    return typeof restoredDraft?.category === 'string' ? restoredDraft.category.trim() : '';
   });
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const scheduleControls = useEventSchedule(() =>
     editing ? scheduleOfEvent(editing, editingExceptions) : scheduleFromDraft(restoredDraft, defaultDate)
   );
@@ -221,8 +222,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
 
   // Autosave the draft (text fields only — files can't be stored)
   const draftToSave: SavedDraft = {
-    // (only a new event is kept as a draft, and its category is one of the list)
-    title, category: category as EventCategoryName | '', location, description,
+    title, category, location, description,
     dates: selectedDates.map((d) => d.toISOString()),
     sharedTimes,
     sameTime: sameTimeForAll, perDateTimes,
@@ -636,6 +636,7 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
                   extra={editing?.category}
                   required={!editing}
                   error={errors.category}
+                  onAddCategory={isAdmin ? () => setIsAddCategoryOpen(true) : undefined}
                 />
 
                 {setsStatus && <StatusPicker value={status} onChange={setStatus} />}
@@ -845,6 +846,20 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
         {errorSummary && <div className="-mt-1 mb-1.5 flex justify-center">{errorSummary}</div>}
         <SubmitButton isAdmin={isAdmin} draft={savesDraft} isSubmitting={isSubmitting} editing={editing ? (publishesDraft ? 'publish' : 'save') : undefined} full />
       </div>
+
+      {isAdmin && isAddCategoryOpen && (
+        <Suspense fallback={null}>
+          <CategoriesModal
+            isOpen={isAddCategoryOpen}
+            onClose={() => setIsAddCategoryOpen(false)}
+            initialMode="add"
+            onCreated={(created) => {
+              setCategory(created.name);
+              clearError('category');
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

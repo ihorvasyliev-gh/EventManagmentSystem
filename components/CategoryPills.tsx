@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EVENT_CATEGORIES, CATEGORY_SHORT_LABELS } from '../constants/categories';
-import { getCategoryDotColor } from './WeekView';
+import { shortCategoryLabel } from '../constants/categories';
+import { useCategories } from '../contexts/CategoriesContext';
+import { getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 
 interface CategoryPillsProps {
   selected?: string;
@@ -17,6 +19,7 @@ const pillClass = (active: boolean) =>
 
 /** Quick category filter: one compact row of short names (full names in the tooltip) that scrolls sideways when it doesn't fit */
 const CategoryPills: React.FC<CategoryPillsProps> = ({ selected, onSelect, className = '' }) => {
+  const { categories } = useCategories();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const [moreOnRight, setMoreOnRight] = useState(false);
@@ -36,7 +39,7 @@ const CategoryPills: React.FC<CategoryPillsProps> = ({ selected, onSelect, class
       scroller.removeEventListener('scroll', update);
       observer.disconnect();
     };
-  }, []);
+  }, [categories.length]);
 
   return (
     <div className={`min-w-0 min-h-10 sm:h-10 py-1 sm:py-0 flex items-center px-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 ${className}`}>
@@ -50,12 +53,22 @@ const CategoryPills: React.FC<CategoryPillsProps> = ({ selected, onSelect, class
           <button type="button" onClick={() => onSelect(undefined)} aria-pressed={!selected} className={pillClass(!selected)}>
             All
           </button>
-          {EVENT_CATEGORIES.map((cat) => {
-            const isSelected = selected === cat;
+          {categories.map((cat) => {
+            const isSelected = selected === cat.name;
             return (
-              <button key={cat} type="button" onClick={() => onSelect(isSelected ? undefined : cat)} aria-pressed={isSelected} title={cat} className={pillClass(isSelected)}>
-                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)} ${isSelected ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
-                {CATEGORY_SHORT_LABELS[cat]}
+              <button
+                key={cat.name}
+                type="button"
+                onClick={() => onSelect(isSelected ? undefined : cat.name)}
+                aria-pressed={isSelected}
+                title={cat.name}
+                className={pillClass(isSelected)}
+              >
+                <CategoryIcon
+                  category={cat.name}
+                  className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : getCategoryIconColor(cat.name)}`}
+                />
+                {shortCategoryLabel(cat.name)}
               </button>
             );
           })}

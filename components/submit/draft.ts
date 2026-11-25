@@ -6,7 +6,6 @@ import { useEffect } from 'react';
 import {
   type TimeRange, type TimeSlot, type SessionPlaces as SessionPlacesMap, type ScheduleState, makeSlot
 } from '../../utils/multiDateUtils.ts';
-import { type EventCategoryName } from '../../constants/categories.ts';
 import { type RepeatSetting, NO_REPEAT, isRepeatChoice } from '../../utils/repeat.ts';
 import type { EventContact } from '../../types.ts';
 
@@ -33,7 +32,7 @@ export const saveSubmitter = (name: string, email: string) => {
 export interface SavedDraft {
   title: string;
   /** '' while none is picked */
-  category: EventCategoryName | '';
+  category: string;
   dates: string[];
   /** Times used on every day (older drafts have one `startTime`/`endTime` instead) */
   sharedTimes?: TimeSlot[];

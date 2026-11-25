@@ -4,6 +4,7 @@ import { type Event } from '../../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../../utils/date';
 import { isRecurringEvent } from '../../utils/recurrence';
 import { getCategoryColor, getCategoryDotColor } from '../WeekView';
+import CategoryIcon from '../CategoryIcon';
 import { clickableProps, PendingBadge } from './shared';
 import Highlight from './Highlight';
 
@@ -110,7 +111,8 @@ export const AgendaDayGroups: React.FC<AgendaDayGroupsProps> = ({ events, today,
                           <div className={`w-1 self-stretch min-h-[2.5rem] rounded-full ${getCategoryDotColor(event.category)}`}></div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded ${colorClass}`}>
+                                {event.category && <CategoryIcon category={event.category} className="w-3 h-3 shrink-0" />}
                                 {event.category || 'Event'}
                               </span>
                               <PendingBadge event={event} />

@@ -3,13 +3,16 @@
  * for Outlook, Apple and Google, and which of them suit the device the page is opened on.
  * Pure functions, so they can be tested.
  */
-import { EVENT_CATEGORIES, categoryKey } from '../constants/categories.ts';
+import { getAllCategories, categoryKey } from '../constants/categories.ts';
 import { calendarName } from '../server/feed.ts';
 
-/** Ticked categories in the order of the category list, and only official ones (given as keys or names) */
-export const knownCategories = (names: string[]): string[] => {
+/** Ticked categories in the order of the category list, and only known ones (given as keys or names) */
+export const knownCategories = (
+  names: string[],
+  list: readonly { name: string }[] = getAllCategories()
+): string[] => {
   const wanted = new Set(names.map(categoryKey));
-  return EVENT_CATEGORIES.filter((c) => wanted.has(categoryKey(c)));
+  return list.map((c) => c.name).filter((c) => wanted.has(categoryKey(c)));
 };
 
 /** `?category=health-wellbeing,other` for some categories, or nothing for every event */

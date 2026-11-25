@@ -1,10 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { SlidersHorizontal, X, Calendar, MapPin, User, Tag, CircleDot } from 'lucide-react';
 import { type EventFilters, type EventStatus } from '../types';
-import { EVENT_CATEGORIES, CATEGORY_SHORT_LABELS } from '../constants/categories';
+import { shortCategoryLabel } from '../constants/categories';
+import { useCategories } from '../contexts/CategoriesContext';
 import { formatLocalDate } from '../utils/date';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
-import { getCategoryDotColor } from './WeekView';
+import { getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 
 /** YYYY-MM-DD (date input) → local midnight */
 const parseDateInput = (value: string): Date | undefined => {
@@ -66,6 +68,7 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   resultCount,
   showCategory = false
 }) => {
+  const { categories } = useCategories();
   const [isOpen, setIsOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setIsOpen(false), []);
@@ -150,22 +153,25 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
                     <Tag className="h-4 w-4" /> Category
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {EVENT_CATEGORIES.map((cat) => {
-                      const selected = filters.category === cat;
+                    {categories.map((cat) => {
+                      const selected = filters.category === cat.name;
                       return (
                         <button
-                          key={cat}
+                          key={cat.name}
                           type="button"
                           aria-pressed={selected}
-                          onClick={() => onFiltersChange({ ...filters, category: selected ? undefined : cat })}
+                          onClick={() => onFiltersChange({ ...filters, category: selected ? undefined : cat.name })}
                           className={`flex items-center gap-2 px-3 py-2.5 min-h-[44px] text-sm rounded-md border text-left transition-colors ${
                             selected
                               ? 'bg-brand-600 border-brand-600 text-white'
                               : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200'
                           }`}
                         >
-                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${getCategoryDotColor(cat)} ${selected ? 'ring-1 ring-white' : ''}`} aria-hidden="true" />
-                          <span className="truncate">{CATEGORY_SHORT_LABELS[cat]}</span>
+                          <CategoryIcon
+                            category={cat.name}
+                            className={`w-4 h-4 shrink-0 ${selected ? 'text-white' : getCategoryIconColor(cat.name)}`}
+                          />
+                          <span className="truncate">{shortCategoryLabel(cat.name)}</span>
                         </button>
                       );
                     })}

@@ -3,8 +3,9 @@ import { type Event, UserRole, type EventCategory } from '../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
 import { useMedia } from '../hooks/useMedia';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { shortCategoryLabel } from '../constants/categories';
+import { getCategoryTone, shortCategoryLabel, type CategoryTone } from '../constants/categories';
 import { PendingBadge } from './calendar/shared';
+import CategoryIcon from './CategoryIcon';
 
 export interface WeekViewProps {
   /** Today at midnight (moves on at midnight) */
@@ -52,28 +53,8 @@ const isEventOnDay = (event: Event, day: Date): boolean => {
   return target >= s && target <= e;
 };
 
-// Category colours (Tailwind cat-* scales, mirrored for the PDF in constants/categoryColors.ts)
-const CATEGORY_TONE: Record<string, string> = {
-  'Enterprise & Employment': 'enterprise',
-  'Community & Family': 'community',
-  'Education & Training': 'education',
-  'Special Visits & Celebrations': 'special',
-  'Public Information Session': 'info',
-  'Health & Wellbeing': 'health',
-  'Seminar/Conference': 'seminar',
-  Other: 'other',
-  // Older category names
-  meeting: 'enterprise',
-  workshop: 'education',
-  social: 'health',
-  training: 'community',
-  community: 'special',
-  celebration: 'special',
-  other: 'other'
-};
-
 // Full class names, so Tailwind finds them. The border colour only shows where a chip sets a border width.
-const CHIP_CLASSES: Record<string, string> = {
+const CHIP_CLASSES: Record<CategoryTone, string> = {
   enterprise: 'bg-cat-enterprise-100 text-cat-enterprise-800 border-cat-enterprise-500 dark:bg-cat-enterprise-900 dark:text-cat-enterprise-100 dark:border-cat-enterprise-400',
   community: 'bg-cat-community-100 text-cat-community-800 border-cat-community-500 dark:bg-cat-community-900 dark:text-cat-community-100 dark:border-cat-community-400',
   education: 'bg-cat-education-100 text-cat-education-800 border-cat-education-500 dark:bg-cat-education-900 dark:text-cat-education-100 dark:border-cat-education-400',
@@ -81,10 +62,12 @@ const CHIP_CLASSES: Record<string, string> = {
   info: 'bg-cat-info-100 text-cat-info-800 border-cat-info-500 dark:bg-cat-info-900 dark:text-cat-info-100 dark:border-cat-info-400',
   health: 'bg-cat-health-100 text-cat-health-800 border-cat-health-500 dark:bg-cat-health-900 dark:text-cat-health-100 dark:border-cat-health-400',
   seminar: 'bg-cat-seminar-100 text-cat-seminar-800 border-cat-seminar-500 dark:bg-cat-seminar-900 dark:text-cat-seminar-100 dark:border-cat-seminar-400',
+  indigo: 'bg-cat-indigo-100 text-cat-indigo-800 border-cat-indigo-500 dark:bg-cat-indigo-900 dark:text-cat-indigo-100 dark:border-cat-indigo-400',
+  olive: 'bg-cat-olive-100 text-cat-olive-800 border-cat-olive-500 dark:bg-cat-olive-900 dark:text-cat-olive-100 dark:border-cat-olive-400',
   other: 'bg-cat-other-100 text-cat-other-800 border-cat-other-400 dark:bg-cat-other-800 dark:text-cat-other-100 dark:border-cat-other-500'
 };
 
-const DOT_CLASSES: Record<string, string> = {
+const DOT_CLASSES: Record<CategoryTone, string> = {
   enterprise: 'bg-cat-enterprise-500',
   community: 'bg-cat-community-500',
   education: 'bg-cat-education-500',
@@ -92,11 +75,26 @@ const DOT_CLASSES: Record<string, string> = {
   info: 'bg-cat-info-500',
   health: 'bg-cat-health-500',
   seminar: 'bg-cat-seminar-500',
+  indigo: 'bg-cat-indigo-500',
+  olive: 'bg-cat-olive-500',
   other: 'bg-cat-other-400'
 };
 
+const ICON_TEXT_CLASSES: Record<CategoryTone, string> = {
+  enterprise: 'text-cat-enterprise-600 dark:text-cat-enterprise-400',
+  community: 'text-cat-community-600 dark:text-cat-community-400',
+  education: 'text-cat-education-600 dark:text-cat-education-400',
+  special: 'text-cat-special-600 dark:text-cat-special-400',
+  info: 'text-cat-info-600 dark:text-cat-info-400',
+  health: 'text-cat-health-600 dark:text-cat-health-400',
+  seminar: 'text-cat-seminar-600 dark:text-cat-seminar-400',
+  indigo: 'text-cat-indigo-600 dark:text-cat-indigo-400',
+  olive: 'text-cat-olive-600 dark:text-cat-olive-400',
+  other: 'text-cat-other-500 dark:text-cat-other-400'
+};
+
 // The left edge of an event's card, in its category's colour (the month grid's chips and the agenda's bar)
-const ACCENT_CLASSES: Record<string, string> = {
+const ACCENT_CLASSES: Record<CategoryTone, string> = {
   enterprise: 'border-l-cat-enterprise-500 dark:border-l-cat-enterprise-400',
   community: 'border-l-cat-community-500 dark:border-l-cat-community-400',
   education: 'border-l-cat-education-500 dark:border-l-cat-education-400',
@@ -104,22 +102,46 @@ const ACCENT_CLASSES: Record<string, string> = {
   info: 'border-l-cat-info-500 dark:border-l-cat-info-400',
   health: 'border-l-cat-health-500 dark:border-l-cat-health-400',
   seminar: 'border-l-cat-seminar-500 dark:border-l-cat-seminar-400',
+  indigo: 'border-l-cat-indigo-500 dark:border-l-cat-indigo-400',
+  olive: 'border-l-cat-olive-500 dark:border-l-cat-olive-400',
   other: 'border-l-cat-other-400 dark:border-l-cat-other-500'
 };
 
+export const TONE_LABELS: Record<CategoryTone, string> = {
+  enterprise: 'Blue',
+  community: 'Green',
+  education: 'Purple',
+  special: 'Amber',
+  info: 'Teal',
+  health: 'Rose',
+  seminar: 'Terracotta',
+  indigo: 'Indigo',
+  olive: 'Olive',
+  other: 'Grey'
+};
+
+export const getToneChipClass = (tone: CategoryTone): string => CHIP_CLASSES[tone] ?? CHIP_CLASSES.other;
+export const getToneDotClass = (tone: CategoryTone): string => DOT_CLASSES[tone] ?? DOT_CLASSES.other;
+export const getToneIconClass = (tone: CategoryTone): string => ICON_TEXT_CLASSES[tone] ?? ICON_TEXT_CLASSES.other;
+
 export const getCategoryColor = (category?: EventCategory): string => {
   if (!category) return 'bg-brand-50 text-brand-800 border-brand-500 dark:bg-brand-900 dark:text-brand-100 dark:border-brand-400';
-  return CHIP_CLASSES[CATEGORY_TONE[category] ?? 'other'];
+  return CHIP_CLASSES[getCategoryTone(category)];
 };
 
 export const getCategoryDotColor = (category?: EventCategory): string => {
   if (!category) return 'bg-brand-500';
-  return DOT_CLASSES[CATEGORY_TONE[category]] ?? 'bg-brand-500';
+  return DOT_CLASSES[getCategoryTone(category)];
+};
+
+export const getCategoryIconColor = (category?: EventCategory): string => {
+  if (!category) return 'text-brand-600 dark:text-brand-400';
+  return ICON_TEXT_CLASSES[getCategoryTone(category)];
 };
 
 /** A 3px left edge in the category's colour, for a card that has a border */
 export const getCategoryAccent = (category?: EventCategory): string =>
-  `border-l-[3px] ${category ? ACCENT_CLASSES[CATEGORY_TONE[category] ?? 'other'] : 'border-l-brand-500 dark:border-l-brand-400'}`;
+  `border-l-[3px] ${category ? ACCENT_CLASSES[getCategoryTone(category)] : 'border-l-brand-500 dark:border-l-brand-400'}`;
 
 const formatTimeRange = (event: Event): string => {
   const startStr = formatClock(event.date);
@@ -367,8 +389,9 @@ const WeekView: React.FC<WeekViewProps> = ({
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="flex items-center gap-1 flex-wrap min-w-0 max-w-full">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full truncate`}>
-                          {event.category || 'Event'}
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass} min-w-0 max-w-full`}>
+                          {event.category && <CategoryIcon category={event.category} className="w-3 h-3 shrink-0" />}
+                          <span className="truncate">{event.category || 'Event'}</span>
                         </span>
                         <PendingBadge event={event} />
                       </span>
@@ -481,8 +504,9 @@ const WeekView: React.FC<WeekViewProps> = ({
                         {/* Category & Time */}
                         <div className="flex items-center justify-between gap-x-1.5 gap-y-1 flex-wrap">
                           {/* Short names: the full ones were cut to "Enterprise & Em…" in these narrow columns */}
-                          <span className={`text-[11px] xl:text-xs font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full truncate`} title={event.category}>
-                            {shortCategoryLabel(event.category)}
+                          <span className={`inline-flex items-center gap-1 text-[11px] xl:text-xs font-bold px-1.5 py-0.5 rounded ${colorClass} min-w-0 max-w-full`} title={event.category}>
+                            {event.category && <CategoryIcon category={event.category} className="w-3 h-3 shrink-0" />}
+                            <span className="truncate">{shortCategoryLabel(event.category)}</span>
                           </span>
                           <span className="text-[11px] xl:text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {timeText}

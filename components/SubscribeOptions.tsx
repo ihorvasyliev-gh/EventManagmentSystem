@@ -1,7 +1,8 @@
 import React, { useEffect, useId, useState } from 'react';
 import { Apple, ArrowRight, Building2, CalendarDays, Check, ChevronDown, CircleCheck, Copy, ExternalLink, Link2, Mail, Monitor, type LucideIcon } from 'lucide-react';
-import { EVENT_CATEGORIES } from '../constants/categories';
-import { getCategoryDotColor } from './WeekView';
+import { useCategories } from '../contexts/CategoriesContext';
+import { getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 import {
   type AppId, type SubscribeLink, APPS_BY_DEVICE, deviceOf, feedNameFor, feedUrlFor, knownCategories, subscribeLinks, subscribePageUrlFor,
 } from '../utils/subscribeLinks';
@@ -118,15 +119,23 @@ interface SubscribeOptionsProps {
  * account: the feed is public and has published events only).
  */
 const SubscribeOptions: React.FC<SubscribeOptionsProps> = ({ initialCategories = [], onCategoriesChange, compact = false }) => {
-  const [categories, setCategories] = useState<string[]>(() => knownCategories(initialCategories));
+  const { categories: availableCategories } = useCategories();
+  const [categories, setCategories] = useState<string[]>(() => knownCategories(initialCategories, availableCategories));
   const [copied, copy] = useCopied();
   const [device] = useState(() => (typeof navigator === 'undefined' ? 'other' : deviceOf(navigator.userAgent, navigator.maxTouchPoints)));
   // The calendar whose link was last pressed: what to do next is shown under the list
   const [opened, setOpened] = useState<AppId | null>(null);
   const ids = useId();
 
+  // If the URL carried a custom category key that loaded asynchronously, tick it once categories arrive
+  useEffect(() => {
+    if (initialCategories.length === 0) return;
+    const resolved = knownCategories(initialCategories, availableCategories);
+    setCategories((prev) => (prev.length === 0 && resolved.length > 0 ? resolved : prev));
+  }, [initialCategories, availableCategories]);
+
   const setTicked = (next: string[]) => {
-    const ordered = knownCategories(next);
+    const ordered = knownCategories(next, availableCategories);
     setCategories(ordered);
     onCategoriesChange?.(ordered);
   };
@@ -193,20 +202,20 @@ const SubscribeOptions: React.FC<SubscribeOptionsProps> = ({ initialCategories =
             {categories.length === 0 && <Check className="h-3.5 w-3.5 -ml-0.5" aria-hidden="true" />}
             All events
           </button>
-          {EVENT_CATEGORIES.map((cat) => {
-            const checked = categories.includes(cat);
+          {availableCategories.map((cat) => {
+            const checked = categories.includes(cat.name);
             return (
-              <label key={cat} className={`${chip(checked)} cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 has-[:focus-visible]:ring-offset-1 dark:has-[:focus-visible]:ring-offset-slate-800`}>
+              <label key={cat.name} className={`${chip(checked)} cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 has-[:focus-visible]:ring-offset-1 dark:has-[:focus-visible]:ring-offset-slate-800`}>
                 <input
                   type="checkbox"
                   className="sr-only"
                   checked={checked}
-                  onChange={() => setTicked(checked ? categories.filter((c) => c !== cat) : [...categories, cat])}
+                  onChange={() => setTicked(checked ? categories.filter((c) => c !== cat.name) : [...categories, cat.name])}
                 />
                 {checked
                   ? <Check className="h-3.5 w-3.5 -ml-0.5" aria-hidden="true" />
-                  : <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(cat)}`} aria-hidden="true" />}
-                {cat}
+                  : <CategoryIcon category={cat.name} className={`h-3.5 w-3.5 shrink-0 ${getCategoryIconColor(cat.name)}`} />}
+                {cat.name}
               </label>
             );
           })}

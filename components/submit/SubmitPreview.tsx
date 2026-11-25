@@ -1,6 +1,7 @@
 import React from 'react';
 import { CalendarDays, Clock, ImageIcon, Info, MapPin, Repeat, Sparkles } from 'lucide-react';
-import { getCategoryDotColor } from '../WeekView';
+import { getCategoryIconColor } from '../WeekView';
+import CategoryIcon from '../CategoryIcon';
 import { formatOccurrenceLabel } from '../../utils/digestGrouping';
 
 interface SubmitPreviewProps {
@@ -34,7 +35,7 @@ const SubmitPreview: React.FC<SubmitPreviewProps> = ({ showGuide, title, categor
       )}
       <div className="p-5 space-y-2.5">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(category)}`} /> {category}
+          <CategoryIcon category={category} className={`w-3.5 h-3.5 shrink-0 ${getCategoryIconColor(category)}`} /> {category}
         </span>
         <p className={`text-lg font-bold leading-snug break-words ${title.trim() ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
           {title.trim() || 'Your event name'}

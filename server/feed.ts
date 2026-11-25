@@ -354,14 +354,14 @@ export function exceptionsFromRows(rows: Array<{ event_id: string; exception_dat
  * full names older addresses carry): official names in their proper spelling, others as given,
  * no repeats
  */
-export function categoryNames(params: URLSearchParams): string[] {
+export function categoryNames(params: URLSearchParams, known?: readonly { name: string }[]): string[] {
     const seen = new Set<string>();
     const names: string[] = [];
     for (const raw of params.getAll('category').flatMap((v) => v.split(','))) {
         const key = categoryKey(raw);
         if (key && !seen.has(key)) {
             seen.add(key);
-            names.push(categoryFromKey(raw) ?? raw.trim());
+            names.push(categoryFromKey(raw, known) ?? raw.trim());
         }
     }
     return names;

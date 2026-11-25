@@ -244,3 +244,59 @@ test('the event window shows the poster’s light copy and opens the full poster
   await details.getByRole('button', { name: 'Open full poster' }).click();
   await expect(page.locator(`img[src="/api/file/${KEY}"]`)).toBeVisible();
 });
+
+test('admins add a category with an icon and colour, and it appears in filters and the submission form', async ({ page }) => {
+  await mockSupabase(page, { role: 'admin' });
+  await signIn(page);
+
+  // Open Categories from the admin account menu
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: /Categories/ }).click();
+  const modal = page.getByRole('dialog', { name: 'Event categories' });
+  await expect(modal.getByText('Seminar/Conference')).toBeVisible();
+  await expectAccessible(page);
+
+  await modal.getByRole('button', { name: 'Add category', exact: true }).click();
+  const addDialog = page.getByRole('dialog', { name: 'Add category' });
+  await addDialog.getByLabel(/Category name/).fill('Youth & Sports');
+  await addDialog.getByLabel(/Short label/).fill('Youth');
+  await addDialog.getByRole('button', { name: 'Sports', exact: true }).click();
+  await addDialog.getByRole('button', { name: 'Indigo', exact: true }).click();
+  await expectAccessible(page);
+  await addDialog.getByRole('button', { name: 'Add category', exact: true }).click();
+
+  await expect(page.getByText('Category "Youth & Sports" added')).toBeVisible();
+  await page.getByRole('dialog', { name: 'Event categories' }).getByRole('button', { name: 'Done' }).click();
+
+  // Appears in the calendar category filter pills
+  await expect(page.getByRole('group', { name: 'Filter by category' }).getByRole('button', { name: 'Youth' })).toBeVisible();
+
+  // Appears in the submission form, alongside the admin-only "+ New category" shortcut
+  await page.getByRole('button', { name: 'New Event' }).click();
+  await expect(page.locator('#field-category').getByText('Youth & Sports', { exact: true })).toBeVisible();
+  await expect(page.locator('#field-category').getByText('Seminar/Conference', { exact: true })).toBeVisible();
+  await page.locator('#field-category').getByRole('button', { name: 'New category' }).click();
+
+  const quickAdd = page.getByRole('dialog', { name: 'Add category' });
+  await quickAdd.getByLabel(/Category name/).fill('Arts & Culture');
+  await quickAdd.getByRole('button', { name: 'Arts', exact: true }).click();
+  await quickAdd.getByRole('button', { name: 'Add category', exact: true }).click();
+  await expect(page.locator('#field-category').getByRole('radio', { name: 'Arts & Culture' })).toBeChecked();
+});
+
+test('staff see admin-added categories in the submission form but cannot manage or add categories', async ({ page }) => {
+  const backend = await mockSupabase(page, { role: 'staff' });
+  backend.customCategories.push({ name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo' });
+  await signIn(page);
+
+  // No Categories item in the account menu for staff
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await expect(page.getByRole('menuitem', { name: /Categories/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Custom category appears in the submission form, without any "+ New category" button
+  await page.getByRole('button', { name: 'Submit Event' }).click();
+  await expect(page.locator('#field-category').getByText('Youth & Sports', { exact: true })).toBeVisible();
+  await expect(page.locator('#field-category').getByRole('button', { name: 'New category' })).toHaveCount(0);
+});
+

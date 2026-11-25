@@ -45,6 +45,7 @@ const FortnightlyBulletinModal = lazyWithReload(() => import('./components/Fortn
 const SubmitEventPage = lazyWithReload(() => import('./pages/SubmitEventPage'));
 const StaffModal = lazyWithReload(() => import('./components/StaffModal'));
 const EmailRecipientsModal = lazyWithReload(() => import('./components/EmailRecipientsModal'));
+const CategoriesModal = lazyWithReload(() => import('./components/CategoriesModal'));
 const PasswordModal = lazyWithReload(() => import('./components/PasswordModal'));
 const StatsModal = lazyWithReload(() => import('./components/StatsModal'));
 const ChangeLogModal = lazyWithReload(() => import('./components/ChangeLogModal'));
@@ -117,6 +118,7 @@ const AuthenticatedApp: React.FC = () => {
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
   const [isStaffOpen, setIsStaffOpen] = useState(false);
   const [isRecipientsOpen, setIsRecipientsOpen] = useState(false);
+  const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isMyEventsOpen, setIsMyEventsOpen] = useState(false);
@@ -365,6 +367,7 @@ const AuthenticatedApp: React.FC = () => {
         onSendReminder={isAdmin ? sendReminder : undefined}
         onOpenStaff={() => setIsStaffOpen(true)}
         onOpenEmailRecipients={() => setIsRecipientsOpen(true)}
+        onOpenCategories={() => setIsCategoriesOpen(true)}
         onOpenStats={() => setIsStatsOpen(true)}
         onOpenChangeLog={openChangeLog}
         changeLogCount={changeLog.count}
@@ -503,6 +506,12 @@ const AuthenticatedApp: React.FC = () => {
       {isRecipientsOpen && isAdmin && (
         <Suspense fallback={<ModalFallback />}>
           <EmailRecipientsModal isOpen={isRecipientsOpen} onClose={() => setIsRecipientsOpen(false)} />
+        </Suspense>
+      )}
+
+      {isCategoriesOpen && isAdmin && (
+        <Suspense fallback={<ModalFallback />}>
+          <CategoriesModal isOpen={isCategoriesOpen} onClose={() => setIsCategoriesOpen(false)} />
         </Suspense>
       )}
 

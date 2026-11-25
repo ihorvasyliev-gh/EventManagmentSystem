@@ -5,6 +5,7 @@ import { formatDate, formatTime, isSameDay, formatClock, APP_LOCALE } from '../.
 import { PosterDownloadButton } from '../PosterLightbox';
 import EventHistory from '../EventHistory';
 import { getCategoryColor } from '../WeekView';
+import CategoryIcon from '../CategoryIcon';
 import AddToCalendarMenu from './AddToCalendarMenu';
 import { eventContacts } from '../../utils/contacts';
 import { describeRepeat } from '../../utils/repeat';
@@ -49,7 +50,8 @@ const EventDetails: React.FC<EventDetailsProps> = ({
             </span>
           )}
           {event.category && (
-            <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded uppercase tracking-[0.12em] ${getCategoryColor(event.category)}`}>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] font-bold rounded uppercase tracking-[0.12em] ${getCategoryColor(event.category)}`}>
+              <CategoryIcon category={event.category} className="w-3.5 h-3.5 shrink-0" />
               {event.category}
             </span>
           )}

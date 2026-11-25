@@ -3,6 +3,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import UpdateBanner from './components/UpdateBanner';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { CategoriesProvider } from './contexts/CategoriesContext';
 import { loadOrReload } from './utils/staleChunk';
 
 // Routes load when visited; after a deploy an old tab reloads instead of crashing
@@ -29,22 +30,24 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          {isDigestPage() ? (
-            <Suspense fallback={<PageFallback />}>
-              <DigestViewPage />
-            </Suspense>
-          ) : (
-            isSubscribePage() ? (
+          <CategoriesProvider>
+            {isDigestPage() ? (
               <Suspense fallback={<PageFallback />}>
-                <SubscribePage />
+                <DigestViewPage />
               </Suspense>
             ) : (
-              <Suspense fallback={<PageFallback />}>
-                <AuthenticatedApp />
-              </Suspense>
-            )
-          )}
-          <UpdateBanner />
+              isSubscribePage() ? (
+                <Suspense fallback={<PageFallback />}>
+                  <SubscribePage />
+                </Suspense>
+              ) : (
+                <Suspense fallback={<PageFallback />}>
+                  <AuthenticatedApp />
+                </Suspense>
+              )
+            )}
+            <UpdateBanner />
+          </CategoriesProvider>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

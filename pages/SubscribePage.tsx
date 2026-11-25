@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BellOff, CalendarCheck2, Check, Clock, Link2, MapPin, RefreshCw, Share2, ShieldCheck, type LucideIcon } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 import SubscribeOptions, { SubscribeHelp, categoryQuery, copyText, knownCategories, subscribePageUrl } from '../components/SubscribeOptions';
-import { getCategoryDotColor } from '../components/WeekView';
+import { getCategoryIconColor } from '../components/WeekView';
+import CategoryIcon from '../components/CategoryIcon';
 import { shortCategoryLabel } from '../constants/categories';
+import { useCategories } from '../contexts/CategoriesContext';
 
 interface PreviewEvent { title: string; start: string; end: string | null; location: string | null; category: string | null }
 
@@ -28,8 +30,8 @@ const timesOf = (ev: PreviewEvent): string => {
   return `${TIME.format(start)} – ${DAY.format(end)}, ${TIME.format(end)}`;
 };
 
-const categoriesInAddress = (): string[] =>
-  knownCategories(new URLSearchParams(window.location.search).getAll('category').flatMap((v) => v.split(',')));
+const rawCategoriesInAddress = (): string[] =>
+  new URLSearchParams(window.location.search).getAll('category').flatMap((v) => v.split(',')).map((s) => s.trim()).filter(Boolean);
 
 const BENEFITS: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: RefreshCw, title: 'Updates by itself', text: 'New events, changes and cancellations' },
@@ -48,12 +50,19 @@ const secondaryButton =
  * title, dates, description, venue and category.
  */
 const SubscribePage: React.FC = () => {
-  const [initial] = useState(categoriesInAddress);
-  const [categories, setCategories] = useState<string[]>(initial);
+  const { categories: availableCategories } = useCategories();
+  const [rawInitial] = useState(rawCategoriesInAddress);
+  const [categories, setCategories] = useState<string[]>(() => knownCategories(rawInitial, availableCategories));
   const [upcoming, setUpcoming] = useState<PreviewEvent[] | null | undefined>(undefined);
   const [linkCopied, setLinkCopied] = useState(false);
   // Phones and tablets (and some computers) can hand the link to Messages, Mail, WhatsApp…
   const [canShare] = useState(() => typeof navigator !== 'undefined' && typeof navigator.share === 'function');
+
+  useEffect(() => {
+    if (rawInitial.length === 0) return;
+    const resolved = knownCategories(rawInitial, availableCategories);
+    setCategories((prev) => (prev.length === 0 && resolved.length > 0 ? resolved : prev));
+  }, [rawInitial, availableCategories]);
 
   useEffect(() => {
     document.title = `${PAGE_TITLE} · Cork City Partnership`;
@@ -129,7 +138,7 @@ const SubscribePage: React.FC = () => {
         {/* A computer: the steps on the left, what the calendar holds beside them. A phone: the steps, what it holds, the help */}
         <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-x-6 lg:gap-y-5 lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1">
-            <SubscribeOptions initialCategories={initial} onCategoriesChange={onCategoriesChange} />
+            <SubscribeOptions initialCategories={rawInitial} onCategoriesChange={onCategoriesChange} />
           </div>
 
           <div className="space-y-4 sm:space-y-5 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[5.25rem]">
@@ -176,7 +185,7 @@ const SubscribePage: React.FC = () => {
                             )}
                             {ev.category && (
                               <span className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
-                                <span className={`w-2 h-2 rounded-full ${getCategoryDotColor(ev.category)}`} aria-hidden="true" />{shortCategoryLabel(ev.category)}
+                                <CategoryIcon category={ev.category} className={`h-3 w-3 shrink-0 ${getCategoryIconColor(ev.category)}`} />{shortCategoryLabel(ev.category)}
                               </span>
                             )}
                           </span>

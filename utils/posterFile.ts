@@ -1,6 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { sniffFileKind, type FileKind } from './fileKind.ts';
 import { POSTER_VARIANTS, variantSize, type PosterVariant } from './posterVariants.ts';
+import { loadOrReload } from './staleChunk.ts';
 
 /**
  * Poster uploads. Images are used as they are; a PDF flyer is turned into an image of one
@@ -162,11 +163,11 @@ const userError = (message: string, cause?: unknown): Error => {
 
 /** pdf.js is only downloaded when it is needed (a PDF flyer picked, a shared digest opened) */
 export const loadPdfJs = async () => {
-  const [pdfjs, { default: workerSrc }] = await Promise.all([
+  const [pdfjs, { default: workerSrc }] = await loadOrReload(() => Promise.all([
     // The legacy build also runs on older phone browsers (Safari < 17)
     import('pdfjs-dist/legacy/build/pdf.mjs'),
     import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
-  ]);
+  ]));
   pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
   return pdfjs;
 };

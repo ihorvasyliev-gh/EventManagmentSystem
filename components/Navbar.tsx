@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { type User, UserRole } from '../types';
 import { LogOut, PlusCircle, Download, Moon, Sun, Menu, X, Inbox, FileText, RefreshCw, Users, KeyRound, BarChart3, ChevronDown, History, CalendarCheck, BellRing, Mails } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 interface NavbarProps {
   user: User;
@@ -76,16 +78,15 @@ const Navbar: React.FC<NavbarProps> = ({
   const accountRef = useRef<HTMLDivElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
   const isAdmin = user.role === UserRole.ADMIN;
   const isBusy = loadingEvents || isRefreshing;
 
+  const closeMenu = useCallback(() => setIsMenuOpen(false), []);
+  useModalFocusTrap(isMenuOpen, closeMenu, menuPanelRef, true);
   useEffect(() => {
     if (!isMenuOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsMenuOpen(false);
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
+    return lockBodyScroll();
   }, [isMenuOpen]);
 
   // Account menu (desktop): opens with its first item focused, closes on Escape (back to its
@@ -360,8 +361,13 @@ const Navbar: React.FC<NavbarProps> = ({
             aria-hidden="true"
           />
           <div
+            ref={menuPanelRef}
             id="app-menu"
-            className={`fixed top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 sm:bottom-auto sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 bg-white dark:bg-slate-900 sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden sm:max-h-[calc(100dvh-4rem-6.75rem-env(safe-area-inset-bottom))] md:max-h-[calc(100dvh-5rem)] overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:pb-0`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            tabIndex={-1}
+            className={`outline-none fixed top-[calc(3.5rem+env(safe-area-inset-top))] bottom-0 sm:bottom-auto sm:top-16 inset-x-0 sm:inset-x-auto sm:right-4 sm:w-80 z-50 bg-white dark:bg-slate-900 sm:border sm:rounded-2xl border-slate-200 dark:border-slate-800 shadow-xl animate-slide-down lg:hidden sm:max-h-[calc(100dvh-4rem-6.75rem-env(safe-area-inset-bottom))] md:max-h-[calc(100dvh-5rem)] overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:pb-0`}
           >
             <div className="p-3">
               <div className="flex items-center gap-3 px-3 py-3 mb-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">

@@ -46,7 +46,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
         title="Choose a month"
         className="group min-w-0 min-h-[44px] sm:min-h-0 -mx-1.5 px-1.5 sm:py-0.5 flex items-center gap-1 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
-        <span className="truncate">
+        <span className="truncate" aria-live="polite" aria-atomic="true">
           {viewMode === 'week' ? title : (
             <>
               {/* The full month where it fits beside the buttons */}
@@ -55,13 +55,13 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
             </>
           )}
         </span>
-        <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <ChevronDown data-print-hide className={`h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform ${isPickerOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
     </h2>
     {isPickerOpen && titleRef.current && (
       <MonthPicker anchor={titleRef.current} currentDate={currentDate} today={today} onPick={onJumpToMonth} onClose={closePicker} />
     )}
-    <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+    <div data-print-hide className="flex items-center gap-1.5 sm:gap-3 shrink-0">
       <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
         <button
           type="button"
@@ -91,7 +91,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({ viewMode, onViewModeCha
     </div>
 
     {/* Month / Week / Agenda, styled like the site's menu: the current view in raspberry, underlined */}
-    <div className="flex w-full sm:w-auto shrink-0" role="group" aria-label="Calendar view">
+    <div data-print-hide className="flex w-full sm:w-auto shrink-0" role="group" aria-label="Calendar view">
       {VIEWS.map(([mode, label, Icon]) => (
         <button
           key={mode}

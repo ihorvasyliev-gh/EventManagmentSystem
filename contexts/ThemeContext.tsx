@@ -34,6 +34,11 @@ const getSystemTheme = (): Theme =>
 
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
+const THEME_COLOR: Record<Theme, string> = { light: '#B90B4F', dark: '#222222' };
+const syncThemeColor = (theme: Theme) => {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme]);
+};
+
 // Switches still settling: a second switch during the crossfade keeps transitions off until both end
 let switching = 0;
 
@@ -50,6 +55,7 @@ const switchColours = (next: Theme, update: () => void, animate: boolean) => {
     switching++;
     root.classList.add('theme-switching');
     root.classList.toggle('dark', next === 'dark');
+    syncThemeColor(next);
     update();
   };
   const settle = () => {
@@ -85,6 +91,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // The class on <html> follows the state (theme-init.js already set it before the first paint)
   useLayoutEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    syncThemeColor(theme);
   }, [theme]);
 
   /** Shows a theme: the colours and the React state (icons, labels) change in the same frame */

@@ -11,7 +11,8 @@
  * venue and category (never contacts, submitters, flyers or tags).
  * Reads with SUPABASE_SERVICE_ROLE_KEY (published events only): the public key can't read events.
  */
-import { supabaseConfig, selectAll, type SupabaseEnv } from '../../server/supabase.ts';
+import { API_SECURITY_HEADERS, edgeCache, textResponse } from '../../server/http.ts';
+import { supabaseConfig, selectAll, type SupabaseConfig, type SupabaseEnv } from '../../server/supabase.ts';
 import {
     type FeedEvent, FEED_COLUMNS, FEED_HISTORY_DAYS, FEED_FUTURE_YEARS, feedFilter, exceptionsFromRows, expandRecurring,
     buildICS, requestedCategories, categoryNames, calendarName, inCategories, occurrenceOf,
@@ -19,11 +20,9 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_PREVIEW = 10;
+const EXCEPTION_ID_BATCH = 100;
 
 const CALENDAR_DESCRIPTION = 'Events published on the Cork City Partnership calendar. Updates by itself; to change an event, use the CCP calendar.';
-
-const textResponse = (text: string, status: number, headers: Record<string, string> = {}): Response =>
-    new Response(text, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
 
 /** A short fingerprint of the feed, so a calendar app asking again gets "not modified" */
 async function etagOf(text: string): Promise<string> {
@@ -32,10 +31,30 @@ async function etagOf(text: string): Promise<string> {
     return `"${hex}"`;
 }
 
-const matchesEtag = (header: string | null, etag: string): boolean =>
-    !!header && header.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag || tag.trim() === '*');
+const matchesEtag = (header: string | null, etag: string | null): boolean =>
+    !!header && !!etag && header.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag.replace(/^W\//, '') || tag.trim() === '*');
 
-async function icsResponse(request: Request, ics: string, disposition: string, maxAge: number): Promise<Response> {
+const putInCache = async (
+    cache: ReturnType<typeof edgeCache>,
+    cacheKey: Request,
+    response: Response,
+    waitUntil?: (promise: Promise<unknown>) => void
+): Promise<void> => {
+    if (!cache || response.status !== 200) return;
+    const task = cache.put(cacheKey, response.clone()).catch(() => undefined);
+    if (waitUntil) waitUntil(task);
+    else await task;
+};
+
+async function icsResponse(
+    request: Request,
+    ics: string,
+    disposition: string,
+    maxAge: number,
+    cache: ReturnType<typeof edgeCache>,
+    cacheKey: Request,
+    waitUntil?: (promise: Promise<unknown>) => void
+): Promise<Response> {
     const etag = await etagOf(ics);
     const headers: Record<string, string> = {
         'Content-Type': 'text/calendar; charset=utf-8',
@@ -44,23 +63,74 @@ async function icsResponse(request: Request, ics: string, disposition: string, m
         'ETag': etag,
         'Access-Control-Allow-Origin': '*',
         'X-Robots-Tag': 'noindex',
+        ...API_SECURITY_HEADERS,
     };
+    const full = new Response(ics, { status: 200, headers });
+    if (request.method === 'GET') {
+        await putInCache(cache, cacheKey, full, waitUntil);
+    }
     if (matchesEtag(request.headers.get('If-None-Match'), etag)) {
         return new Response(null, { status: 304, headers });
     }
-    return new Response(request.method === 'HEAD' ? null : ics, { status: 200, headers });
+    return request.method === 'HEAD' ? new Response(null, { status: 200, headers }) : full;
 }
 
 const slugOf = (title: string): string =>
     title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ccp-event';
 
-interface Context { request: Request; env: SupabaseEnv }
+const fetchExceptionsFor = async (
+    cfg: SupabaseConfig,
+    recurringIds: string[]
+): Promise<Array<{ event_id: string; exception_date: string }>> => {
+    if (recurringIds.length === 0) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < recurringIds.length; i += EXCEPTION_ID_BATCH) {
+        chunks.push(recurringIds.slice(i, i + EXCEPTION_ID_BATCH));
+    }
+    const pages = await Promise.all(
+        chunks.map((chunk) =>
+            selectAll<{ event_id: string; exception_date: string }>(
+                cfg,
+                `recurrence_exceptions?select=event_id,exception_date&event_id=in.(${chunk.join(',')})&order=id.asc`
+            ).catch(() => []) // best-effort: without them the feed still lists the full series
+        )
+    );
+    return pages.flat();
+};
+
+interface Context {
+    request: Request;
+    env: SupabaseEnv;
+    waitUntil?: (promise: Promise<unknown>) => void;
+}
 
 // Typed by hand (not PagesFunction) so the app's type check and tests can import it
-export const onRequestGet = async ({ request, env }: Context): Promise<Response> => {
+export const onRequestGet = async ({ request, env, waitUntil }: Context): Promise<Response> => {
     const cfg = supabaseConfig(env);
-    if (!cfg) {
-        return textResponse('Server misconfiguration: missing Supabase credentials (SUPABASE_URL and SUPABASE_ANON_KEY).', 500);
+    if (!cfg?.serviceKey) {
+        // Temporary 503 with Retry-After and no-store so subscriber apps keep their cached events
+        return textResponse(
+            'The CCP calendar is briefly unavailable. Please try again in a few minutes.',
+            503,
+            { 'Retry-After': '300' }
+        );
+    }
+
+    const cache = edgeCache();
+    const cacheKey = new Request(request.url, { method: 'GET' });
+    if (cache) {
+        const cached = await cache.match(cacheKey).catch(() => undefined);
+        if (cached) {
+            if (matchesEtag(request.headers.get('If-None-Match'), cached.headers.get('ETag'))) {
+                void cached.body?.cancel().catch(() => {});
+                return new Response(null, { status: 304, headers: cached.headers });
+            }
+            if (request.method === 'HEAD') {
+                void cached.body?.cancel().catch(() => {});
+                return new Response(null, { status: cached.status, headers: cached.headers });
+            }
+            return cached;
+        }
     }
 
     try {
@@ -78,7 +148,15 @@ export const onRequestGet = async ({ request, env }: Context): Promise<Response>
             }
             const at = params.get('date');
             const invite = occurrenceOf(ev, at ? new Date(at) : null);
-            return icsResponse(request, buildICS([invite]), `attachment; filename="${slugOf(ev.title || 'event')}.ics"`, 3600);
+            return icsResponse(
+                request,
+                buildICS([invite]),
+                `attachment; filename="${slugOf(ev.title || 'event')}.ics"`,
+                3600,
+                cache,
+                cacheKey,
+                waitUntil
+            );
         }
 
         // The subscription feed
@@ -87,12 +165,14 @@ export const onRequestGet = async ({ request, env }: Context): Promise<Response>
         const until = new Date(now.getFullYear() + FEED_FUTURE_YEARS, now.getMonth(), now.getDate());
         const categories = requestedCategories(params);
 
-        const [events, exceptionRows] = await Promise.all([
-            selectAll<FeedEvent>(cfg, `events?select=${FEED_COLUMNS}&${feedFilter(from)}&order=date.asc,id.asc`),
-            selectAll<{ event_id: string; exception_date: string }>(cfg, 'recurrence_exceptions?select=event_id,exception_date&order=id.asc')
-                .catch(() => []), // best-effort: without them the feed still lists the full series
-        ]);
-        const expanded = expandRecurring(events.filter((ev) => inCategories(ev, categories)), from, until, exceptionsFromRows(exceptionRows))
+        const events = await selectAll<FeedEvent>(cfg, `events?select=${FEED_COLUMNS}&${feedFilter(from)}&order=date.asc,id.asc`);
+        const matchingEvents = events.filter((ev) => inCategories(ev, categories));
+        const recurringIds = matchingEvents
+            .filter((ev) => ev.recurrence_type && ev.recurrence_type !== 'none')
+            .map((ev) => ev.id);
+        const exceptionRows = await fetchExceptionsFor(cfg, recurringIds);
+
+        const expanded = expandRecurring(matchingEvents, from, until, exceptionsFromRows(exceptionRows))
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
 
         // The next few, for the subscribe page to show what the calendar holds
@@ -103,10 +183,19 @@ export const onRequestGet = async ({ request, env }: Context): Promise<Response>
                 .filter((ev) => new Date(ev.end_date || ev.date).getTime() >= now.getTime())
                 .slice(0, count)
                 .map((ev) => ({ title: ev.title, start: ev.date, end: ev.end_date ?? null, location: ev.location ?? null, category: ev.category ?? null }));
-            return new Response(JSON.stringify({ events: upcoming }), {
+            const res = new Response(request.method === 'HEAD' ? null : JSON.stringify({ events: upcoming }), {
                 status: 200,
-                headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Robots-Tag': 'noindex' },
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Cache-Control': 'public, max-age=300',
+                    'X-Robots-Tag': 'noindex',
+                    ...API_SECURITY_HEADERS,
+                },
             });
+            if (request.method === 'GET') {
+                await putInCache(cache, cacheKey, res, waitUntil);
+            }
+            return res;
         }
 
         const ics = buildICS(expanded, {
@@ -116,7 +205,7 @@ export const onRequestGet = async ({ request, env }: Context): Promise<Response>
             now,
         });
         // Short browser/proxy cache: a new subscriber sees changes within minutes
-        return icsResponse(request, ics, 'inline; filename="ccp-events.ics"', 900);
+        return icsResponse(request, ics, 'inline; filename="ccp-events.ics"', 900, cache, cacheKey, waitUntil);
     } catch (err) {
         console.error('Calendar feed error:', err);
         // Temporary: calendar apps keep the events they have and try again later

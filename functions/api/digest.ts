@@ -20,7 +20,7 @@
  */
 import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, type SupabaseEnv } from '../../server/supabase.ts';
-import { contentMatchesType } from '../../server/files.ts';
+import { contentMatchesType, deleteKeys, normalizeFileName } from '../../server/files.ts';
 import { parseIssue, recordIssue, isDigestLayout, digestListKey } from '../../server/digestIssues.ts';
 import { type DigestBucket, DIGEST_PREFIX, listDigestObjects } from '../../server/digestVersions.ts';
 import { parseDigestList } from '../../utils/digestList.ts';
@@ -51,7 +51,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const deleteOldDigests = async (bucket: DigestBucket, now = new Date()): Promise<string[]> => {
   const cutoff = now.getTime() - DIGEST_KEEP_DAYS * DAY_MS;
   const old = (await listDigestObjects(bucket)).filter((o) => new Date(o.uploaded).getTime() < cutoff).map((o) => o.key);
-  for (const key of old) await bucket.delete(key);
+  await deleteKeys(bucket, old);
   return old;
 };
 
@@ -91,7 +91,8 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   }
   if (file.size > DIGEST_MAX_BYTES) return fail('The digest PDF is too large to share as a link.', 413);
 
-  const name = (file.name || 'events-digest.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');
+  const rawName = normalizeFileName(file.name, 'events-digest.pdf', 120);
+  const name = rawName.toLowerCase().endsWith('.pdf') ? rawName : `${rawName.slice(0, 116)}.pdf`;
   const uploadId = form.get('uploadId');
   const id = typeof uploadId === 'string' && UUID_RE.test(uploadId) ? uploadId : crypto.randomUUID();
   const key = `${DIGEST_PREFIX}${id}-${name}`;

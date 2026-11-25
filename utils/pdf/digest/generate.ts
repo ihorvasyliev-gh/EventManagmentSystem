@@ -9,7 +9,8 @@ import { paginate, pickLayout } from '../../pdfLayout.ts';
 import { type Event } from '../../../types';
 import { formatLocalDate } from '../../date';
 import { toDate, startOfLocalDay } from '../../digestText.ts';
-import { loadImageCached } from '../images';
+import { loadImageCached, mapWithConcurrency } from '../images';
+import { loadOrReload } from '../../staleChunk';
 import { posterVariantUrl } from '../../posterVariants.ts';
 import { loadFontData } from '../fonts';
 import { registerLato, createPdfKit } from '../kit';
@@ -43,7 +44,7 @@ export const generateEventsDigestPDF = async (
   events: Event[],
   options: BulletinOptions
 ): Promise<Blob | void> => {
-  const { jsPDF: JsPDF } = await import('jspdf');
+  const { jsPDF: JsPDF } = await loadOrReload(() => import('jspdf'));
   const doc: jsPDF = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   const screenOnly = createScreenOnlyLayer(doc);
   const geo = pageGeometry(doc);
@@ -65,13 +66,13 @@ export const generateEventsDigestPDF = async (
       // tall) need 600 px to stay sharp, QR codes included. JPEG keeps a PNG flyer from adding a
       // few hundred KB to the file
       const maxSide = printFlyers ? 1000 : 600;
-      await Promise.all(groups.map(async ({ event: ev }) => {
+      await mapWithConcurrency(groups, 5, async ({ event: ev }) => {
         const url = ev.posterUrl || ev.attachments?.find((a) => a.type === 'image')?.url;
         if (!url) return;
         // A poster's copy for the screen (1600 px) is big enough, and a fraction of the download
         const flyer = await loadImageCached(ev.posterUrl ? posterVariantUrl(ev.posterUrl, 'screen') : url, maxSide, true);
         if (flyer) map.set(ev.id, { ...flyer, alias: `flyer-${url}` });
-      }));
+      });
       return map;
     })()
   ]);

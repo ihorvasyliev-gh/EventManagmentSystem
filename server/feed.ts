@@ -33,6 +33,7 @@ export interface FeedEvent {
 // 10:00 after the clocks change, and every instance keeps the original duration.
 
 const FEED_TIMEZONE = 'Europe/Dublin';
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_INSTANCES_PER_EVENT = 1000;
 
 interface WallTime { y: number; m: number; d: number; h: number; mi: number; s: number }
@@ -89,6 +90,33 @@ function nthOccurrence(base: WallTime, type: string, steps: number): Date {
     }
 }
 
+/** Rough number of whole periods between the series start and `target`, never overshooting. */
+function periodsBefore(baseStart: Date, base: WallTime, target: Date, type: string): number {
+    if (target <= baseStart) return 0;
+    switch (type) {
+        case 'daily':
+            return Math.max(0, Math.floor((target.getTime() - baseStart.getTime()) / DAY_MS) - 1);
+        case 'weekly':
+            return Math.max(0, Math.floor((target.getTime() - baseStart.getTime()) / (7 * DAY_MS)) - 1);
+        case 'monthly': {
+            const t = toWall(target);
+            return Math.max(0, (t.y - base.y) * 12 + (t.m - base.m) - 1);
+        }
+        case 'yearly': {
+            const t = toWall(target);
+            return Math.max(0, t.y - base.y - 1);
+        }
+        default:
+            return 0;
+    }
+}
+
+/** Instance overlaps [rangeStart, rangeEnd] (multi-day events that started earlier still count). */
+function overlapsRange(start: Date, end: Date | null, rangeStart: Date, rangeEnd: Date): boolean {
+    const effectiveEnd = end && end > start ? end : start;
+    return start <= rangeEnd && effectiveEnd >= rangeStart;
+}
+
 export function expandRecurring(
     events: FeedEvent[],
     rangeStart: Date,
@@ -105,11 +133,11 @@ export function expandRecurring(
         const type = ev.recurrence_type;
 
         const pushInstance = (start: Date, ownEnd?: Date | null, location: string | null = ev.location) => {
-            if (start < rangeStart || start > rangeEnd) return;
-            if (exceptions.get(ev.id)?.has(wallDayKey(start))) return;
             const end = ownEnd !== undefined
                 ? ownEnd
                 : durationMs !== null ? new Date(start.getTime() + durationMs) : null;
+            if (!overlapsRange(start, end, rangeStart, rangeEnd)) return;
+            if (exceptions.get(ev.id)?.has(wallDayKey(start))) return;
             result.push({
                 ...ev,
                 id: `${ev.id}_${start.getTime()}`,
@@ -120,7 +148,7 @@ export function expandRecurring(
         };
 
         if (!type || type === 'none') {
-            if (baseStart >= rangeStart && baseStart <= rangeEnd) result.push(ev);
+            if (overlapsRange(baseStart, baseEnd, rangeStart, rangeEnd)) result.push(ev);
             continue;
         }
 
@@ -152,7 +180,7 @@ export function expandRecurring(
             continue;
         }
 
-        const interval = ev.recurrence_interval && ev.recurrence_interval > 0 ? ev.recurrence_interval : 1;
+        const interval = ev.recurrence_interval && ev.recurrence_interval > 0 ? Math.floor(ev.recurrence_interval) : 1;
         const maxOccurrences = ev.recurrence_occurrences || Infinity;
         let endLimit = rangeEnd;
         if (ev.recurrence_end_date) {
@@ -161,9 +189,15 @@ export function expandRecurring(
             if (inclusiveEnd < endLimit) endLimit = inclusiveEnd;
         }
 
+        // Jump close to the range start (occurrence index stays exact, so `occurrences` still works).
+        // Look back one extra duration so multi-day instances that started earlier are included.
+        const lookBackStart = new Date(rangeStart.getTime() - Math.max(0, durationMs ?? 0));
+        let k = Math.floor(periodsBefore(baseStart, base, lookBackStart, type) / interval);
+        const kLimit = k + MAX_INSTANCES_PER_EVENT;
+
         // (recurrence_days_of_week is not used: the app has no way to set it and ignores it,
         // and the feed must list exactly what the calendar shows)
-        for (let k = 0; k < MAX_INSTANCES_PER_EVENT && k < maxOccurrences; k++) {
+        for (; k < kLimit && k < maxOccurrences; k++) {
             const start = nthOccurrence(base, type, k * interval);
             if (start > endLimit) break;
             pushInstance(start);

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 interface EventModalFooterProps {
@@ -12,7 +12,7 @@ interface EventModalFooterProps {
 }
 
 const secondaryButton = 'cta inline-flex justify-center items-center rounded px-5 py-3 sm:py-2.5 min-h-[48px] sm:min-h-0 bg-white dark:bg-transparent text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 border border-slate-300 dark:border-slate-600 transition-all w-full sm:w-auto';
-const menuItem = 'w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounded-lg text-sm font-medium text-left transition-colors';
+const menuItem = 'w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounded-lg text-sm font-medium text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500';
 
 /**
  * Under the event details: Delete and Duplicate (admins), Close, and Edit. On phones Delete and
@@ -20,15 +20,51 @@ const menuItem = 'w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounde
  */
 const EventModalFooter: React.FC<EventModalFooterProps> = ({ onClose, onDelete, onDuplicate, onEdit }) => {
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuId = useId();
   const moreRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!moreOpen) return;
+    moreMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
     const close = (e: MouseEvent) => {
       if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMoreOpen(false);
+      moreButtonRef.current?.focus();
+    };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', handleKey, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', handleKey, true);
+    };
   }, [moreOpen]);
+
+  const handleMoreMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab') {
+      setMoreOpen(false);
+      return;
+    }
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (current + 1) % items.length
+      : e.key === 'ArrowUp' ? (current - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? items.length - 1
+      : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+
   const hasMore = !!onDelete || !!onDuplicate;
 
   return (
@@ -38,17 +74,32 @@ const EventModalFooter: React.FC<EventModalFooterProps> = ({ onClose, onDelete, 
           {hasMore && (
             <div ref={moreRef} className="relative sm:hidden">
               <button
+                ref={moreButtonRef}
                 type="button"
                 onClick={() => setMoreOpen((open) => !open)}
+                onKeyDown={(e) => {
+                  if (!moreOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    e.preventDefault();
+                    setMoreOpen(true);
+                  }
+                }}
                 aria-haspopup="menu"
                 aria-expanded={moreOpen}
+                aria-controls={moreMenuId}
                 className="cta inline-flex justify-center items-center gap-1.5 rounded px-3 py-3 min-h-[48px] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 bg-white dark:bg-transparent transition-all"
               >
                 <MoreHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
                 More
               </button>
               {moreOpen && (
-                <div role="menu" className="absolute bottom-full left-0 mb-2 w-56 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl animate-scale-in origin-bottom-left">
+                <div
+                  ref={moreMenuRef}
+                  id={moreMenuId}
+                  role="menu"
+                  aria-label="More event actions"
+                  onKeyDown={handleMoreMenuKeyDown}
+                  className="absolute bottom-full left-0 mb-2 w-56 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl animate-scale-in origin-bottom-left"
+                >
                   {onDuplicate && (
                     <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onDuplicate(); }} className={`${menuItem} text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800`}>
                       <Copy className="h-4 w-4 shrink-0" aria-hidden="true" /> Duplicate

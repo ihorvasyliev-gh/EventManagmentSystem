@@ -59,7 +59,7 @@ export const DayEventCard: React.FC<DayEventCardProps> = ({ event, onOpen, class
     : '';
 
   return (
-    <div {...clickableProps(onOpen)} className={`${className} ${getCategoryAccent(event.category)}`}>
+    <div {...clickableProps(onOpen)} className={`${className} ${getCategoryAccent(event.category)} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500`}>
       <div className="flex items-center justify-between gap-1 flex-wrap">
         <span className="flex items-center gap-1 flex-wrap">
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${colorClass}`}>

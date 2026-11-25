@@ -10,10 +10,23 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
 
-# HTML - no cache, always revalidate
+# HTML and SPA entry routes - no cache, always revalidate
+# (/*.html does not match extensionless SPA paths on Cloudflare Pages)
 /*.html
   Cache-Control: no-cache, no-store, must-revalidate
   Content-Type: text/html; charset=utf-8
+
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/submit
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/subscribe
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/digest/*
+  Cache-Control: no-cache, no-store, must-revalidate
 
 # Built files: hashed names, so they never change. No Content-Type here: Cloudflare sets the
 # right one, and a file missing after a deploy then comes back as the page (text/html) instead

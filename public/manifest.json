@@ -6,19 +6,58 @@
     "display": "standalone",
     "background_color": "#F3F3F3",
     "theme_color": "#B90B4F",
-    "orientation": "portrait-primary",
     "icons": [
         {
             "src": "/icon-192.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
+        },
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
         },
         {
             "src": "/icon-512.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Submit an event",
+            "short_name": "Submit",
+            "description": "Send in a community event for the calendar",
+            "url": "/submit",
+            "icons": [
+                {
+                    "src": "/icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }
+            ]
+        },
+        {
+            "name": "Subscribe to calendar",
+            "short_name": "Subscribe",
+            "description": "Add CCP events to Outlook, Google or Apple Calendar",
+            "url": "/subscribe",
+            "icons": [
+                {
+                    "src": "/icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }
+            ]
         }
     ]
 }

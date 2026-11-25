@@ -74,7 +74,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # VITE_SUPABASE_REALTIME=false
 ```
 
-Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `019_restore_deleted_events.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
+Set up the database: in the Supabase SQL Editor run **`supabase/setup.sql`** (the whole schema). An existing database instead runs the files in [`supabase/migrations/`](supabase/migrations) it hasn't run yet, in order; the latest is `020_audit_security_fixes.sql`. Details: [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md).
 
 Start the dev server:
 
@@ -146,9 +146,8 @@ Every page gets security headers from `public/_headers`: a Content-Security-Poli
 | `/api/edit-event` | `POST` | admins, staff (own events) | Saves changes to an event (and a new flyer) in one request, checked like `/api/submit`; only admins change the status. Refuses if someone saved the event meanwhile, and logs what changed |
 | `/api/published-events` | `GET` | anyone | Published events without anyone's details, for the form's same-time warning |
 | `/api/calendar` | `GET`, `HEAD` | anyone | Live ICS feed (past year, recurrences expanded, Europe/Dublin; `?category=health-wellbeing,other` to filter, by key or full name, and the calendar is named after them). Events show as *free*; each carries when it was last changed, so the text is stable and `If-None-Match` gets *304*. `?preview=N` gives the next N as JSON for `/subscribe`. `?event_id=…&date=…` gives one invite |
-| `/api/file/:key` | `GET` | anyone | Serves a poster, attachment or shared digest from R2 |
+| `/api/file/:key` | `GET`, `HEAD` | anyone | Serves a poster, attachment or shared digest from R2 (supports `If-None-Match` and `HEAD` checks) |
 | `/api/file/:key` | `DELETE` | admins | Removes a file no event uses any more |
-| `/api/upload` | `PUT` | admins | Uploads a poster or attachment to R2 |
 | `/api/digest` | `POST` | admins | Uploads the digest PDF under `digests/`, with its events as a list for the digest's page, and returns its link (kept six months; older digests are deleted); records which events it carried and which day's digest it is (`update=1`: an update of that day's) |
 | `/api/digest-issues?before=YYYY-MM-DD` | `GET` | signed in | The last digest shared before that day (its day and event ids), for the *New* marks, and the latest digest shared, for updating it |
 | `/api/digest-versions?key=digests/…` | `GET` | anyone with a digest link | What that link shows (its week's newest PDF, and when it was updated) and each week's digest, for *Previous digests* |

@@ -4,7 +4,7 @@ import ModalShell from './ModalShell';
 import Tabs from './Tabs';
 import { ChangeList, historyIcon } from './EventHistory';
 import { type Event } from '../types';
-import { type ChangeLogEntry, type ChangeLogView, CHANGE_LOG_PAGE, getChangeLog } from '../services/historyService';
+import { type ChangeLogCursor, type ChangeLogEntry, type ChangeLogView, CHANGE_LOG_PAGE, getChangeLog } from '../services/historyService';
 import type { DeletedEvent } from '../services/eventService';
 import { listStaff, type StaffAccount } from '../services/staffService';
 import { APP_LOCALE } from '../utils/date';
@@ -63,7 +63,7 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async (which: ChangeLogView, filters: { search: string; userId: string }, before?: Date) => {
+  const load = useCallback(async (which: ChangeLogView, filters: { search: string; userId: string }, before?: ChangeLogCursor) => {
     setLoading(true);
     setError(null);
     try {
@@ -200,7 +200,7 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
                       <button
                         type="button"
                         onClick={() => openEvent(entry.eventId)}
-                        className="font-semibold text-brand-700 dark:text-brand-300 underline underline-offset-2 hover:no-underline text-left"
+                        className="inline min-w-0 min-h-0 font-semibold text-brand-700 dark:text-brand-300 underline underline-offset-2 hover:no-underline text-left"
                       >
                         {entry.eventTitle}
                       </button>
@@ -248,7 +248,10 @@ const ChangeLogModal: React.FC<ChangeLogModalProps> = ({ isOpen, onClose, events
         <div className="pt-4 text-center">
           <button
             type="button"
-            onClick={() => void load(view, { search: query, userId: person }, entries[entries.length - 1].timestamp)}
+            onClick={() => {
+              const last = entries[entries.length - 1];
+              void load(view, { search: query, userId: person }, { timestamp: last.rawTimestamp, id: last.id });
+            }}
             className="cta px-4 py-2 rounded border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60"
           >
             Show older changes

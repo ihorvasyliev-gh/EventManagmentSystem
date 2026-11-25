@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Ban, Check, Pencil, CalendarDays, Clock, MapPin, Mail, CheckCheck, Inbox, Copy, Repeat, X, RefreshCw } from 'lucide-react';
 import { type Event } from '../types';
 import ModalShell from './ModalShell';
@@ -133,21 +133,33 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
     }
   };
 
-  const published = events.filter((e) => e.status !== 'draft');
+  const { schedulesById, overlapsById, duplicateCount } = useMemo(() => {
+    const published = events.filter((e) => e.status !== 'draft');
+    const schedules = new Map<string, ReturnType<typeof readScheduleFromEvent>>();
+    const overlaps = new Map<string, OverlapEntry[]>();
+    let duplicates = 0;
 
-  /** Events at the same time as a submission, likely duplicates first */
-  const overlapsOf = (event: Event): OverlapEntry[] => {
-    const schedule = readScheduleFromEvent(event, null);
-    const perDate = schedule.sameTime ? null : schedule.perDate;
-    const conflict = detectOccurrenceConflicts(
-      buildOccurrences(schedule.dates, schedule.shared, perDate),
-      getOccurrencesAroundDates(published, schedule.dates)
-    );
-    return groupOverlaps(conflict.conflicts, { id: event.id, title: event.title, location: event.location });
-  };
-  const overlapsById = new Map(submissions.map((s) => [s.id, overlapsOf(s)]));
+    for (const submission of submissions) {
+      const schedule = readScheduleFromEvent(submission, null);
+      schedules.set(submission.id, schedule);
+      const perDate = schedule.sameTime ? null : schedule.perDate;
+      const conflict = detectOccurrenceConflicts(
+        buildOccurrences(schedule.dates, schedule.shared, perDate),
+        getOccurrencesAroundDates(published, schedule.dates)
+      );
+      const grouped = groupOverlaps(conflict.conflicts, {
+        id: submission.id,
+        title: submission.title,
+        location: submission.location
+      });
+      overlaps.set(submission.id, grouped);
+      if (grouped.some((o) => o.duplicate === 'title')) duplicates++;
+    }
+
+    return { schedulesById: schedules, overlapsById: overlaps, duplicateCount: duplicates };
+  }, [events, submissions]);
+
   const duplicateOf = (id: string) => overlapsById.get(id)?.find((o) => o.duplicate === 'title');
-  const duplicateCount = submissions.filter((s) => duplicateOf(s.id)).length;
 
   // Approving everything at once always asks first, and says so when some look like duplicates
   const footer = (
@@ -287,7 +299,7 @@ const SubmissionsModal: React.FC<SubmissionsModalProps> = ({
               const imgUrl = event.posterUrl || event.attachments?.find((a) => a.type === 'image')?.url;
               // The small copy in the list; the full poster opens large
               const thumbUrl = event.posterUrl ? posterVariantUrl(event.posterUrl, 'thumb') : imgUrl;
-              const schedule = readScheduleFromEvent(event, null);
+              const schedule = schedulesById.get(event.id) ?? readScheduleFromEvent(event, null);
               const dates = schedule.dates;
               const perDate = schedule.sameTime ? null : schedule.perDate;
               const places = schedule.samePlace ? null : schedule.places;

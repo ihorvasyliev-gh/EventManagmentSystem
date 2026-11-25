@@ -18,9 +18,20 @@ export interface RateLimit {
  */
 export const SUBMIT_LIMIT: RateLimit = { name: 'submit', max: 30, windowSeconds: 15 * 60 };
 
-const hashOf = async (text: string): Promise<string> => {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest).slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join('');
+/** Browser error reports per network */
+export const CLIENT_ERROR_LIMIT: RateLimit = { name: 'client_error', max: 20, windowSeconds: 15 * 60 };
+
+export const hashIp = async (ip: string, secret: string): Promise<string> => {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(ip));
+  return Array.from(new Uint8Array(sig).slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join('');
 };
 
 /**
@@ -30,10 +41,11 @@ const hashOf = async (text: string): Promise<string> => {
  */
 export const withinRateLimit = async (cfg: SupabaseConfig, limit: RateLimit, ip: string | null): Promise<boolean> => {
   try {
+    const secret = cfg.serviceKey || cfg.anonKey;
     const res = await serviceRest(cfg, 'rpc/hit_rate_limit', {
       method: 'POST',
       body: JSON.stringify({
-        p_bucket: `${limit.name}:${await hashOf(ip || 'unknown')}`,
+        p_bucket: `${limit.name}:${await hashIp(ip || 'unknown', secret)}`,
         p_window_seconds: limit.windowSeconds,
         p_max: limit.max
       })

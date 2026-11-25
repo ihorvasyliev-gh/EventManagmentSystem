@@ -85,9 +85,12 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   if ('error' in checked) return fail(checked.error, 400);
 
   // Saved since the form was opened (by an admin, or in another tab)
-  const base = typeof input.base_updated_at === 'string' ? new Date(input.base_updated_at).getTime() : NaN;
   const savedAt = stored.updated_at ? new Date(stored.updated_at).getTime() : NaN;
-  if (!isNaN(base) && !isNaN(savedAt) && base !== savedAt) return json({ error: CONFLICT, event: stored }, 409);
+  const base = typeof input.base_updated_at === 'string' ? new Date(input.base_updated_at).getTime() : NaN;
+  if (!isNaN(savedAt)) {
+    if (isNaN(base)) return fail('Missing or invalid event version (base_updated_at). Please reload and try again.', 400);
+    if (base !== savedAt) return json({ error: CONFLICT, event: stored }, 409);
+  }
 
   let posterUrl = input.keep_poster === true ? stored.poster_url ?? null : null;
   let newPoster: string | null = null;

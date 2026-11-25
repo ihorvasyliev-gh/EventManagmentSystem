@@ -240,7 +240,28 @@ const SubmitEventPage: React.FC<SubmitEventPageProps> = ({
     title, category, status, description, scheduleControls.snapshot, activeRepeat, submitterName, submitterEmail, fromContactRows(extraContacts)
   ]);
   const [baseline] = useState(formSnapshot);
-  const hasChanges = () => formSnapshot !== baseline || !!posterFile || (posterPreview ?? null) !== templatePosterUrl;
+  const isDirty = formSnapshot !== baseline || !!posterFile || (posterPreview ?? null) !== templatePosterUrl;
+  const hasChanges = () => isDirty;
+
+  useEffect(() => {
+    if (!editing || !isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [editing, isDirty]);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = editing
+      ? 'Edit event · Cork City Partnership'
+      : 'Submit an event · Cork City Partnership';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [editing]);
 
   useEffect(() => {
     if (submitError) submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });

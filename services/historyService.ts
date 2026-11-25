@@ -3,6 +3,12 @@ import { supabase } from '../lib/supabase';
 import { type HistoryRow, mapHistoryRow } from './eventMapper';
 import type { DeletedEvent } from './eventService';
 
+/** Composite keyset cursor for change-log pagination so ties on the same timestamp are never skipped */
+export interface ChangeLogCursor {
+  timestamp: string;
+  id: string;
+}
+
 /** A line of the admins' change log: a history entry with its event's name and who wrote it */
 export interface ChangeLogEntry extends EventHistoryEntry {
   eventTitle: string;
@@ -10,6 +16,8 @@ export interface ChangeLogEntry extends EventHistoryEntry {
   authorRole: 'admin' | 'staff' | null;
   /** A deleted event's copy, to restore it (deleted since migration 019) */
   deleted: DeletedEvent | null;
+  /** Raw Postgres timestamp string, preserving sub-millisecond precision for cursor pagination */
+  rawTimestamp: string;
 }
 
 type ChangeLogRow = HistoryRow & {
@@ -35,12 +43,14 @@ export const CHANGE_LOG_PAGE = 50;
  */
 export type ChangeLogView = 'staff' | 'deleted' | 'all';
 
+const quotePostgrestValue = (value: string) => `"${value.replace(/"/g, '\\"')}"`;
+
 /**
  * The latest history entries of every event (admins see them all, deleted events' too), newest
  * first, older than `before` when given; only events whose name has `search` in it, and only
  * what `userId` did, when given.
  */
-export const getChangeLog = async (options: { view: ChangeLogView; before?: Date; search?: string; userId?: string }): Promise<ChangeLogEntry[]> => {
+export const getChangeLog = async (options: { view: ChangeLogView; before?: Date | ChangeLogCursor; search?: string; userId?: string }): Promise<ChangeLogEntry[]> => {
   const staffEdits = options.view === 'staff';
   const search = options.search?.trim();
   const page = (columns: string) => {
@@ -48,10 +58,19 @@ export const getChangeLog = async (options: { view: ChangeLogView; before?: Date
       .from('event_history')
       .select(`${columns},users${staffEdits ? '!inner' : ''}(role)`)
       .order('timestamp', { ascending: false })
+      .order('id', { ascending: false })
       .limit(CHANGE_LOG_PAGE);
     if (staffEdits) query = query.eq('action', 'updated').eq('users.role', 'staff');
     if (options.view === 'deleted') query = query.eq('action', 'deleted');
-    if (options.before) query = query.lt('timestamp', options.before.toISOString());
+    if (options.before) {
+      if (options.before instanceof Date) {
+        query = query.lt('timestamp', options.before.toISOString());
+      } else {
+        const ts = quotePostgrestValue(options.before.timestamp);
+        const id = quotePostgrestValue(options.before.id);
+        query = query.or(`timestamp.lt.${ts},and(timestamp.eq.${ts},id.lt.${id})`);
+      }
+    }
     // (before migration 018 entries have no event name to search)
     if (search && columns !== COLUMNS_BEFORE_018) query = query.ilike('event_title', `%${search}%`);
     if (options.userId) query = query.eq('user_id', options.userId);
@@ -69,7 +88,8 @@ export const getChangeLog = async (options: { view: ChangeLogView; before?: Date
     authorRole: row.users?.role === 'admin' ? 'admin' : row.users?.role === 'staff' ? 'staff' : null,
     deleted: row.snapshot?.event
       ? { row: row.snapshot.event, attachments: row.snapshot.attachments ?? [], deletedDates: row.snapshot.deleted_dates ?? [] }
-      : null
+      : null,
+    rawTimestamp: row.timestamp
   }));
 };
 

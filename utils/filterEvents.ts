@@ -28,8 +28,16 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
   }
 
   // Status filter
-  if (filters.status) {
-    filtered = filtered.filter(event => event.status === filters.status);
+  if (filters.status === 'published') {
+    filtered = filtered.filter(event => event.status === 'published' || event.status === undefined);
+  } else if (filters.status === 'draft') {
+    if (userRole === 'admin') {
+      filtered = filtered.filter(event => event.status === 'draft');
+    } else {
+      filtered = filtered.filter(event =>
+        event.status === 'draft' && !!userId && ownsEvent(event, { id: userId, email: userEmail })
+      );
+    }
   } else {
     // By default, show only published events (unless status filter is explicitly set)
     // Admins see every draft; staff see their own submissions while they wait for review (the
@@ -53,7 +61,9 @@ export const filterEvents = (events: Event[], filters: EventFilters, userRole?: 
       const eventDate = new Date(event.date);
       const isRecurring = !!event.recurrence && event.recurrence.type !== 'none';
       if (!isRecurring) {
-        if (start && eventDate < start) return false;
+        const parsedEnd = event.endDate ? new Date(event.endDate) : null;
+        const effectiveEnd = parsedEnd && !isNaN(parsedEnd.getTime()) && parsedEnd > eventDate ? parsedEnd : eventDate;
+        if (start && effectiveEnd < start) return false;
         if (end && eventDate >= end) return false;
         return true;
       }

@@ -328,3 +328,64 @@ body {
         scroll-behavior: auto !important;
     }
 }
+
+/* --- Print Stylesheet --- */
+@media print {
+    /* Hide app chrome, navigation, mobile bottom nav, banners, filter/search controls, and modal backdrops */
+    nav,
+    footer,
+    [data-print-hide],
+    [role="status"],
+    [aria-label="Filter by category"],
+    .fixed.inset-0 {
+        display: none !important;
+    }
+
+    main > div:has(#event-search-input),
+    main > button {
+        display: none !important;
+    }
+
+    /* Force crisp white background and dark text even if dark mode is enabled */
+    html,
+    body,
+    .dark,
+    .dark body,
+    .glass-panel,
+    .dark-glass,
+    .dark-panel {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    .dark * {
+        color: #111111 !important;
+        background-color: transparent !important;
+        border-color: #d4d4d8 !important;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Unstick sticky headers so they do not overlap printed content */
+    .sticky {
+        position: static !important;
+    }
+
+    /* Avoid splitting event cards and day groups across printed pages */
+    [role="button"],
+    [data-print-card],
+    [data-print-group],
+    article,
+    section > ul > li {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+

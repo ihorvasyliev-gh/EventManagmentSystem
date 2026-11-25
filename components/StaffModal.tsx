@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Copy, Eye, EyeOff, KeyRound, Loader2, Mail, RotateCcw, User, UserPlus, Users } from 'lucide-react';
 import ModalShell from './ModalShell';
 import { createStaffAccount, listStaff, resetStaffPassword, type StaffAccount } from '../services/staffService';
+import { copyText } from '../utils/clipboard';
 
 interface StaffModalProps {
   isOpen: boolean;
@@ -27,11 +28,10 @@ const ErrorBox: React.FC<{ message: string }> = ({ message }) => (
 const TempPassword: React.FC<{ password: string }> = ({ password }) => {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(password);
+    if (await copyText(password)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       window.prompt('Copy the temporary password:', password);
     }
   };

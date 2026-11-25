@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { SlidersHorizontal, X, Calendar, MapPin, User, Tag, CircleDot } from 'lucide-react';
 import { type EventFilters, type EventStatus } from '../types';
 import { EVENT_CATEGORIES, CATEGORY_SHORT_LABELS } from '../constants/categories';
 import { formatLocalDate } from '../utils/date';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { getCategoryDotColor } from './WeekView';
 
 /** YYYY-MM-DD (date input) → local midnight */
@@ -66,15 +67,9 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   showCategory = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [isOpen]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setIsOpen(false), []);
+  useModalFocusTrap(isOpen, close, panelRef, true);
 
   // The category is counted only where it is picked here; elsewhere its pills show it
   const activeCount = [
@@ -98,7 +93,7 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
   const reset = () => onFiltersChange(showCategory ? {} : { category: filters.category });
 
   return (
-    <div className="relative">
+    <div data-print-hide className="relative">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -125,13 +120,16 @@ const EventFiltersComponent: React.FC<EventFiltersProps> = ({
         <>
           <div
             className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
-            onClick={() => setIsOpen(false)}
+            onClick={close}
             aria-hidden="true"
           />
           <div
+            ref={panelRef}
             role="dialog"
+            aria-modal="true"
             aria-label="Filters"
-            className="fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-auto sm:right-0 sm:left-auto sm:mt-2 sm:w-80 w-full bg-white dark:bg-slate-800 rounded-t-2xl sm:rounded-lg shadow-xl border-t sm:border border-slate-200 dark:border-slate-700 z-50 flex flex-col max-h-[85vh] sm:max-h-[80vh] animate-slide-up sm:animate-scale-in"
+            tabIndex={-1}
+            className="outline-none fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-auto sm:right-0 sm:left-auto sm:mt-2 sm:w-80 w-full bg-white dark:bg-slate-800 rounded-t-2xl sm:rounded-lg shadow-xl border-t sm:border border-slate-200 dark:border-slate-700 z-50 flex flex-col max-h-[85vh] sm:max-h-[80vh] animate-slide-up sm:animate-scale-in"
           >
             <div className="flex justify-between items-center px-4 pt-4 pb-2">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Filters</h3>

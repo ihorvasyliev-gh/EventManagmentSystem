@@ -7,11 +7,46 @@
  * grouped: the same error on the same day only increases its count. The database function caps
  * the table's size, so a flood of fake reports can't fill it.
  */
-import { fail, bearerToken, readJson } from '../../server/http.ts';
+import { json, fail, bearerToken } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
+import { CLIENT_ERROR_LIMIT, withinRateLimit } from '../../server/rateLimit.ts';
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 const clip = (value: unknown, max: number): string | null =>
   typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+
+/** Reads request body text enforcing an actual byte cap even when Content-Length is missing or spoofed */
+const readLimitedText = async (request: Request, maxBytes: number): Promise<string | null> => {
+  if (!request.body) {
+    const text = await request.text();
+    return new TextEncoder().encode(text).byteLength <= maxBytes ? text : null;
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+};
 
 /** Same message and first stack line = same error (numbers and ids don't make it a new one) */
 export const errorFingerprint = async (message: string, stack: string | null): Promise<string> => {
@@ -25,9 +60,27 @@ export const errorFingerprint = async (message: string, stack: string | null): P
 export const onRequestPost = async ({ request, env }: { request: Request; env: SupabaseEnv }): Promise<Response> => {
   const cfg = supabaseConfig(env);
   if (!cfg?.serviceKey) return new Response(null, { status: 204 });
-  if (Number(request.headers.get('content-length') || 0) > 16 * 1024) return fail('Too large.', 413);
 
-  const body = await readJson<{ message?: unknown; stack?: unknown; url?: unknown; release?: unknown }>(request);
+  if (!(await withinRateLimit(cfg, CLIENT_ERROR_LIMIT, request.headers.get('CF-Connecting-IP')))) {
+    return json(
+      { error: 'Too many error reports.' },
+      429,
+      { 'Retry-After': String(CLIENT_ERROR_LIMIT.windowSeconds) }
+    );
+  }
+
+  if (Number(request.headers.get('content-length') || 0) > MAX_BODY_BYTES) return fail('Too large.', 413);
+
+  const raw = await readLimitedText(request, MAX_BODY_BYTES);
+  if (raw === null) return fail('Too large.', 413);
+
+  let body: { message?: unknown; stack?: unknown; url?: unknown; release?: unknown } | null;
+  try {
+    body = JSON.parse(raw) as { message?: unknown; stack?: unknown; url?: unknown; release?: unknown };
+  } catch {
+    return fail('Invalid request.', 400);
+  }
+
   const message = clip(body?.message, 500);
   if (!message) return fail('Invalid request.', 400);
   const stack = clip(body?.stack, 4000);

@@ -24,6 +24,12 @@ export const fetchEventDetails = async (eventId: string): Promise<{ attachments:
     // (not a deleted entry's copy of the event, kept for restoring it: migration 019)
     supabase.from('event_history').select('id,event_id,user_id,user_name,action,changes,timestamp').eq('event_id', eventId).order('timestamp', { ascending: true })
   ]);
+  if (attachmentsRes.error) {
+    throw new Error(attachmentsRes.error.message || 'Failed to load event attachments');
+  }
+  if (historyRes.error) {
+    throw new Error(historyRes.error.message || 'Failed to load event history');
+  }
   return {
     attachments: ((attachmentsRes.data || []) as AttachmentRow[]).map(mapAttachmentRow),
     history: ((historyRes.data || []) as HistoryRow[]).map(mapHistoryRow)
@@ -268,8 +274,7 @@ export const dropMissingFiles = async (deleted: DeletedEvent): Promise<{ deleted
   const stored = async (url: unknown): Promise<boolean> => {
     if (typeof url !== 'string' || !url.startsWith('/api/file/')) return true;
     try {
-      const res = await fetch(url, { cache: 'no-store' });
-      void res.body?.cancel();
+      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
       return res.status !== 404;
     } catch {
       return true;
@@ -291,7 +296,7 @@ export const dropMissingFiles = async (deleted: DeletedEvent): Promise<{ deleted
  * its deleted dates. Its history keeps the deletion, and the database adds who restored it
  * (migration 019). Admins only.
  */
-export const restoreEvent = async (deleted: DeletedEvent): Promise<{ event: Event; deletedDates: Date[] }> => {
+export const restoreEvent = async (deleted: DeletedEvent): Promise<{ event: Event; deletedDates: Date[]; warnings: string[] }> => {
   const { data, error } = await supabase.from('events').insert(deleted.row).select(EVENT_COLUMNS).single<EventRow>();
   if (error || !data) {
     console.error('Restoring the event failed:', error);
@@ -303,10 +308,18 @@ export const restoreEvent = async (deleted: DeletedEvent): Promise<{ event: Even
     deleted.attachments.length ? supabase.from('event_attachments').insert(deleted.attachments) : null,
     deleted.deletedDates.length ? supabase.from('recurrence_exceptions').insert(deleted.deletedDates) : null
   ]);
-  if (attachmentsRes?.error) console.error('Restoring the attachments failed:', attachmentsRes.error);
-  if (datesRes?.error) console.error('Restoring the deleted dates failed:', datesRes.error);
+  const warnings: string[] = [];
+  if (attachmentsRes?.error) {
+    console.warn('Restoring the attachments failed:', attachmentsRes.error);
+    warnings.push('attachments');
+  }
+  if (datesRes?.error) {
+    console.warn('Restoring the deleted dates failed:', datesRes.error);
+    warnings.push('deleted dates');
+  }
   return {
     event: mapEventRow(data),
-    deletedDates: datesRes?.error ? [] : deleted.deletedDates.map((d) => new Date(String(d.exception_date)))
+    deletedDates: datesRes?.error ? [] : deleted.deletedDates.map((d) => new Date(String(d.exception_date))),
+    warnings
   };
 };

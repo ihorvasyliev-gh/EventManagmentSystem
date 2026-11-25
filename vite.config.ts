@@ -1,6 +1,20 @@
 import { readFileSync } from 'node:fs';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+
+// Optional jsPDF dependencies only used by doc.html()/addSvgAsImage() which this app never calls
+const UNUSED_JSPDF_STUB_ID = '\0stub:unused-jspdf-dep';
+const UNUSED_JSPDF_DEPS = new Set(['html2canvas', 'canvg', 'dompurify']);
+const stubUnusedJsPdfDeps = (): Plugin => ({
+  name: 'stub-unused-jspdf-deps',
+  enforce: 'pre',
+  resolveId(id) {
+    if (id === UNUSED_JSPDF_STUB_ID || UNUSED_JSPDF_DEPS.has(id)) return UNUSED_JSPDF_STUB_ID;
+  },
+  load(id) {
+    if (id === UNUSED_JSPDF_STUB_ID) return 'export default {};';
+  },
+});
 
 /**
  * The headers public/_headers gives every page on Cloudflare (the `/*` block), so
@@ -48,13 +62,22 @@ export default defineConfig(({ mode }) => {
     preview: {
       headers: siteWideHeaders(),
     },
-    plugins: [react()],
+    resolve: {
+      alias: {
+        html2canvas: UNUSED_JSPDF_STUB_ID,
+        canvg: UNUSED_JSPDF_STUB_ID,
+        dompurify: UNUSED_JSPDF_STUB_ID,
+      },
+    },
+    plugins: [react(), stubUnusedJsPdfDeps()],
     // Which build an error report came from (Cloudflare Pages sets the commit at build time)
     define: {
       __APP_RELEASE__: JSON.stringify((process.env.CF_PAGES_COMMIT_SHA || 'local').slice(0, 7)),
     },
-    // Production: remove all console.* and debugger from the bundle
-    esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
+    // Production: strip noisy logs & debugger while preserving console.warn and console.error
+    esbuild: mode === 'production'
+      ? { pure: ['console.log', 'console.debug', 'console.info'], drop: ['debugger'] }
+      : {},
     build: {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
@@ -65,7 +88,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes('exceljs')) return 'vendor-exceljs';
             if (id.includes('lucide-react')) return 'vendor-lucide';
             if (id.includes('@supabase')) return 'vendor-supabase';
-            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) return 'vendor-react';
+            if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'vendor-react';
           },
         },
       },

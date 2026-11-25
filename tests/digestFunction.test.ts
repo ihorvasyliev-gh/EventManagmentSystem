@@ -26,9 +26,11 @@ const digestBucket = (existing: Record<string, Date> = {}) => {
       const value = contents.get(key);
       return value instanceof Blob ? { text: () => value.text() } : null;
     },
-    delete: async (key: string) => {
-      deleted.push(key);
-      uploaded.delete(key);
+    delete: async (key: string | string[]) => {
+      for (const k of Array.isArray(key) ? key : [key]) {
+        deleted.push(k);
+        uploaded.delete(k);
+      }
     },
     // Two objects per page, so paging is exercised
     list: async ({ prefix, cursor }) => {

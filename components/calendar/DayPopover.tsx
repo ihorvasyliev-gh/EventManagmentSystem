@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, X } from 'lucide-react';
 import { type Event } from '../../types';
 import { APP_LOCALE } from '../../utils/date';
-import { isAnyModalOpen } from '../../hooks/useModalFocusTrap';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import { DayEventCard } from './shared';
 
 interface DayPopoverProps {
@@ -20,17 +20,8 @@ interface DayPopoverProps {
  * backdrop-filter would clip a fixed overlay inside it.
  */
 const DayPopover: React.FC<DayPopoverProps> = ({ day, events, onEventClick, onAdd, onClose }) => {
-  // Escape closes it (unless a dialog opened from it is on top)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isAnyModalOpen()) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(true, onClose, panelRef, true);
 
   return createPortal(
     <div
@@ -39,10 +30,12 @@ const DayPopover: React.FC<DayPopoverProps> = ({ day, events, onEventClick, onAd
       data-own-swipe
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={day.toLocaleDateString(APP_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' })}
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden animate-scale-in"
+        tabIndex={-1}
+        className="outline-none bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">

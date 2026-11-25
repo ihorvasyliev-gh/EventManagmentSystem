@@ -26,6 +26,24 @@ const readStoredViewMode = (isMobile: boolean): ViewMode | null => {
   }
 };
 
+const readUrlViewMode = (): ViewMode | null => {
+  if (typeof window === 'undefined') return null;
+  const value = new URLSearchParams(window.location.search).get('view');
+  if (value === 'month' || value === 'grid') return 'grid';
+  if (value === 'week' || value === 'agenda') return value;
+  return null;
+};
+
+const readUrlDate = (): Date | null => {
+  if (typeof window === 'undefined') return null;
+  const raw = new URLSearchParams(window.location.search).get('date');
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [y, m, d] = raw.split('-').map(Number);
+  const parsed = new Date(y, m - 1, d);
+  if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) return null;
+  return parsed;
+};
+
 const formatWeekRange = (start: Date, end: Date): string => {
   const startMonth = start.toLocaleDateString(APP_LOCALE, { month: 'short' });
   const endMonth = end.toLocaleDateString(APP_LOCALE, { month: 'short' });
@@ -88,12 +106,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   initialDate,
   onDateChange
 }) => {
-  const [currentDate, setCurrentDate] = useState(() => initialDate ?? new Date());
+  const [currentDate, setCurrentDate] = useState(() => initialDate ?? readUrlDate() ?? new Date());
   useEffect(() => {
     onDateChange?.(currentDate);
   }, [currentDate, onDateChange]);
   const [viewMode, setViewModeState] = useState<ViewMode>(
-    () => readStoredViewMode(window.matchMedia('(max-width: 640px)').matches)
+    () => readUrlViewMode()
+      ?? readStoredViewMode(window.matchMedia('(max-width: 640px)').matches)
       ?? (window.matchMedia('(max-width: 640px)').matches ? 'agenda' : 'grid')
   );
   const [showEarlierEvents, setShowEarlierEvents] = useState(false);
@@ -107,6 +126,26 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const isMobile = useMedia('(max-width: 640px)');
   const today = useToday();
   const canAdd = !!onAddEventForDate && userRole === UserRole.ADMIN;
+
+  // Keep non-default view and date in the URL (preserving all other query params)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const defaultView: ViewMode = isMobile ? 'agenda' : 'grid';
+    const viewParam = viewMode === 'grid' ? 'month' : viewMode;
+    if (viewMode === defaultView) url.searchParams.delete('view');
+    else url.searchParams.set('view', viewParam);
+
+    const dateKey = toDayKey(currentDate);
+    if (dateKey === toDayKey(today)) url.searchParams.delete('date');
+    else url.searchParams.set('date', dateKey);
+
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  }, [viewMode, currentDate, isMobile, today]);
 
   // Remember the chosen view separately for phone and desktop layouts
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -161,29 +200,37 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     setCurrentDate(prev => addMonths(new Date(prev.getFullYear(), prev.getMonth(), 1), -1));
   }, []);
 
+  const prevWeek = useCallback(() => {
+    setCurrentDate(prev => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() - 7);
+      return next;
+    });
+  }, []);
+
+  const nextWeek = useCallback(() => {
+    setCurrentDate(prev => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + 7);
+      return next;
+    });
+  }, []);
+
   const prevPeriod = useCallback(() => {
     if (viewMode === 'week') {
-      setCurrentDate(prev => {
-        const next = new Date(prev);
-        next.setDate(next.getDate() - 7);
-        return next;
-      });
+      prevWeek();
     } else {
       prevMonth();
     }
-  }, [viewMode, prevMonth]);
+  }, [viewMode, prevWeek, prevMonth]);
 
   const nextPeriod = useCallback(() => {
     if (viewMode === 'week') {
-      setCurrentDate(prev => {
-        const next = new Date(prev);
-        next.setDate(next.getDate() + 7);
-        return next;
-      });
+      nextWeek();
     } else {
       nextMonth();
     }
-  }, [viewMode, nextMonth]);
+  }, [viewMode, nextWeek, nextMonth]);
 
   const goToday = useCallback(() => setCurrentDate(new Date()), []);
   // From the list of months: the month's first day, or today in the current month (so Week shows this week)
@@ -257,14 +304,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Expand recurring events
   const displayEvents = useMemo(() => {
+    if (viewMode === 'agenda' || showResults) return [];
     const expanded = expandRecurringEvents(events, rangeStart, rangeEnd, recurrenceExceptions)
       .filter(ev => (!dateRange?.start || ev.date >= dateRange.start) && (!dateRange?.end || ev.date < dateRange.end))
       .filter(ev => !location || ev.location?.trim() === location);
     return expanded.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [events, rangeStart, rangeEnd, recurrenceExceptions, dateRange, location]);
+  }, [viewMode, showResults, events, rangeStart, rangeEnd, recurrenceExceptions, dateRange, location]);
 
   // Every day an event is on (multi-day events on each of their days)
   const eventsByDayKey = useMemo(() => {
+    if (viewMode !== 'grid' || showResults) return new Map<string, Event[]>();
     const map = new Map<string, Event[]>();
     for (const ev of displayEvents) {
       const s = new Date(ev.date);
@@ -283,7 +332,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
     }
     return map;
-  }, [displayEvents]);
+  }, [viewMode, showResults, displayEvents]);
 
   // Agenda: from today (or the first of a month browsed to) on, a month further at a time
   const monthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
@@ -378,6 +427,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               events={displayEvents}
               onEventClick={onEventClick}
               onAddEventForDate={onAddEventForDate}
+              onPrevWeek={prevWeek}
+              onNextWeek={nextWeek}
               userRole={userRole}
             />
           </div>

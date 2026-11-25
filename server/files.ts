@@ -5,7 +5,7 @@ import { MAX_VARIANT_BYTES, POSTER_VARIANTS, posterVariantKey, posterVariantKeys
 /** The part of an R2 bucket binding the functions use (typed here so the app's checks can import it) */
 export interface FileBucket {
   put(key: string, value: ReadableStream | ArrayBuffer | Blob, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
-  delete(key: string): Promise<void>;
+  delete(key: string | string[]): Promise<void>;
 }
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
@@ -50,9 +50,29 @@ export interface StoredFile {
   size: number;
 }
 
+const MAX_FILENAME_CHARS = 120;
+
+/**
+ * Normalizes an uploaded filename to safe ASCII characters, guarantees a non-empty fallback,
+ * and caps length to ~120 characters while preserving the file extension.
+ */
+export const normalizeFileName = (rawName: string | null | undefined, fallback = 'file', maxLen = MAX_FILENAME_CHARS): string => {
+  const base = (rawName || '').trim().split(/[\\/]/).pop() || '';
+  const cleaned = base.replace(/[^a-zA-Z0-9.-]/g, '_').replace(/^\.+/, '');
+  if (!cleaned || /^[_.-]+$/.test(cleaned)) return fallback;
+  if (cleaned.length <= maxLen) return cleaned;
+  const dot = cleaned.lastIndexOf('.');
+  const hasExt = dot > 0 && cleaned.length - dot <= 16;
+  if (!hasExt) return cleaned.slice(0, maxLen);
+  const ext = cleaned.slice(dot);
+  const stem = cleaned.slice(0, Math.max(1, maxLen - ext.length));
+  return `${stem}${ext}`;
+};
+
 /** Saves an upload under a random key; files are served through /api/file/<key> */
 export const storeFile = async (bucket: FileBucket, file: File, contentType: string): Promise<StoredFile> => {
-  const key = `${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+  const safeName = normalizeFileName(file.name);
+  const key = `${crypto.randomUUID()}-${safeName}`;
   await bucket.put(key, file.stream(), { httpMetadata: { contentType } });
   return { key, url: `${FILE_PATH}${key}`, name: file.name, type: contentType, size: file.size };
 };
@@ -114,6 +134,29 @@ export const storeFlyer = async (
 /** Most a request with a flyer and its copies may carry, besides the form's own fields */
 export const MAX_FLYER_REQUEST_BYTES = MAX_UPLOAD_BYTES + Object.keys(POSTER_VARIANTS).length * MAX_VARIANT_BYTES;
 
+const R2_DELETE_BATCH = 1000;
+const SUPABASE_IN_BATCH = 100;
+
+/**
+ * Batch-deletes keys in R2 (up to 1000 per call). Falls back to per-key deletes if a bucket
+ * implementation throws when passed an array of keys.
+ */
+export const deleteKeys = async (bucket: FileBucket, keys: string[]): Promise<void> => {
+  if (keys.length === 0) return;
+  for (let i = 0; i < keys.length; i += R2_DELETE_BATCH) {
+    const batch = keys.slice(i, i + R2_DELETE_BATCH);
+    if (batch.length === 1) {
+      await bucket.delete(batch[0]);
+    } else {
+      try {
+        await bucket.delete(batch);
+      } catch {
+        await Promise.all(batch.map((k) => bucket.delete(k)));
+      }
+    }
+  }
+};
+
 /** Removes a stored file and, for a poster, its lighter copies */
 export const deleteStoredFile = async (bucket: FileBucket, key: string): Promise<void> => {
   await Promise.all([key, ...posterVariantKeys(key)].map((k) => bucket.delete(k)));
@@ -170,14 +213,36 @@ export const isFileReferenced = async (cfg: SupabaseConfig, key: string): Promis
   return p.length > 0 || a.length > 0;
 };
 
+/** Checks which of the candidate `/api/file/<key>` URLs are still referenced by any event or attachment */
+const findReferencedUrls = async (cfg: SupabaseConfig, candidateUrls: string[]): Promise<Set<string> | null> => {
+  const referenced = new Set<string>();
+  for (let i = 0; i < candidateUrls.length; i += SUPABASE_IN_BATCH) {
+    const chunk = candidateUrls.slice(i, i + SUPABASE_IN_BATCH);
+    const inList = `in.(${chunk.map((u) => encodeURIComponent(`"${u}"`)).join(',')})`;
+    const [posters, attachments] = await Promise.all([
+      serviceRest(cfg, `events?select=poster_url&poster_url=${inList}`),
+      serviceRest(cfg, `event_attachments?select=url&url=${inList}`)
+    ]);
+    if (!posters.ok || !attachments.ok) return null; // when in doubt, keep the files
+    const [pRows, aRows] = (await Promise.all([posters.json(), attachments.json()])) as [
+      Array<{ poster_url?: string | null }>,
+      Array<{ url?: string | null }>
+    ];
+    for (const r of pRows) if (r.poster_url) referenced.add(r.poster_url);
+    for (const r of aRows) if (r.url) referenced.add(r.url);
+  }
+  return referenced;
+};
+
 /** Deletes the given files from R2, skipping any that something still uses. Returns the keys deleted. */
 export const deleteUnreferencedFiles = async (bucket: FileBucket, cfg: SupabaseConfig, urls: Array<string | null | undefined>): Promise<string[]> => {
   const keys = [...new Set(urls.map(fileKeyFromUrl).filter((k): k is string => !!k))];
-  const deleted: string[] = [];
-  for (const key of keys) {
-    if (await isFileReferenced(cfg, key)) continue;
-    await deleteStoredFile(bucket, key);
-    deleted.push(key);
-  }
-  return deleted;
+  if (keys.length === 0) return [];
+  const referenced = await findReferencedUrls(cfg, keys.map((k) => `${FILE_PATH}${k}`));
+  if (!referenced) return []; // when in doubt, keep the files
+  const unreferenced = keys.filter((k) => !referenced.has(`${FILE_PATH}${k}`));
+  if (unreferenced.length === 0) return [];
+  const allR2Keys = unreferenced.flatMap((k) => [k, ...posterVariantKeys(k)]);
+  await deleteKeys(bucket, allR2Keys);
+  return unreferenced;
 };

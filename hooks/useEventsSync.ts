@@ -43,9 +43,9 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
   const setExceptionsIfChanged = useCallback((next: Map<string, Date[]>) => {
     if (!areExceptionsEqual(exceptionsRef.current, next)) {
       setRecurrenceExceptions(next);
-      cacheExceptions(next);
+      cacheExceptions(next, userId);
     }
-  }, []);
+  }, [userId]);
 
   // Fetches events and deleted occurrences together. When nothing changed the current state is
   // kept, so a background sync doesn't re-render the whole calendar.
@@ -71,14 +71,14 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
       if (isManual) {
         onErrorRef.current('Failed to refresh events');
       } else {
-        const cached = getCachedEvents();
+        const cached = getCachedEvents(userId);
         if (!cached || cached.length === 0) onErrorRef.current('Failed to load events');
       }
     } finally {
       setLoadingEvents(false);
       setIsRefreshing(false);
     }
-  }, [setExceptionsIfChanged]);
+  }, [userId, setExceptionsIfChanged]);
 
   // One fetch at a time. A refresh asked for meanwhile runs once more afterwards: the running
   // fetch may have started before the change it is meant to pick up.
@@ -121,14 +121,14 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
       setLastSyncedAt(null);
       return;
     }
-    const cached = getCachedEvents();
+    const cached = getCachedEvents(userId);
     if (cached && cached.length > 0) {
       // Show the last known calendar at once; the fetch below brings it up to date
       restoredFromCacheRef.current = cached;
       setEvents(cached);
       setLoadingEvents(false);
       setLastSyncedAt(getEventsCacheTime());
-      const cachedExceptions = getCachedExceptions();
+      const cachedExceptions = getCachedExceptions(userId);
       if (cachedExceptions) setRecurrenceExceptions(cachedExceptions);
     } else {
       setLoadingEvents(true);
@@ -141,7 +141,7 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
   // changes is written once.
   useEffect(() => {
     if (!userId || events === restoredFromCacheRef.current) return;
-    const write = () => cacheEvents(events);
+    const write = () => cacheEvents(events, userId);
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(write, { timeout: 2000 });
       return () => window.cancelIdleCallback(id);
@@ -154,9 +154,29 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
   useEffect(() => {
     if (!userId || !REALTIME_ENABLED) return;
 
+    const FALLBACK_POLL_MS = 60_000;
     let queue: EventChange[] = [];
     // A burst of changes (e.g. "Approve all") is applied in one go
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let fallbackPoll: ReturnType<typeof setInterval> | undefined;
+    let hadRealtimeError = false;
+
+    const startFallbackPoll = () => {
+      if (fallbackPoll !== undefined) return;
+      fallbackPoll = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          void refreshEvents(false);
+        }
+      }, FALLBACK_POLL_MS);
+    };
+
+    const stopFallbackPoll = () => {
+      if (fallbackPoll !== undefined) {
+        clearInterval(fallbackPoll);
+        fallbackPoll = undefined;
+      }
+    };
+
     const flush = () => {
       const changes = queue;
       queue = [];
@@ -186,16 +206,27 @@ export function useEventsSync({ userId, onError, onNewDraft }: Options) {
           debounce = setTimeout(flush, 300);
         })
         .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {
-            console.warn('[Realtime] Subscription error; set VITE_SUPABASE_REALTIME=false to poll instead.');
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            hadRealtimeError = true;
+            startFallbackPoll();
+            console.warn(`[Realtime] Subscription ${status}; falling back to periodic polling until reconnected.`);
+          } else if (status === 'SUBSCRIBED') {
+            stopFallbackPoll();
+            if (hadRealtimeError) {
+              hadRealtimeError = false;
+              void refreshEvents(false);
+            }
           }
         });
     } catch (err) {
-      if (import.meta.env.DEV) console.warn('[Realtime] Could not subscribe to channel:', err);
+      hadRealtimeError = true;
+      startFallbackPoll();
+      console.warn('[Realtime] Could not subscribe to channel; falling back to periodic polling:', err);
     }
 
     return () => {
       clearTimeout(debounce);
+      stopFallbackPoll();
       if (channel) supabase.removeChannel(channel);
     };
   }, [userId, refreshEvents, setExceptionsIfChanged]);

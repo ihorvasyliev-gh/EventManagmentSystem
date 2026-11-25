@@ -60,6 +60,7 @@ const CATEGORY_TONE: Record<string, string> = {
   'Special Visits & Celebrations': 'special',
   'Public Information Session': 'info',
   'Health & Wellbeing': 'health',
+  'Seminar/Conference': 'seminar',
   Other: 'other',
   // Older category names
   meeting: 'enterprise',
@@ -79,6 +80,7 @@ const CHIP_CLASSES: Record<string, string> = {
   special: 'bg-cat-special-100 text-cat-special-800 border-cat-special-500 dark:bg-cat-special-900 dark:text-cat-special-100 dark:border-cat-special-400',
   info: 'bg-cat-info-100 text-cat-info-800 border-cat-info-500 dark:bg-cat-info-900 dark:text-cat-info-100 dark:border-cat-info-400',
   health: 'bg-cat-health-100 text-cat-health-800 border-cat-health-500 dark:bg-cat-health-900 dark:text-cat-health-100 dark:border-cat-health-400',
+  seminar: 'bg-cat-seminar-100 text-cat-seminar-800 border-cat-seminar-500 dark:bg-cat-seminar-900 dark:text-cat-seminar-100 dark:border-cat-seminar-400',
   other: 'bg-cat-other-100 text-cat-other-800 border-cat-other-400 dark:bg-cat-other-800 dark:text-cat-other-100 dark:border-cat-other-500'
 };
 
@@ -89,6 +91,7 @@ const DOT_CLASSES: Record<string, string> = {
   special: 'bg-cat-special-500',
   info: 'bg-cat-info-500',
   health: 'bg-cat-health-500',
+  seminar: 'bg-cat-seminar-500',
   other: 'bg-cat-other-400'
 };
 
@@ -100,6 +103,7 @@ const ACCENT_CLASSES: Record<string, string> = {
   special: 'border-l-cat-special-500 dark:border-l-cat-special-400',
   info: 'border-l-cat-info-500 dark:border-l-cat-info-400',
   health: 'border-l-cat-health-500 dark:border-l-cat-health-400',
+  seminar: 'border-l-cat-seminar-500 dark:border-l-cat-seminar-400',
   other: 'border-l-cat-other-400 dark:border-l-cat-other-500'
 };
 

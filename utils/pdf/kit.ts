@@ -196,6 +196,12 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
           return [cx + r * 1.05 * Math.cos(a), cy + r * 1.05 * Math.sin(a)] as [number, number];
         }));
         break;
+      case 'pentagon':
+        poly(Array.from({ length: 5 }, (_, k) => {
+          const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+          return [cx + r * 1.08 * Math.cos(a), cy + r * 1.08 * Math.sin(a)] as [number, number];
+        }));
+        break;
       case 'ring':
         doc.circle(cx, cy, r * 0.8, style);
         break;

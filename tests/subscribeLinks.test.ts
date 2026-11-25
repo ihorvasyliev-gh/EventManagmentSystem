@@ -8,7 +8,7 @@ const ORIGIN = 'https://cal.test';
 test('a category goes into an address as a key of letters, digits and hyphens', () => {
   assert.deepEqual(EVENT_CATEGORIES.map(categoryKey), [
     'enterprise-employment', 'community-family', 'education-training', 'special-visits-celebrations',
-    'public-information-session', 'health-wellbeing', 'other'
+    'public-information-session', 'health-wellbeing', 'seminar-conference', 'other'
   ]);
   for (const cat of EVENT_CATEGORIES) {
     assert.equal(categoryFromKey(categoryKey(cat)), cat);

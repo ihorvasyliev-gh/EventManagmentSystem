@@ -2,7 +2,7 @@
 import { type Rgb } from '../../constants/categoryColors';
 
 // Second cue besides colour for each category (see categoryMark)
-export type CategoryShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'triangleDown' | 'hexagon' | 'ring';
+export type CategoryShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'triangleDown' | 'hexagon' | 'pentagon' | 'ring';
 export const CATEGORY_SHAPE: Record<string, CategoryShape> = {
   'Enterprise & Employment': 'circle',
   'Community & Family': 'square',
@@ -10,6 +10,7 @@ export const CATEGORY_SHAPE: Record<string, CategoryShape> = {
   'Special Visits & Celebrations': 'diamond',
   'Public Information Session': 'triangleDown',
   'Health & Wellbeing': 'hexagon',
+  'Seminar/Conference': 'pentagon',
   Other: 'ring'
 };
 

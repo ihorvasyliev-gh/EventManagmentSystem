@@ -588,6 +588,7 @@ VALUES
   ('Special Visits & Celebrations'),
   ('Public Information Session'),
   ('Health & Wellbeing'),
+  ('Seminar/Conference'),
   ('Other')
 ON CONFLICT (name) DO NOTHING;
 

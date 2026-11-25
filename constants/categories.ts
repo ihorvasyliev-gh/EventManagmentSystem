@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Official Cork City Partnership Event Categories
  * Standardized across Public Submission Form, Admin Edit Modal, Calendar Filters, and PDF Bulletin.
  */
@@ -10,6 +10,7 @@ export const EVENT_CATEGORIES = [
   'Special Visits & Celebrations',
   'Public Information Session',
   'Health & Wellbeing',
+  'Seminar/Conference',
   'Other'
 ] as const;
 
@@ -23,6 +24,7 @@ export const CATEGORY_SHORT_LABELS: Record<EventCategoryName, string> = {
   'Special Visits & Celebrations': 'Special visits',
   'Public Information Session': 'Info sessions',
   'Health & Wellbeing': 'Health',
+  'Seminar/Conference': 'Seminars',
   Other: 'Other'
 };
 

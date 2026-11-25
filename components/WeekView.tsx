@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { type Event, UserRole, type EventCategory } from '../types';
 import { isSameDay, isMultiDayEvent, formatClock, APP_LOCALE } from '../utils/date';
+import { useMedia } from '../hooks/useMedia';
 import { Clock, MapPin, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { shortCategoryLabel } from '../constants/categories';
 import { PendingBadge } from './calendar/shared';
@@ -12,8 +13,13 @@ export interface WeekViewProps {
   events: Event[];
   onEventClick: (event: Event) => void;
   onAddEventForDate?: (date: Date) => void;
+  onPrevWeek?: () => void;
+  onNextWeek?: () => void;
   userRole?: UserRole;
 }
+
+// Preserves the target day index (Monday=0 or Sunday=6) across week-change remounts
+let pendingMobileDayIndex: number | null = null;
 
 export const getMondayOfWeek = (date: Date): Date => {
   const d = new Date(date);
@@ -130,10 +136,13 @@ const WeekView: React.FC<WeekViewProps> = ({
   events,
   onEventClick,
   onAddEventForDate,
+  onPrevWeek,
+  onNextWeek,
   userRole
 }) => {
   // Compute Monday to Sunday
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
+  const isLargeScreen = useMedia('(min-width: 1024px)');
 
   // Map events to each day
   const eventsByDay = useMemo(() => {
@@ -148,15 +157,33 @@ const WeekView: React.FC<WeekViewProps> = ({
     });
   }, [weekDays, events]);
 
-  // Mobile selected day tab (defaults to today if in current week, else 0)
+  // Mobile selected day tab (defaults to today if in current week, else 0; honours cross-week swipe target)
   const initialDayIndex = useMemo(() => {
     const idx = weekDays.findIndex(d => isSameDay(d, today));
     return idx !== -1 ? idx : 0;
   }, [weekDays, today]);
 
-  const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(initialDayIndex);
+  const [selectedMobileDayIndex, setSelectedMobileDayIndex] = useState<number>(() => {
+    if (pendingMobileDayIndex !== null) {
+      const target = pendingMobileDayIndex;
+      pendingMobileDayIndex = null;
+      return target;
+    }
+    return initialDayIndex;
+  });
 
+  const isInitialMountRef = useRef(true);
   useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    if (pendingMobileDayIndex !== null) {
+      const target = pendingMobileDayIndex;
+      pendingMobileDayIndex = null;
+      setSelectedMobileDayIndex(target);
+      return;
+    }
     const idx = weekDays.findIndex(d => isSameDay(d, today));
     setSelectedMobileDayIndex(idx !== -1 ? idx : 0);
   }, [currentDate, weekDays, today]);
@@ -182,10 +209,22 @@ const WeekView: React.FC<WeekViewProps> = ({
     if (!start || !end) return;
     const distance = start.x - end.x;
     if (Math.abs(distance) < Math.abs(start.y - end.y) * 1.5) return;
-    if (distance > 50 && selectedMobileDayIndex < 6) {
-      setSelectedMobileDayIndex(prev => prev + 1);
-    } else if (distance < -50 && selectedMobileDayIndex > 0) {
-      setSelectedMobileDayIndex(prev => prev - 1);
+    if (distance > 50) {
+      if (selectedMobileDayIndex < 6) {
+        setSelectedMobileDayIndex(prev => prev + 1);
+      } else if (onNextWeek) {
+        pendingMobileDayIndex = 0;
+        setSelectedMobileDayIndex(0);
+        onNextWeek();
+      }
+    } else if (distance < -50) {
+      if (selectedMobileDayIndex > 0) {
+        setSelectedMobileDayIndex(prev => prev - 1);
+      } else if (onPrevWeek) {
+        pendingMobileDayIndex = 6;
+        setSelectedMobileDayIndex(6);
+        onPrevWeek();
+      }
     }
   };
 
@@ -214,6 +253,8 @@ const WeekView: React.FC<WeekViewProps> = ({
                 key={idx}
                 type="button"
                 onClick={() => setSelectedMobileDayIndex(idx)}
+                aria-pressed={isSelected}
+                aria-current={isToday && !isLargeScreen ? 'date' : undefined}
                 className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all min-h-[48px] touch-manipulation ${
                   isSelected
                     ? 'bg-brand-600 text-white shadow-sm font-semibold'
@@ -318,7 +359,7 @@ const WeekView: React.FC<WeekViewProps> = ({
                     tabIndex={0}
                     onClick={() => onEventClick(event)}
                     onKeyDown={cardKeyDown(event)}
-                    className={`p-3 rounded-xl border border-slate-200 dark:border-slate-700 ${getCategoryAccent(event.category)} bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px] ${event.status === 'draft' ? 'border-dashed' : ''}`}
+                    className={`p-3 rounded-xl border border-slate-200 dark:border-slate-700 ${getCategoryAccent(event.category)} bg-white dark:bg-slate-800 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer space-y-2 touch-manipulation group min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${event.status === 'draft' ? 'border-dashed' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="flex items-center gap-1 flex-wrap min-w-0 max-w-full">
@@ -363,7 +404,7 @@ const WeekView: React.FC<WeekViewProps> = ({
           return (
             <div
               key={idx}
-              aria-current={isToday ? 'date' : undefined}
+              aria-current={isToday && isLargeScreen ? 'date' : undefined}
               className={`flex flex-col min-w-0 border-r border-b border-slate-100 dark:border-slate-800 transition-colors ${
                 isToday
                   ? 'bg-brand-50/60 dark:bg-brand-900/25'

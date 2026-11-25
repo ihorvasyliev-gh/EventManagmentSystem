@@ -36,8 +36,20 @@ export interface DigestIssue {
   versions?: DigestVersionRecord[];
 }
 
+export interface IssuePutOptions {
+  httpMetadata?: { contentType?: string };
+  onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
+}
+
+export interface IssueObject {
+  text(): Promise<string>;
+  etag?: string;
+  httpEtag?: string;
+}
+
 export interface IssueBucket extends FileBucket {
-  get(key: string): Promise<{ text(): Promise<string> } | null>;
+  get(key: string): Promise<IssueObject | null>;
+  put(key: string, value: ReadableStream | ArrayBuffer | Blob, options?: IssuePutOptions): Promise<unknown>;
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,43 +81,58 @@ const parseVersion = (value: unknown): DigestVersionRecord | null => {
   };
 };
 
-export const readIssues = async (bucket: IssueBucket): Promise<DigestIssue[]> => {
+const readIssuesWithEtag = async (bucket: IssueBucket): Promise<{ issues: DigestIssue[]; etag: string | null }> => {
   const object = await bucket.get(ISSUES_KEY);
-  if (!object) return [];
-  try {
-    const data: unknown = JSON.parse(await object.text());
-    if (!Array.isArray(data)) return [];
-    return data.flatMap((item): DigestIssue[] => {
-      if (!item || typeof item !== 'object') return [];
-      const issue = parseIssue((item as DigestIssue).issued, (item as DigestIssue).ids);
-      if (!issue) return [];
-      const raw = (item as DigestIssue).versions;
-      const versions = Array.isArray(raw) ? raw.map(parseVersion).filter((v): v is DigestVersionRecord => !!v) : [];
-      return [versions.length ? { ...issue, versions } : issue];
-    });
-  } catch {
-    return [];
-  }
+  if (!object) return { issues: [], etag: null };
+  const data: unknown = JSON.parse(await object.text());
+  if (!Array.isArray(data)) throw new Error('Stored digest issues file is not an array');
+  const issues = data.flatMap((item): DigestIssue[] => {
+    if (!item || typeof item !== 'object') return [];
+    const issue = parseIssue((item as DigestIssue).issued, (item as DigestIssue).ids);
+    if (!issue) return [];
+    const raw = (item as DigestIssue).versions;
+    const versions = Array.isArray(raw) ? raw.map(parseVersion).filter((v): v is DigestVersionRecord => !!v) : [];
+    return [versions.length ? { ...issue, versions } : issue];
+  });
+  return { issues, etag: object.etag ?? null };
 };
+
+/**
+ * Reads recorded digest issues. Returns `[]` only when the object does not exist yet; throws on
+ * read or JSON parse errors so writers (`recordIssue`) never wipe history by overwriting with `[]`.
+ */
+export const readIssues = async (bucket: IssueBucket): Promise<DigestIssue[]> =>
+  (await readIssuesWithEtag(bucket)).issues;
 
 /** Where a digest's list of events is kept: beside its PDF, as .json */
 export const digestListKey = (pdfKey: string): string => `${pdfKey.replace(/\.pdf$/i, '')}.json`;
+
+const MAX_RECORD_ATTEMPTS = 3;
 
 /**
  * Adds a shared digest; sharing again the same day adds its events to that day's issue. An update
  * doesn't: the email and the WhatsApp text went out without the events it added, so next week's
  * digest still marks them NEW. `version` is the PDF shared, recorded with the issue.
+ * Uses conditional R2 writes with short retries so concurrent shares don't clobber each other.
  */
 export const recordIssue = async (bucket: IssueBucket, issue: DigestIssue, version?: DigestVersionRecord): Promise<void> => {
-  const issues = await readIssues(bucket);
-  let entry = issues.find((i) => i.issued === issue.issued);
-  if (entry && !version?.update) entry.ids = [...new Set([...entry.ids, ...issue.ids])].slice(0, MAX_IDS);
-  // An update of an issue that wasn't recorded: what it carries is all there is to go by
-  else if (!entry) issues.push(entry = { issued: issue.issued, ids: issue.ids });
-  // The same upload sent twice (a retry after a dropped connection) is one version
-  if (version) entry.versions = [...(entry.versions ?? []).filter((v) => v.key !== version.key), version].slice(-MAX_VERSIONS);
-  issues.sort((a, b) => a.issued.localeCompare(b.issued));
-  await bucket.put(ISSUES_KEY, new Blob([JSON.stringify(issues.slice(-MAX_ISSUES))]), { httpMetadata: { contentType: 'application/json' } });
+  for (let attempt = 0; attempt < MAX_RECORD_ATTEMPTS; attempt++) {
+    const { issues, etag } = await readIssuesWithEtag(bucket);
+    let entry = issues.find((i) => i.issued === issue.issued);
+    if (entry && !version?.update) entry.ids = [...new Set([...entry.ids, ...issue.ids])].slice(0, MAX_IDS);
+    // An update of an issue that wasn't recorded: what it carries is all there is to go by
+    else if (!entry) issues.push(entry = { issued: issue.issued, ids: issue.ids });
+    // The same upload sent twice (a retry after a dropped connection) is one version
+    if (version) entry.versions = [...(entry.versions ?? []).filter((v) => v.key !== version.key), version].slice(-MAX_VERSIONS);
+    issues.sort((a, b) => a.issued.localeCompare(b.issued));
+    const options: IssuePutOptions = {
+      httpMetadata: { contentType: 'application/json' },
+      onlyIf: etag ? { etagMatches: etag } : { etagDoesNotMatch: '*' }
+    };
+    const written = await bucket.put(ISSUES_KEY, new Blob([JSON.stringify(issues.slice(-MAX_ISSUES))]), options);
+    if (written !== null) return;
+  }
+  throw new Error('Could not record digest issue after concurrent updates');
 };
 
 /** The latest digest shared before `before` (a day), or null when there is none */

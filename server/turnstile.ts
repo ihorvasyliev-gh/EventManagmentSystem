@@ -17,7 +17,11 @@ export const verifyTurnstile = async (env: TurnstileEnv, token: string | null, i
   form.append('response', token);
   if (ip) form.append('remoteip', ip);
   try {
-    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(10_000)
+    });
     const outcome = (await res.json()) as { success?: boolean };
     return outcome.success === true;
   } catch {

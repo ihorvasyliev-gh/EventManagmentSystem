@@ -44,8 +44,10 @@ test('failing again right after a reload shows the error instead of reloading in
   const storage = memoryStorage();
   storage.setItem(STALE_CHUNK_RELOAD_KEY, '50000');
   await assert.rejects(
-    loadOrReload(() => Promise.reject(new Error('offline')), { storage, repair: noRepair, reload: () => reloads++, now: () => 50_000 + STALE_CHUNK_RELOAD_GUARD_MS - 1 }),
-    /offline/
+    loadOrReload(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), {
+      storage, repair: noRepair, reload: () => reloads++, now: () => 50_000 + STALE_CHUNK_RELOAD_GUARD_MS - 1
+    }),
+    /dynamically imported module/
   );
   assert.equal(reloads, 0);
 });
@@ -54,14 +56,39 @@ test('a later deploy reloads again', async () => {
   let reloads = 0;
   const storage = memoryStorage();
   storage.setItem(STALE_CHUNK_RELOAD_KEY, '50000');
-  const pending = loadOrReload(() => Promise.reject(new Error('gone')), { storage, repair: noRepair, reload: () => reloads++, now: () => 50_000 + STALE_CHUNK_RELOAD_GUARD_MS });
+  const pending = loadOrReload(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), {
+    storage, repair: noRepair, reload: () => reloads++, now: () => 50_000 + STALE_CHUNK_RELOAD_GUARD_MS
+  });
   assert.equal(await settlesWithin(pending), false);
   assert.equal(reloads, 1);
 });
 
 test('without storage (blocked site data) the error is shown: a loop could not be stopped', async () => {
   let reloads = 0;
-  await assert.rejects(loadOrReload(() => Promise.reject(new Error('gone')), { storage: null, repair: noRepair, reload: () => reloads++, now: () => 1 }), /gone/);
+  await assert.rejects(
+    loadOrReload(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), {
+      storage: null, repair: noRepair, reload: () => reloads++, now: () => 1
+    }),
+    /dynamically imported module/
+  );
+  assert.equal(reloads, 0);
+});
+
+test('non-chunk errors and offline state do not trigger a reload', async () => {
+  let reloads = 0;
+  const storage = memoryStorage();
+  await assert.rejects(
+    loadOrReload(() => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'x')")), {
+      storage, repair: noRepair, reload: () => reloads++, now: () => 50_000, isOnline: () => true
+    }),
+    /Cannot read properties/
+  );
+  await assert.rejects(
+    loadOrReload(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), {
+      storage, repair: noRepair, reload: () => reloads++, now: () => 50_000, isOnline: () => false
+    }),
+    /dynamically imported module/
+  );
   assert.equal(reloads, 0);
 });
 

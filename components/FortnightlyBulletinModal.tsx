@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useId, useMemo, useRef } from 'react';
 import {
   FileText, Download, Check, MessageSquare, LayoutGrid, List, Eye, AlertTriangle, Inbox, ChevronDown, CalendarPlus, Mail, Link2, MoreHorizontal,
   RefreshCw
@@ -8,6 +8,7 @@ import { generateEventsDigestPDF, generateWhatsAppSummary, digestFileName } from
 import { generateDigestEmail, generateDigestMailto, generateDigestMailtoSubject } from '../utils/digestText';
 import { generateDigestEmailHtml } from '../utils/digestEmailHtml';
 import { copyFormattedEmail, PASTE_KEYS } from '../utils/copyEmail';
+import { copyText } from '../utils/clipboard';
 import { shareDigestPdf, fetchDigestIssues, fetchDigestList, type SentDigest } from '../services/digestService';
 import { recipientsFor } from '../services/emailRecipientsService';
 import { buildDigestList, markDigestUpdate } from '../utils/digestList';
@@ -63,25 +64,18 @@ const writePref = (key: string, value: string) => {
  * page write to the clipboard during the click itself, so where it can the text goes in as a promise.
  * Rejects when the text can't be had.
  */
-const copyText = async (text: Promise<string>): Promise<void> => {
+const copyAsyncText = async (text: Promise<string>): Promise<void> => {
   if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })]);
       return;
     } catch {
-      // Not supported this way, or not allowed: the plain ways below
+      // Not supported this way, or not allowed: fall back to shared copyText
     }
   }
   const value = await text;
-  try {
-    await navigator.clipboard.writeText(value);
-  } catch {
-    const input = document.createElement('textarea');
-    input.value = value;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    document.body.removeChild(input);
+  if (!(await copyText(value))) {
+    throw new Error('Could not copy text');
   }
 };
 
@@ -145,15 +139,49 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const [busy, setBusy] = useState<'download' | 'preview' | 'email' | 'whatsapp' | 'link' | 'update' | null>(null);
   const [copied, setCopied] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuId = useId();
   const moreRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!moreOpen) return;
+    moreMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
     const close = (e: MouseEvent) => {
       if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMoreOpen(false);
+      moreButtonRef.current?.focus();
+    };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', handleKey, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', handleKey, true);
+    };
   }, [moreOpen]);
+
+  const handleMoreMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab') {
+      setMoreOpen(false);
+      return;
+    }
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (current + 1) % items.length
+      : e.key === 'ArrowUp' ? (current - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? items.length - 1
+      : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
   const [linkCopied, setLinkCopied] = useState(false);
   const [showList, setShowList] = useState(true);
 
@@ -328,7 +356,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
       : Promise.resolve(summary());
     if (shareable) setBusy('whatsapp');
     try {
-      await copyText(text);
+      await copyAsyncText(text);
       setCopied(true);
       showToast(
         linkFailed
@@ -389,7 +417,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
   const handleCopyLink = async () => {
     setBusy('link');
     try {
-      await copyText(getShareLink());
+      await copyAsyncText(getShareLink());
       setLinkCopied(true);
       showToast('Link copied — anyone with it can open this PDF for six months', 'success');
       setTimeout(() => setLinkCopied(false), 2500);
@@ -470,17 +498,32 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
     <div className="flex items-center gap-2">
       <div ref={moreRef} className="relative sm:hidden">
         <button
+          ref={moreButtonRef}
           type="button"
           onClick={() => setMoreOpen((open) => !open)}
+          onKeyDown={(e) => {
+            if (!moreOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault();
+              setMoreOpen(true);
+            }
+          }}
           aria-haspopup="menu"
           aria-expanded={moreOpen}
+          aria-controls={moreMenuId}
           className={`${secondary} h-11 px-4`}
         >
           <MoreHorizontal className="w-4 h-4 shrink-0" aria-hidden="true" />
           More
         </button>
         {moreOpen && (
-          <div role="menu" aria-label="More ways to share" className="absolute bottom-full left-0 mb-2 w-64 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl animate-scale-in origin-bottom-left">
+          <div
+            ref={moreMenuRef}
+            id={moreMenuId}
+            role="menu"
+            aria-label="More ways to share"
+            onKeyDown={handleMoreMenuKeyDown}
+            className="absolute bottom-full left-0 mb-2 w-64 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl animate-scale-in origin-bottom-left"
+          >
             {moreItems.map((item) => (
               <button
                 key={item.key}
@@ -488,7 +531,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
                 role="menuitem"
                 disabled={item.off}
                 onClick={() => { setMoreOpen(false); void item.onClick(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounded-lg text-sm font-medium text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-3 min-h-[48px] rounded-lg text-sm font-medium text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50 transition-colors"
               >
                 {item.icon}
                 {item.label}

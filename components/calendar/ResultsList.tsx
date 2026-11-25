@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SearchX } from 'lucide-react';
 import { type Event } from '../../types';
 import { AgendaDayGroups, FoldedEvents } from './AgendaView';
@@ -18,7 +18,12 @@ interface ResultsListProps {
 /** Search and filter results across all dates, upcoming first, the past ones folded away below */
 const ResultsList: React.FC<ResultsListProps> = ({ upcoming, past, today, onEventClick, onClearFilters, query }) => {
   // Nothing coming up: the past results are what there is, so they start open
-  const [showPast, setShowPast] = useState(upcoming.length === 0);
+  const [showPast, setShowPast] = useState(upcoming.length === 0 && past.length > 0);
+  useEffect(() => {
+    if (upcoming.length === 0 && past.length > 0) {
+      setShowPast(true);
+    }
+  }, [upcoming.length, past.length]);
 
   if (upcoming.length === 0 && past.length === 0) {
     return (

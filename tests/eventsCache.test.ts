@@ -60,11 +60,30 @@ test('a copy an older version left on the device is removed after a one-time sig
 
 test('with "Remember me" the calendar is kept on the device, and signing out clears it everywhere', () => {
   setRememberMe(true);
-  cacheEvents([event]);
+  cacheEvents([event], 'user-1');
   assert.ok(cacheKeys(local).includes('ccp_events_cache'));
   assert.deepEqual(cacheKeys(session), []);
-  assert.equal(getCachedEvents()?.[0].date.toISOString(), '2026-11-05T10:00:00.000Z');
+  assert.equal(getCachedEvents('user-1')?.[0].date.toISOString(), '2026-11-05T10:00:00.000Z');
 
   clearEventsCache();
   assert.deepEqual([...cacheKeys(local), ...cacheKeys(session)], []);
+});
+
+test('cached events and exceptions are scoped by userId and ignored for a different user', () => {
+  setRememberMe(true);
+  cacheEvents([event], 'user-a');
+  cacheExceptions(new Map([['e1', [new Date('2026-11-12T00:00:00Z')]]]), 'user-a');
+
+  assert.equal(getCachedEvents('user-a')?.length, 1);
+  assert.equal(getCachedExceptions('user-a')?.get('e1')?.length, 1);
+  assert.equal(getCachedEvents('user-b'), null);
+  assert.equal(getCachedExceptions('user-b'), null);
+});
+
+test('legacy unscoped array in storage is safely discarded instead of leaking across users', () => {
+  setRememberMe(true);
+  local.setItem('ccp_events_cache', JSON.stringify([{ ...event, date: event.date.toISOString(), createdAt: event.createdAt.toISOString() }]));
+  local.setItem('ccp_events_cache_timestamp', String(Date.now()));
+  assert.equal(getCachedEvents('user-a'), null);
+  assert.deepEqual(cacheKeys(local), []);
 });

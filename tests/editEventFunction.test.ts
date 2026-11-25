@@ -92,7 +92,7 @@ const backend = (stored: ReturnType<typeof storedEvent>, options: { savedMeanwhi
         return json(null, 201);
       }
       // "Is the old flyer still used?" — no
-      if (method === 'GET' && (url.includes('/rest/v1/events?select=id&poster_url=') || url.includes('/rest/v1/event_attachments?select=id&url='))) return json([]);
+      if (method === 'GET' && (url.includes('/rest/v1/events?select=poster_url&poster_url=in.') || url.includes('/rest/v1/event_attachments?select=url&url=in.'))) return json([]);
       return undefined;
     }
   ]);
@@ -189,7 +189,13 @@ test('if someone saved the event after the form was opened, nothing is written a
 test('a new flyer replaces the old one, which is deleted once nothing uses it; keep_poster false removes it', async () => {
   const stored = storedEvent();
   const { writes } = backend(stored);
-  const bucket = fakeBucket();
+  const base = fakeBucket();
+  const bucket = {
+    ...base,
+    delete: async (keys: string | string[]) => {
+      for (const k of Array.isArray(keys) ? keys : [keys]) await base.delete(k);
+    }
+  };
   const res = await onRequestPost({
     request: send(form(stored), { poster: new File([PNG], 'new.png', { type: 'image/png' }) }),
     env: { ...env, BUCKET: bucket }
@@ -201,7 +207,7 @@ test('a new flyer replaces the old one, which is deleted once nothing uses it; k
   assert.deepEqual(bucket.deleted, [old, `${old}.screen.jpg`, `${old}.thumb.jpg`]);
 
   const again = backend(stored);
-  await onRequestPost({ request: send(form(stored, { keep_poster: false })), env: { ...env, BUCKET: fakeBucket() } });
+  await onRequestPost({ request: send(form(stored, { keep_poster: false })), env: { ...env, BUCKET: bucket } });
   assert.equal(again.writes.patched[0].poster_url, null);
   assert.deepEqual(again.writes.history[0].changes, { poster: { old: null, new: 'Removed' } });
 });

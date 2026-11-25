@@ -393,7 +393,7 @@ export const MultiDatePicker: React.FC<MultiDatePickerProps> = ({
                     e.stopPropagation();
                     handleRemoveDate(d);
                   }}
-                  className="w-5 h-5 rounded-full inline-flex items-center justify-center hover:bg-brand-200/80 dark:hover:bg-brand-800/80 text-brand-500 dark:text-brand-300 transition-colors disabled:opacity-40"
+                  className="w-5 h-5 min-w-0 min-h-0 rounded-full inline-flex items-center justify-center hover:bg-brand-200/80 dark:hover:bg-brand-800/80 text-brand-500 dark:text-brand-300 transition-colors disabled:opacity-40"
                 >
                   <X className="w-3 h-3" />
                 </button>

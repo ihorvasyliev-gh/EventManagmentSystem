@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { Calendar as CalendarIcon, ChevronDown, Download, ExternalLink } from 'lucide-react';
 import type { Event } from '../../types';
 import { exportToICal, downloadFile } from '../../utils/export';
@@ -36,9 +36,46 @@ interface AddToCalendarMenuProps {
   onClose: () => void;
 }
 
+const ITEM_SELECTOR = 'a[href], button:not([disabled])';
+
 /** "Add to Calendar" with Office 365, Outlook.com, Google and an .ics download */
 const AddToCalendarMenu: React.FC<AddToCalendarMenuProps> = ({ event, open, onToggle, onClose }) => {
   const links = calendarLinks(event);
+  const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus();
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onCloseRef.current();
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKey, true);
+    return () => document.removeEventListener('keydown', handleKey, true);
+  }, [open]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(ITEM_SELECTOR));
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === 'ArrowDown' ? (current + 1) % items.length
+      : e.key === 'ArrowUp' ? (current - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? items.length - 1
+      : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+
   const downloadIcs = () => {
     downloadFile(exportToICal([{ ...event, endDate: getEventEnd(event) }]), `${(event.title || 'event').replace(/[^a-z0-9]/gi, '_')}.ics`, 'text/calendar;charset=utf-8');
     onClose();
@@ -47,8 +84,18 @@ const AddToCalendarMenu: React.FC<AddToCalendarMenuProps> = ({ event, open, onTo
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
+        type="button"
         onClick={onToggle}
+        onKeyDown={(e) => {
+          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-haspopup="true"
         aria-expanded={open}
+        aria-controls={menuId}
         className="cta w-full py-3 sm:py-2.5 min-h-[44px] sm:min-h-0 border border-brand-600 dark:border-brand-400 rounded text-brand-600 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors flex items-center justify-center gap-2"
       >
         <CalendarIcon className="h-4 w-4" />
@@ -58,13 +105,19 @@ const AddToCalendarMenu: React.FC<AddToCalendarMenuProps> = ({ event, open, onTo
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={onClose} />
-          <div className="absolute bottom-full left-0 right-0 mb-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 animate-scale-in origin-bottom">
+          <div className="fixed inset-0 z-10" onClick={onClose} aria-hidden="true" />
+          <div
+            ref={menuRef}
+            id={menuId}
+            aria-label="Calendar options"
+            onKeyDown={handleMenuKeyDown}
+            className="absolute bottom-full left-0 right-0 mb-2 p-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 animate-scale-in origin-bottom"
+          >
             <a
               href={links.office365}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
+              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg transition-colors group"
             >
               <span className="flex-1 font-medium">Office 365</span>
               <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
@@ -73,7 +126,7 @@ const AddToCalendarMenu: React.FC<AddToCalendarMenuProps> = ({ event, open, onTo
               href={links.outlook}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
+              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg transition-colors group"
             >
               <span className="flex-1">Outlook.com</span>
               <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
@@ -82,15 +135,16 @@ const AddToCalendarMenu: React.FC<AddToCalendarMenuProps> = ({ event, open, onTo
               href={links.google}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group"
+              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg transition-colors group"
             >
               <span className="flex-1">Google Calendar</span>
               <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
             </a>
-            <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
+            <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" role="separator" />
             <button
+              type="button"
               onClick={downloadIcs}
-              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors group text-left"
+              className="flex items-center w-full px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg transition-colors group text-left"
             >
               <span className="flex-1">Download .ics File</span>
               <Download className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />

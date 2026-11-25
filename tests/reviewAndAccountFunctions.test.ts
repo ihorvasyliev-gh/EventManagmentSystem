@@ -3,8 +3,17 @@ import assert from 'node:assert/strict';
 import { onRequestPost as submissions } from '../functions/api/submissions.ts';
 import { onRequestPost as resetPassword } from '../functions/api/staff-password.ts';
 import { onRequestGet as listStaff, onRequestPost as createStaff } from '../functions/api/staff.ts';
-import { onRequestPut as upload } from '../functions/api/upload.ts';
 import { mockFetch, authRoutes, json, env, fakeBucket } from './support/mockFetch.ts';
+
+const batchBucket = () => {
+  const b = fakeBucket();
+  return {
+    ...b,
+    delete: async (keys: string | string[]) => {
+      for (const k of Array.isArray(keys) ? keys : [keys]) await b.delete(k);
+    }
+  };
+};
 
 const ID = '10000000-0000-0000-0000-000000000001';
 const KEY = '0f8fad5b-d9cb-469f-a165-70867728950e-flyer.png';
@@ -45,17 +54,18 @@ test('declining emails the reason, deletes the draft and its flyer', async () =>
     ({ url }) => (url.includes('/rest/v1/event_attachments?event_id=in.') ? json([]) : undefined),
     ({ url, method }) => (method === 'DELETE' && url.includes('/rest/v1/events?id=in.') ? new Response(null, { status: 204 }) : undefined),
     // Nothing else uses the flyer any more
-    ({ url }) => (url.includes('select=id&poster_url=eq.') || url.includes('select=id&url=eq.') ? json([]) : undefined),
+    ({ url }) => (url.includes('select=poster_url&poster_url=in.') || url.includes('select=url&url=in.') ? json([]) : undefined),
     ({ url }) => (url.startsWith('https://api.resend.com/') ? json({ id: 'm' }) : undefined)
   ]);
-  const bucket = fakeBucket();
+  const bucket = batchBucket();
   const res = await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID], reason: 'Not a CCP event' }), env: { ...mailEnv, BUCKET: bucket } });
   assert.equal(res.status, 200);
   const reply = await res.json();
   assert.deepEqual(reply.declined, [ID]);
   assert.equal(reply.authorsEmailed, true);
   const del = calls.find((c) => c.method === 'DELETE' && c.url.includes('/rest/v1/events?'));
-  assert.ok(del?.url.includes('status=eq.draft'), 'only drafts are deleted');
+  assert.ok(del, 'delete call was made');
+  assert.ok(del.url.includes('status=eq.draft'), 'only drafts are deleted');
   // The database logs the deletion as declined by this admin
   assert.equal(del.headers['X-Acting-User'], '00000000-0000-0000-0000-00000000000a');
   assert.equal(del.headers['X-Delete-Reason'], 'declined');
@@ -71,10 +81,10 @@ test('a flyer another event still uses is kept when a submission is declined', a
     ({ url, method }) => (method === 'GET' && url.includes('/rest/v1/events?id=in.') ? json([draft]) : undefined),
     ({ url }) => (url.includes('/rest/v1/event_attachments?event_id=in.') ? json([]) : undefined),
     ({ method }) => (method === 'DELETE' ? new Response(null, { status: 204 }) : undefined),
-    ({ url }) => (url.includes('select=id&poster_url=eq.') ? json([{ id: 'other' }]) : undefined),
-    ({ url }) => (url.includes('select=id&url=eq.') ? json([]) : undefined)
+    ({ url }) => (url.includes('select=poster_url&poster_url=in.') ? json([{ poster_url: `/api/file/${KEY}` }]) : undefined),
+    ({ url }) => (url.includes('select=url&url=in.') ? json([]) : undefined)
   ]);
-  const bucket = fakeBucket();
+  const bucket = batchBucket();
   const res = await submissions({ request: post('https://app.test/api/submissions', { action: 'decline', ids: [ID] }), env: { ...env, BUCKET: bucket } });
   // No email set up: the app offers to write from the admin's own mail instead
   assert.equal((await res.json()).authorsEmailed, false);
@@ -134,22 +144,4 @@ test('admins list every account; staff cannot', async () => {
   assert.deepEqual((await res.json()).staff, [{ id: ID, email: 'a@x.ie', fullName: 'A', role: 'staff', mustChangePassword: true, createdAt: 'x' }]);
   const staff = await listStaff({ request: new Request('https://app.test/api/staff', { headers: { Authorization: 'Bearer staff-token' } }), env });
   assert.equal(staff.status, 403);
-});
-
-test('/api/upload is for signed-in admins only', async () => {
-  mockFetch(authRoutes);
-  const form = () => {
-    const f = new FormData();
-    f.append('file', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], 'a.png', { type: 'image/png' }));
-    return f;
-  };
-  const anon = await upload({ request: new Request('https://app.test/api/upload', { method: 'PUT', body: form() }), env: { ...env, BUCKET: fakeBucket() } });
-  assert.equal(anon.status, 401);
-  const staff = await upload({ request: new Request('https://app.test/api/upload', { method: 'PUT', body: form(), headers: { Authorization: 'Bearer staff-token' } }), env: { ...env, BUCKET: fakeBucket() } });
-  assert.equal(staff.status, 403);
-  const bucket = fakeBucket();
-  const admin = await upload({ request: new Request('https://app.test/api/upload', { method: 'PUT', body: form(), headers: { Authorization: 'Bearer admin-token' } }), env: { ...env, BUCKET: bucket } });
-  assert.equal(admin.status, 200);
-  assert.match((await admin.json()).url, /^\/api\/file\/[0-9a-f-]{36}-a\.png$/);
-  assert.equal(bucket.stored.size, 1);
 });

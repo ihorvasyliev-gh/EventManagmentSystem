@@ -1,8 +1,9 @@
 import { type Event } from '../types';
 import { eventContacts } from './contacts';
 import { foldICSLine } from './icsFold.ts';
-import { loadImageForPdf, type LoadedPdfFlyer } from './pdf/images';
+import { loadImageForPdf, mapWithConcurrency, type LoadedPdfFlyer } from './pdf/images';
 import { posterVariantUrl } from './posterVariants.ts';
+import { loadOrReload } from './staleChunk.ts';
 
 /** Posters are shown 58 px tall in the sheet; made twice that size, they stay sharp zoomed in */
 const SHEET_POSTER_PX = 58;
@@ -110,14 +111,14 @@ export const downloadBlob = (blob: Blob, filename: string) => {
  * - Gridlines enabled and text wrapping
  */
 export const exportToExcel = async (events: Event[]): Promise<Blob> => {
-  const ExcelJSConstructor = (await import('exceljs')).default;
+  const ExcelJSConstructor = (await loadOrReload(() => import('exceljs'))).default;
 
   // 1. Strictly filter published events
   const publishedEvents = events.filter(isPublished);
 
   // 2. Each poster once, made small: a weekly series has a row per date, all with the same poster
   const posterUrls = [...new Set(publishedEvents.map(posterOf).filter((url): url is string => !!url))];
-  const posters = new Map(await Promise.all(posterUrls.map(async (url) => [url, await loadSheetPoster(url)] as const)));
+  const posters = new Map(await mapWithConcurrency(posterUrls, 5, async (url) => [url, await loadSheetPoster(url)] as const));
   // The workbook holds each image once; every row with that poster shows the same one
   const imageIds = new Map<string, number>();
 

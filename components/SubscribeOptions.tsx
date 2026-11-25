@@ -5,25 +5,13 @@ import { getCategoryDotColor } from './WeekView';
 import {
   type AppId, type SubscribeLink, APPS_BY_DEVICE, deviceOf, feedNameFor, feedUrlFor, knownCategories, subscribeLinks, subscribePageUrlFor,
 } from '../utils/subscribeLinks';
+import { copyText } from '../utils/clipboard';
 
 export { categoryQuery, knownCategories } from '../utils/subscribeLinks';
+export { copyText };
 
 /** The public subscribe page's address with these categories ticked */
 export const subscribePageUrl = (categories: string[]): string => subscribePageUrlFor(categories, window.location.origin);
-
-export const copyText = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Older browsers and some in-app browsers
-    const input = document.createElement('input');
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    document.body.removeChild(input);
-  }
-};
 
 const useCopied = (): [string | null, (key: string, text: string) => void] => {
   const [copied, setCopied] = useState<string | null>(null);
@@ -32,7 +20,7 @@ const useCopied = (): [string | null, (key: string, text: string) => void] => {
     const t = setTimeout(() => setCopied(null), 2000);
     return () => clearTimeout(t);
   }, [copied]);
-  return [copied, (key, text) => void copyText(text).then(() => setCopied(key))];
+  return [copied, (key, text) => void copyText(text).then((ok) => { if (ok) setCopied(key); })];
 };
 
 const APP_ICONS: Record<AppId, LucideIcon> = {

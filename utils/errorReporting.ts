@@ -1,5 +1,3 @@
-import { supabase } from '../lib/supabase';
-
 /**
  * Sends errors from people's browsers to /api/client-error (stored in Supabase's client_errors
  * table), so problems surface without anyone having to email. Production only; a few per page
@@ -14,13 +12,31 @@ const reported = new Set<string>();
 // Noise from browser extensions and aborted requests, not from the app
 const IGNORED = [/ResizeObserver loop/i, /^Script error\.?$/i, /extension:\/\//i, /AbortError/i];
 
-export const reportError = async (error: unknown, context?: string): Promise<void> => {
-  if (!import.meta.env.PROD || reported.size >= MAX_REPORTS_PER_PAGE) return;
-  const err = error instanceof Error ? error : new Error(typeof error === 'string' ? error : JSON.stringify(error));
-  const message = `${context ? `${context}: ` : ''}${err.message || String(err)}`.slice(0, 500);
-  if (!message || reported.has(message) || IGNORED.some((re) => re.test(message) || re.test(err.stack ?? ''))) return;
-  reported.add(message);
+/** Safely turns any thrown value (including circular objects or BigInts) into an Error */
+export const toReportableError = (error: unknown): Error => {
+  if (error instanceof Error) return error;
+  if (typeof error === 'string') return new Error(error);
   try {
+    const serialized = JSON.stringify(error);
+    return new Error(serialized ?? String(error));
+  } catch {
+    try {
+      return new Error(String(error));
+    } catch {
+      return new Error('Unknown error');
+    }
+  }
+};
+
+export const reportError = async (error: unknown, context?: string): Promise<void> => {
+  if (!(import.meta.env && import.meta.env.PROD) || reported.size >= MAX_REPORTS_PER_PAGE) return;
+  try {
+    const err = toReportableError(error);
+    const message = `${context ? `${context}: ` : ''}${err.message || String(err)}`.slice(0, 500);
+    if (!message || reported.has(message) || IGNORED.some((re) => re.test(message) || re.test(err.stack ?? ''))) return;
+    reported.add(message);
+    // Loaded lazily so public pages (/digest/*, /subscribe) never download vendor-supabase
+    const { supabase } = await import('../lib/supabase');
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     await fetch('/api/client-error', {
@@ -41,7 +57,7 @@ export const reportError = async (error: unknown, context?: string): Promise<voi
 
 /** Catches errors nothing else handled (call once at start-up) */
 export const initErrorReporting = (): void => {
-  if (!import.meta.env.PROD) return;
+  if (!(import.meta.env && import.meta.env.PROD)) return;
   window.addEventListener('error', (e) => void reportError(e.error ?? e.message));
   window.addEventListener('unhandledrejection', (e) => void reportError(e.reason, 'Unhandled promise'));
 };

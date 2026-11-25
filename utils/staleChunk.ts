@@ -69,18 +69,25 @@ interface Deps {
   repair: (err: unknown) => Promise<void>;
   reload: () => void;
   now: () => number;
+  /** False when the browser reports it is offline (reloading offline cannot fix a missing chunk) */
+  isOnline?: () => boolean;
 }
+
+const defaultIsOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
 const browserDeps = (): Deps => ({
   storage: safeGetStorage('session'),
   repair: repairBuiltFiles,
   reload: () => window.location.reload(),
-  now: Date.now
+  now: Date.now,
+  isOnline: defaultIsOnline
 });
 
-/** Runs a dynamic import; when it fails, reloads the page once (the promise then never settles) */
+/** Runs a dynamic import; when a chunk fails to load online, reloads the page once (the promise then never settles) */
 export const loadOrReload = <T>(load: () => Promise<T>, deps: Deps = browserDeps()): Promise<T> =>
   load().catch(async (err: unknown) => {
+    const online = deps.isOnline ? deps.isOnline() : defaultIsOnline();
+    if (!isChunkLoadError(err) || !online) throw err;
     const { storage, now } = deps;
     // Without storage a reload can't be told from a reload loop
     if (!storage) throw err;
@@ -96,3 +103,29 @@ export const loadOrReload = <T>(load: () => Promise<T>, deps: Deps = browserDeps
     // The page is going away; keep showing the loading state until it does
     return new Promise<T>(() => undefined);
   });
+
+/**
+ * Listens for Vite's `vite:preloadError` event (fired when a preloaded JS/CSS chunk fails
+ * to fetch after a deploy) and runs the same single-reload recovery as `loadOrReload`.
+ */
+export const registerPreloadErrorHandler = (deps: Deps = browserDeps()): (() => void) => {
+  if (typeof window === 'undefined') return () => undefined;
+  const onPreloadError = (event: Event) => {
+    const err = (event as Event & { payload?: unknown }).payload ?? new Error('Unable to preload CSS');
+    const online = deps.isOnline ? deps.isOnline() : defaultIsOnline();
+    if (!online) return;
+    const { storage, now } = deps;
+    if (!storage) return;
+    try {
+      const last = Number(storage.getItem(STALE_CHUNK_RELOAD_KEY)) || 0;
+      if (now() - last < STALE_CHUNK_RELOAD_GUARD_MS) return;
+      storage.setItem(STALE_CHUNK_RELOAD_KEY, String(now()));
+    } catch {
+      return;
+    }
+    event.preventDefault();
+    void deps.repair(err).finally(() => deps.reload());
+  };
+  window.addEventListener('vite:preloadError', onPreloadError);
+  return () => window.removeEventListener('vite:preloadError', onPreloadError);
+};

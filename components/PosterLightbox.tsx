@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Loader2 } from 'lucide-react';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
 const EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -70,30 +71,14 @@ interface PosterLightboxProps {
 
 /** Full-screen view of a poster. Escape, the close button or a click outside the image closes it. */
 const PosterLightbox: React.FC<PosterLightboxProps> = ({ src, title, onClose }) => {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    // Capture phase + preventDefault: the dialog underneath skips an Escape that was already handled
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-      onCloseRef.current();
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => {
-      document.removeEventListener('keydown', handleKey, true);
-      previous?.focus?.();
-    };
-  }, []);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(true, onClose, dialogRef, true);
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex flex-col animate-fade-in"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="outline-none fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex flex-col animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label={`Poster: ${title}`}
@@ -111,7 +96,6 @@ const PosterLightbox: React.FC<PosterLightboxProps> = ({ src, title, onClose }) 
             className="p-2.5 rounded-full bg-white/15 hover:bg-white/25 transition-colors"
           />
           <button
-            ref={closeRef}
             type="button"
             onClick={(e) => {
               e.stopPropagation();

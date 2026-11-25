@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useCallback, useRef } from 'react';
 import { Loader2, X } from 'lucide-react';
 import type { Event } from '../../types';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 
 interface DeleteEventDialogProps {
   event: Event;
@@ -11,14 +12,21 @@ interface DeleteEventDialogProps {
 }
 
 /** Asks before deleting; a repeating event offers "only this occurrence" or the whole series */
-const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting, onConfirm, onCancel }) => (
-  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={() => !isDeleting && onCancel()}>
-    <div role="alertdialog" aria-modal="true" aria-labelledby="delete-event-title" className="relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 bg-white dark-glass" onClick={(e) => e.stopPropagation()}>
+const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting, onConfirm, onCancel }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const handleClose = useCallback(() => {
+    if (!isDeleting) onCancel();
+  }, [isDeleting, onCancel]);
+  useModalFocusTrap(true, handleClose, panelRef, true);
+
+  return (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" onClick={handleClose}>
+    <div ref={panelRef} role="alertdialog" aria-modal="true" aria-labelledby="delete-event-title" tabIndex={-1} className="outline-none relative rounded-xl shadow-xl border border-white/20 w-full max-w-md mx-4 bg-white dark-glass" onClick={(e) => e.stopPropagation()}>
       <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
         <h3 id="delete-event-title" className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
           Delete Event
         </h3>
-        <button onClick={() => !isDeleting && onCancel()} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" disabled={isDeleting}>
+        <button onClick={handleClose} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" disabled={isDeleting}>
           <X className="h-5 w-5" />
         </button>
       </div>
@@ -77,6 +85,7 @@ const DeleteEventDialog: React.FC<DeleteEventDialogProps> = ({ event, isDeleting
       </div>
     </div>
   </div>
-);
+  );
+};
 
 export default DeleteEventDialog;

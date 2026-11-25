@@ -59,7 +59,16 @@ export const useSubmitPage = () => {
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => setIsOpen(isSubmitUrl());
+    const handlePopState = () => {
+      const open = isSubmitUrl();
+      setIsOpen(open);
+      if (!open) {
+        setInitialDate(null);
+        setTemplate(null);
+        setEditing(null);
+        setPublishOnSave(false);
+      }
+    };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);

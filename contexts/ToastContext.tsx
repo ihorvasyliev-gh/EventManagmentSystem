@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { CONTACT_EMAIL, buildSupportMailto } from '../constants/support';
 
@@ -43,23 +43,42 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Toasts still up, to call onExpire once when one goes (whether it timed out or was closed)
   const live = useRef(new Map<string, Toast>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const clearTimer = useCallback((id: string) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
+  }, []);
+
+  useEffect(() => {
+    const map = timers.current;
+    return () => {
+      for (const timer of map.values()) clearTimeout(timer);
+      map.clear();
+    };
+  }, []);
 
   const removeToast = useCallback((id: string) => {
+    clearTimer(id);
     const toast = live.current.get(id);
     live.current.delete(id);
     setToasts(prev => prev.filter(t => t.id !== id));
     toast?.onExpire?.();
-  }, []);
+  }, [clearTimer]);
 
   const runAction = useCallback((id: string) => {
+    clearTimer(id);
     const toast = live.current.get(id);
     live.current.delete(id);
     setToasts(prev => prev.filter(t => t.id !== id));
     toast?.action?.onClick();
-  }, []);
+  }, [clearTimer]);
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000, options?: ToastOptions) => {
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = Math.random().toString(36).slice(2, 11);
     if (type === 'error' && duration > 0) duration = Math.max(duration, MIN_ERROR_DURATION);
     const toast: Toast = { id, message, type, duration, ...options };
     live.current.set(id, toast);
@@ -67,9 +86,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts(prev => [...prev, toast]);
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        timers.current.delete(id);
         removeToast(id);
       }, duration);
+      timers.current.set(id, timer);
     }
   }, [removeToast]);
 

@@ -52,14 +52,14 @@ const PosterUpload: React.FC<PosterUploadProps> = ({ poster, error }) => {
               {posterPdf && (posterPdf.pages > 1 ? `Page ${posterPdf.page} of ${posterPdf.pages} · ` : 'Converted from PDF · ')}
               {posterFile ? `${Math.max(1, Math.round(posterFile.size / 1024))} KB` : ''}
             </p>
-            <button type="button" onClick={openFilePicker} className="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+            <button type="button" onClick={openFilePicker} className="mt-1 min-w-0 min-h-0 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">
               Replace
             </button>
           </div>
           <button
             type="button"
             onClick={handleRemovePoster}
-            className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            className="min-w-0 min-h-0 p-2 inline-flex items-center justify-center text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             aria-label="Remove poster"
           >
             <X className="w-5 h-5" />

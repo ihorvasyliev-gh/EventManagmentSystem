@@ -7,17 +7,22 @@ test('a tab opened before a deploy reloads instead of crashing when a window’s
   await mockSupabase(page, {
     events: [eventRow({ id: ID, title: 'Enterprise breakfast', date: daysFromNow(1), end_date: daysFromNow(1, 11), location: 'Heron House' })]
   });
-  await signIn(page);
 
-  // The deploy removed the old build's files: Cloudflare answers with the app's page instead
-  let gone = true;
+  // Register before signIn so usePreloadWindows cannot fetch and cache EventModal first.
+  // Keep returning the stale HTML response (including for any idle preload attempt) until the
+  // stale-chunk handler triggers the reload, then serve the real chunk on the new build.
+  let allowReal = false;
   await page.route(/\/assets\/EventModal-[^/]+\.js$/, (route) => {
-    if (!gone) return route.continue();
-    gone = false;
+    if (allowReal) return route.continue();
     return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!DOCTYPE html><html><body></body></html>' });
   });
 
+  await signIn(page);
+
   const reloaded = page.waitForEvent('load');
+  page.once('framenavigated', () => {
+    allowReal = true;
+  });
   await page.getByText('Enterprise breakfast').first().click();
   await reloaded;
   await expect(page.getByText('Something went wrong')).toHaveCount(0);

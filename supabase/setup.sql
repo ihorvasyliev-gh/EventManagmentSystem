@@ -175,7 +175,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
 CREATE TRIGGER update_users_updated_at
@@ -405,8 +405,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 
 -- One row per error per day (repeats raise the count). Reports older than 90 days are
--- dropped, and once 5,000 are stored new kinds of error are ignored, so a flood of
--- fake reports can't fill the database.
+-- dropped, at most 200 new error kinds are recorded per day, and oldest rows beyond 5,000
+-- are evicted so a flood of fake reports can't fill the database or silence future days.
 CREATE OR REPLACE FUNCTION public.log_client_error(
   p_fingerprint TEXT, p_message TEXT, p_stack TEXT, p_url TEXT,
   p_release TEXT, p_user_agent TEXT, p_user_email TEXT
@@ -416,7 +416,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   DELETE FROM public.client_errors WHERE day < CURRENT_DATE - 90;
   IF NOT EXISTS (SELECT 1 FROM public.client_errors WHERE fingerprint = p_fingerprint AND day = CURRENT_DATE)
-     AND (SELECT count(*) FROM public.client_errors) >= 5000 THEN
+     AND (SELECT count(*) FROM public.client_errors WHERE day = CURRENT_DATE) >= 200 THEN
     RETURN;
   END IF;
   INSERT INTO public.client_errors AS c (fingerprint, message, stack, url, release, user_agent, user_email)
@@ -427,6 +427,12 @@ BEGIN
         last_seen = NOW(),
         url = EXCLUDED.url,
         user_email = COALESCE(EXCLUDED.user_email, c.user_email);
+  DELETE FROM public.client_errors
+  WHERE id IN (
+    SELECT id FROM public.client_errors
+    ORDER BY day DESC, last_seen DESC, id DESC
+    OFFSET 5000
+  );
 END;
 $$;
 REVOKE EXECUTE ON FUNCTION public.log_client_error(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
@@ -471,13 +477,13 @@ ALTER TABLE public.recurrence_exceptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.client_errors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
 
--- users: profiles are readable by signed-in users and changed only by the server: anyone
--- editing their own row could clear must_change_password or take someone else's email.
--- Accounts are created by Supabase Auth (handle_new_user).
+-- users: signed-in users can read their own profile (admins can read all); profiles are
+-- changed only by the server: anyone editing their own row could clear must_change_password
+-- or take someone else's email. Accounts are created by Supabase Auth (handle_new_user).
 DROP POLICY IF EXISTS "Users are viewable by authenticated users" ON public.users;
 CREATE POLICY "Users are viewable by authenticated users"
   ON public.users FOR SELECT TO authenticated
-  USING (true);
+  USING (id = (SELECT auth.uid()) OR (SELECT public.is_admin()));
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 REVOKE INSERT, UPDATE, DELETE ON public.users FROM anon, authenticated;
 

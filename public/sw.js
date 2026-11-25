@@ -1,11 +1,12 @@
 // Service Worker for CCP Event Calendar
-// Offline support: pages network-first, built assets cache-first. The runtime cache is capped,
+// Offline support: pages network-first (stored under /index.html), hashed assets & fonts
+// cache-first, unhashed static assets stale-while-revalidate. The runtime cache is capped,
 // and /api/ responses are never cached here (files under /api/file are cached by the browser,
 // and calendar data must never come from a stale copy).
 
-// v4: older caches could hold the app's page saved under a script's name (see remember())
-const CACHE_NAME = 'ccp-calendar-v4';
-const RUNTIME_CACHE = 'ccp-runtime-cache-v4';
+// v5: precache shell assets, cache-first only for hashed /assets/* & /fonts/*, single /index.html shell entry
+const CACHE_NAME = 'ccp-calendar-v5';
+const RUNTIME_CACHE = 'ccp-runtime-cache-v5';
 // Built files have hashed names, so every deploy adds new ones: keep only the most recent
 const MAX_RUNTIME_ENTRIES = 80;
 
@@ -14,6 +15,9 @@ const PRECACHE_URLS = [
     '/',
     '/index.html',
     '/manifest.json',
+    '/theme-init.js',
+    '/fonts/Lato-Regular.woff2',
+    '/assets/ccp-logo-v2.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -32,6 +36,12 @@ self.addEventListener('activate', (event) => {
     );
 });
 
+/** Hashed Vite bundles under /assets/ and immutable font files under /fonts/ */
+function isImmutableAsset(pathname) {
+    if (pathname.startsWith('/fonts/')) return true;
+    return pathname.startsWith('/assets/') && /-[A-Za-z0-9_-]{6,}\.[a-z0-9]+$/i.test(pathname);
+}
+
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
@@ -42,19 +52,25 @@ self.addEventListener('fetch', (event) => {
     // Other sites (Supabase, Turnstile) and the app's API always go to the network
     if (url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
 
-    // Pages - network first (always get fresh content)
+    // Pages - network first, stored under a single /index.html shell key so deep links never evict built chunks
     if (request.mode === 'navigate' || request.destination === 'document') {
-        event.respondWith(networkFirst(request));
+        event.respondWith(networkFirst(event, request, '/index.html'));
         return;
     }
 
-    // Built assets, fonts and images - cache first
+    // Hashed /assets/* bundles and immutable /fonts/* - cache first
+    if (isImmutableAsset(url.pathname)) {
+        event.respondWith(cacheFirst(event, request));
+        return;
+    }
+
+    // Unhashed scripts, styles, icons and images (e.g. /theme-init.js, /icon-*.png) - stale-while-revalidate
     if (['script', 'style', 'image', 'font', 'worker'].includes(request.destination)) {
-        event.respondWith(cacheFirst(request));
+        event.respondWith(staleWhileRevalidate(event, request));
         return;
     }
 
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(event, request));
 });
 
 /** Drops the oldest entries once the cache holds more than the limit */
@@ -75,29 +91,42 @@ function isPageForAsset(request, response) {
     return !isPage && (response.headers.get('content-type') || '').includes('text/html');
 }
 
-async function remember(request, response) {
+async function remember(request, response, cacheKey = request) {
     if (!response.ok || response.type === 'opaque' || isPageForAsset(request, response)) return;
     const cache = await caches.open(RUNTIME_CACHE);
-    await cache.put(request, response);
+    await cache.put(cacheKey, response);
     await trimCache(cache);
 }
 
-async function cacheFirst(request) {
-    const cache = await caches.open(RUNTIME_CACHE);
-    const cached = await cache.match(request);
+async function cacheFirst(event, request) {
+    const cached = await caches.match(request);
     if (cached) return cached;
     const response = await fetch(request);
-    remember(request, response.clone());
+    event.waitUntil(remember(request, response.clone()));
     return response;
 }
 
-async function networkFirst(request) {
+async function staleWhileRevalidate(event, request) {
+    const cached = await caches.match(request);
+    const networkPromise = fetch(request).then((response) => {
+        event.waitUntil(remember(request, response.clone()));
+        return response;
+    });
+    if (cached) {
+        event.waitUntil(networkPromise.catch(() => undefined));
+        return cached;
+    }
+    return networkPromise;
+}
+
+async function networkFirst(event, request, cacheKey) {
     try {
         const response = await fetch(request);
-        remember(request, response.clone());
+        event.waitUntil(remember(request, response.clone(), cacheKey));
         return response;
     } catch (error) {
-        const cached = (await caches.match(request)) || (request.mode === 'navigate' ? await caches.match('/index.html') : undefined);
+        const cached = (await caches.match(cacheKey || request))
+            || (request.mode === 'navigate' ? await caches.match('/index.html') : undefined);
         if (cached) return cached;
         throw error;
     }

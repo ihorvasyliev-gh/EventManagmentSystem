@@ -90,10 +90,10 @@ export const RestoredDraftNotice: React.FC<{ onStartFresh: () => void; onDismiss
   <div className="mb-5 flex items-center gap-3 p-3 sm:p-4 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 text-sm text-sky-900 dark:text-sky-100" role="status">
     <RotateCcw className="w-4 h-4 shrink-0 text-sky-600 dark:text-sky-400" />
     <span className="flex-1">We restored the event you hadn’t sent yet.</span>
-    <button type="button" onClick={onStartFresh} className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline">
+    <button type="button" onClick={onStartFresh} className="shrink-0 min-w-0 min-h-0 py-1 text-xs font-semibold underline underline-offset-2 hover:no-underline">
       Start fresh
     </button>
-    <button type="button" onClick={onDismiss} aria-label="Dismiss" className="shrink-0 p-1 -m-1 rounded-lg text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50">
+    <button type="button" onClick={onDismiss} aria-label="Dismiss" className="shrink-0 min-w-0 min-h-0 p-1.5 -m-1 rounded-lg inline-flex items-center justify-center text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50">
       <X className="w-4 h-4" />
     </button>
   </div>

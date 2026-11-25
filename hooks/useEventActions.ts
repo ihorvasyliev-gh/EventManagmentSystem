@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type React from 'react';
 import { type Event, type User } from '../types';
+import { supabase } from '../lib/supabase';
 import {
   deleteEvent, deleteRecurrenceInstance, saveCustomSchedule, restoreEvent, removeDeletedEventFiles, dropMissingFiles,
-  type DeletedEvent
+  deletedEventFiles, type DeletedEvent
 } from '../services/eventService';
 import { cacheExceptions } from '../utils/eventsCache';
 import { isSameDay } from '../utils/date';
@@ -41,16 +42,43 @@ export const useEventActions = ({
   modal
 }: EventActionsOptions) => {
   const { event: selectedEvent, close: closeModal } = modal;
+  // Pending Undo-window deletions mapped to the auth token captured when deleted, so a tab close
+  // or reload during the 10s Undo window still flushes R2 file cleanup via keepalive fetch
+  const pendingFileDeletionsRef = useRef(new Map<DeletedEvent, string | null>());
+
+  useEffect(() => {
+    const flushPendingDeletions = () => {
+      if (pendingFileDeletionsRef.current.size === 0) return;
+      const entries = Array.from(pendingFileDeletionsRef.current.entries());
+      pendingFileDeletionsRef.current.clear();
+      for (const [deleted, token] of entries) {
+        const paths = [...new Set(deletedEventFiles(deleted).filter((u) => u.startsWith('/api/file/')))];
+        for (const path of paths) {
+          try {
+            void fetch(path, {
+              method: 'DELETE',
+              keepalive: true,
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined
+            }).catch(() => undefined);
+          } catch {
+            // Best-effort cleanup on unload
+          }
+        }
+      }
+    };
+    window.addEventListener('pagehide', flushPendingDeletions);
+    return () => window.removeEventListener('pagehide', flushPendingDeletions);
+  }, []);
 
   /** Forgets the deleted days of an event (it was deleted, or its dates were saved in full) */
   const forgetExceptions = useCallback((id: string) => {
     setRecurrenceExceptions((prev) => {
       const next = new Map(prev);
       next.delete(id);
-      cacheExceptions(next);
+      cacheExceptions(next, user?.id);
       return next;
     });
-  }, [setRecurrenceExceptions]);
+  }, [setRecurrenceExceptions, user?.id]);
 
   const handleDeleteInstance = useCallback(async (eventId: string, instanceDate: Date) => {
     if (!user) return;
@@ -81,7 +109,7 @@ export const useEventActions = ({
           setRecurrenceExceptions((prev) => {
             const next = new Map(prev);
             next.set(eventId, previousExceptions);
-            cacheExceptions(next);
+            cacheExceptions(next, user.id);
             return next;
           });
         }
@@ -100,7 +128,7 @@ export const useEventActions = ({
       if (!exceptions.some((d) => isSameDay(d, normalizedDate))) {
         next.set(eventId, [...exceptions, normalizedDate]);
       }
-      cacheExceptions(next);
+      cacheExceptions(next, user.id);
       return next;
     });
 
@@ -117,7 +145,7 @@ export const useEventActions = ({
         const next = new Map(prev);
         const exceptions = next.get(eventId) || [];
         next.set(eventId, exceptions.filter((d) => !isSameDay(d, normalizedDate)));
-        cacheExceptions(next);
+        cacheExceptions(next, user.id);
         return next;
       });
     }
@@ -131,22 +159,29 @@ export const useEventActions = ({
     if (!user) return false;
     try {
       const { deleted: copy, lostFiles } = options?.checkFiles ? await dropMissingFiles(deleted) : { deleted, lostFiles: 0 };
-      const { event, deletedDates } = await restoreEvent(copy);
+      const { event, deletedDates, warnings } = await restoreEvent(copy);
       setEvents((prev) => [...prev.filter((e) => e.id !== event.id), event]);
       if (deletedDates.length) {
         setRecurrenceExceptions((prev) => {
           const next = new Map(prev);
           next.set(event.id, deletedDates);
-          cacheExceptions(next);
+          cacheExceptions(next, user.id);
           return next;
         });
       }
-      showToast(
-        lostFiles
-          ? `"${event.title}" is back on the calendar, without its flyer or files (they were removed after it was deleted)`
-          : `"${event.title}" is back on the calendar`,
-        lostFiles ? 'warning' : 'success'
-      );
+      if (warnings.length > 0) {
+        showToast(
+          `"${event.title}" is back on the calendar, but its ${warnings.join(' and ')} could not be restored`,
+          'warning'
+        );
+      } else {
+        showToast(
+          lostFiles
+            ? `"${event.title}" is back on the calendar, without its flyer or files (they were removed after it was deleted)`
+            : `"${event.title}" is back on the calendar`,
+          lostFiles ? 'warning' : 'success'
+        );
+      }
       return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'The event could not be restored', 'error');
@@ -179,10 +214,24 @@ export const useEventActions = ({
       return;
     }
     if (isRecurringEvent(eventToDelete)) forgetExceptions(id);
+
+    const token = await supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? null).catch(() => null);
+    pendingFileDeletionsRef.current.set(deleted, token);
+
     // A while to undo; after that its flyer and attachments are removed from storage
     showToast('Event deleted successfully', 'success', UNDO_MS, {
-      action: { label: 'Undo', onClick: () => void restoreDeletedEvent(deleted) },
-      onExpire: () => void removeDeletedEventFiles(deleted)
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          pendingFileDeletionsRef.current.delete(deleted);
+          void restoreDeletedEvent(deleted);
+        }
+      },
+      onExpire: () => {
+        if (pendingFileDeletionsRef.current.delete(deleted)) {
+          void removeDeletedEventFiles(deleted);
+        }
+      }
     });
   }, [user, events, setEvents, selectedEvent, closeModal, forgetExceptions, showToast, restoreDeletedEvent]);
 

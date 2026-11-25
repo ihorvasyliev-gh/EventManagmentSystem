@@ -7,6 +7,7 @@ import { exportStatsToExcel, STATS_NOTE } from '../utils/statsExcel';
 import { downloadBlob } from '../utils/export';
 import { useToast } from '../contexts/ToastContext';
 import { formatLocalDate } from '../utils/date';
+import { copyText } from '../utils/clipboard';
 import { getCategoryDotColor } from './WeekView';
 
 interface StatsModalProps {
@@ -111,11 +112,10 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, events, recurr
   const copySummary = async () => {
     if (!stats) return;
     const text = statsSummaryText(stats, periodLabel);
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       window.prompt('Copy the summary:', text);
     }
   };

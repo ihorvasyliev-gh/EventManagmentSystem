@@ -53,6 +53,16 @@ export const tokenSubject = (token: string): string | null => {
   }
 };
 
+const FETCH_TIMEOUT_MS = 10_000;
+
+const fetchWithTimeout = async (url: string, init: RequestInit, context: string): Promise<Response> => {
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (err) {
+    throw new Error(`${context}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
+};
+
 /**
  * The signed-in user behind an access token, with their role, or null. The token is checked by
  * the auth server; the profile is read at the same time for the id the token names (instead of
@@ -62,20 +72,40 @@ export const tokenSubject = (token: string): string | null => {
 export const getCaller = async (cfg: SupabaseConfig, token: string | null): Promise<Caller | null> => {
   if (!token) return null;
   const headers = { apikey: cfg.anonKey, Authorization: `Bearer ${token}` };
-  // Read with the caller's own token: row-level security lets signed-in users read profiles
+  // Read with the caller's own token: row-level security lets signed-in users read their own profile
   const readProfile = (id: string) =>
-    fetch(`${cfg.url}/rest/v1/users?id=eq.${encodeURIComponent(id)}&select=role,full_name,email`, { headers });
+    fetchWithTimeout(
+      `${cfg.url}/rest/v1/users?id=eq.${encodeURIComponent(id)}&select=role,full_name,email`,
+      { headers },
+      'Supabase profile request failed'
+    );
   const claimed = tokenSubject(token);
   const [meRes, early] = await Promise.all([
-    fetch(`${cfg.url}/auth/v1/user`, { headers }),
+    fetchWithTimeout(`${cfg.url}/auth/v1/user`, { headers }, 'Supabase auth request failed'),
     claimed ? readProfile(claimed).catch(() => null) : Promise.resolve(null)
   ]);
-  if (!meRes.ok) return null;
+  if (!meRes.ok) {
+    void meRes.body?.cancel().catch(() => {});
+    void early?.body?.cancel().catch(() => {});
+    return null;
+  }
   const me = (await meRes.json()) as { id?: string; email?: string };
-  if (!me.id) return null;
-  const profileRes = early && claimed === me.id ? early : await readProfile(me.id);
+  if (!me.id) {
+    void early?.body?.cancel().catch(() => {});
+    return null;
+  }
+  let profileRes: Response;
+  if (early && claimed === me.id) {
+    profileRes = early;
+  } else {
+    void early?.body?.cancel().catch(() => {});
+    profileRes = await readProfile(me.id);
+  }
   const profile = profileRes.ok ? ((await profileRes.json()) as Array<{ role?: string; full_name?: string; email?: string }>)[0] : undefined;
-  if (!profile) return null;
+  if (!profile) {
+    if (!profileRes.ok) void profileRes.body?.cancel().catch(() => {});
+    return null;
+  }
   return {
     id: me.id,
     email: profile.email || me.email || '',
@@ -87,19 +117,27 @@ export const getCaller = async (cfg: SupabaseConfig, token: string | null): Prom
 /** A PostgREST request made with the service-role key (bypasses row-level security) */
 export const serviceRest = (cfg: SupabaseConfig, path: string, init: RequestInit = {}): Promise<Response> => {
   if (!cfg.serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
-  return fetch(`${cfg.url}/rest/v1/${path}`, {
-    ...init,
-    headers: { ...keyHeaders(cfg.serviceKey), 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
-  });
+  return fetchWithTimeout(
+    `${cfg.url}/rest/v1/${path}`,
+    {
+      ...init,
+      headers: { ...keyHeaders(cfg.serviceKey), 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
+    },
+    'Supabase REST request failed'
+  );
 };
 
 /** Supabase auth admin API (service role) */
 export const authAdmin = (cfg: SupabaseConfig, path: string, init: RequestInit = {}): Promise<Response> => {
   if (!cfg.serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
-  return fetch(`${cfg.url}/auth/v1/admin/${path}`, {
-    ...init,
-    headers: { ...keyHeaders(cfg.serviceKey), 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
-  });
+  return fetchWithTimeout(
+    `${cfg.url}/auth/v1/admin/${path}`,
+    {
+      ...init,
+      headers: { ...keyHeaders(cfg.serviceKey), 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
+    },
+    'Supabase auth admin request failed'
+  );
 };
 
 const PAGE_SIZE = 1000;
@@ -107,17 +145,22 @@ const PAGE_SIZE = 1000;
 /**
  * Every row of a select, page by page. The API returns at most `max_rows` (1000 by default) per
  * request, so a single request silently drops the rest. Pages advance by what actually came back,
- * so a lower server limit still reads everything.
+ * so a lower server limit still reads everything. Always requires the service-role key so missing
+ * secrets fail loudly instead of silently returning empty results under anon RLS.
  */
 export const selectAll = async <T>(cfg: SupabaseConfig, path: string): Promise<T[]> => {
-  // Without the service key (not set up yet) reads fall back to what the public key may see
-  const key = cfg.serviceKey || cfg.anonKey;
+  if (!cfg.serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+  const key = cfg.serviceKey;
   const rows: T[] = [];
   let total = Infinity;
   while (rows.length < total) {
-    const res = await fetch(`${cfg.url}/rest/v1/${path}`, {
-      headers: { ...keyHeaders(key), Range: `${rows.length}-${rows.length + PAGE_SIZE - 1}`, 'Range-Unit': 'items', Prefer: 'count=exact' }
-    });
+    const res = await fetchWithTimeout(
+      `${cfg.url}/rest/v1/${path}`,
+      {
+        headers: { ...keyHeaders(key), Range: `${rows.length}-${rows.length + PAGE_SIZE - 1}`, 'Range-Unit': 'items', Prefer: 'count=exact' }
+      },
+      'Supabase query failed'
+    );
     if (!res.ok && res.status !== 206) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
     const page = (await res.json()) as T[];
     const count = Number(res.headers.get('Content-Range')?.split('/')[1]);

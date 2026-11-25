@@ -23,14 +23,19 @@ const dropPersistentCopy = (): void => {
 // only has to be recent enough to be a fair first picture. 30 minutes meant a skeleton on most visits.
 const CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface CachedEvents {
-  events: Event[];
-  timestamp: number;
+interface CachedEventsEnvelope {
+  userId: string | null;
+  events: unknown[];
 }
 
-/** Events as JSON for Web Storage (dates as ISO strings) */
-function serialize(events: Event[]): string {
-  const raw = events.map((e) => ({
+interface CachedExceptionsEnvelope {
+  userId: string | null;
+  exceptions: Record<string, string[]>;
+}
+
+/** Events as plain objects with ISO date strings */
+function serializeRaw(events: Event[]): unknown[] {
+  return events.map((e) => ({
     ...e,
     date: e.date instanceof Date ? e.date.toISOString() : new Date(e.date).toISOString(),
     endDate: e.endDate
@@ -57,12 +62,10 @@ function serialize(events: Event[]): string {
       }
       : undefined
   }));
-  return JSON.stringify(raw);
 }
 
-/** Events back from JSON, with their dates */
-function deserialize(json: string): Event[] {
-  const raw = JSON.parse(json) as any[];
+/** Events back from plain JSON objects, with their dates */
+function deserializeList(raw: any[]): Event[] {
   return raw.map((e) => ({
     ...e,
     date: new Date(e.date),
@@ -86,12 +89,12 @@ function deserialize(json: string): Event[] {
   }));
 }
 
-export function cacheEvents(events: Event[]): void {
+export function cacheEvents(events: Event[], userId?: string | null): void {
   try {
-    const cached: CachedEvents = { events, timestamp: Date.now() };
+    const envelope: CachedEventsEnvelope = { userId: userId ?? null, events: serializeRaw(events) };
     const storage = cacheStorage();
-    storage?.setItem(EVENTS_CACHE_KEY, serialize(events));
-    storage?.setItem(EVENTS_CACHE_TIMESTAMP_KEY, cached.timestamp.toString());
+    storage?.setItem(EVENTS_CACHE_KEY, JSON.stringify(envelope));
+    storage?.setItem(EVENTS_CACHE_TIMESTAMP_KEY, Date.now().toString());
     dropPersistentCopy();
   } catch (err) {
     if (import.meta.env?.DEV) console.warn('Failed to cache events:', err);
@@ -119,8 +122,8 @@ export function getEventsCacheTime(): Date | null {
   }
 }
 
-/** The cached events, while they are recent enough (CACHE_DURATION_MS) */
-export function getCachedEvents(): Event[] | null {
+/** The cached events for `userId`, while they are recent enough (CACHE_DURATION_MS) */
+export function getCachedEvents(userId?: string | null): Event[] | null {
   try {
     dropPersistentCopy();
     const storage = cacheStorage();
@@ -131,7 +134,21 @@ export function getCachedEvents(): Event[] | null {
     const age = ts ? Date.now() - parseInt(ts, 10) : Infinity;
     if (age > CACHE_DURATION_MS) return null;
 
-    return deserialize(json);
+    const parsed: unknown = JSON.parse(json);
+    // Legacy unscoped array format (from an older build) or corrupt shape: discard safely
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray((parsed as CachedEventsEnvelope).events)) {
+      clearEventsCache();
+      return null;
+    }
+
+    const envelope = parsed as CachedEventsEnvelope;
+    const expectedUser = userId ?? null;
+    const cachedUser = envelope.userId ?? null;
+    if (cachedUser !== expectedUser) {
+      return null;
+    }
+
+    return deserializeList(envelope.events);
   } catch {
     clearEventsCache();
     return null;
@@ -150,39 +167,59 @@ export function clearEventsCache(): void {
 
 // --- Exceptions Cache ---
 
-/** Serialize Map<string, Date[]> to JSON */
-function serializeExceptions(map: Map<string, Date[]>): string {
+/** Serialize Map<string, Date[]> to a plain Record<string, string[]> */
+function serializeExceptionsRaw(map: Map<string, Date[]>): Record<string, string[]> {
   const obj: Record<string, string[]> = {};
   for (const [key, dates] of map.entries()) {
     obj[key] = dates.map(d => d.toISOString());
   }
-  return JSON.stringify(obj);
+  return obj;
 }
 
-/** Deserialize JSON to Map<string, Date[]> */
-function deserializeExceptions(json: string): Map<string, Date[]> {
-  const obj = JSON.parse(json) as Record<string, string[]>;
+/** Deserialize Record<string, string[]> to Map<string, Date[]> */
+function deserializeExceptionsRecord(obj: Record<string, string[]>): Map<string, Date[]> {
   const map = new Map<string, Date[]>();
   for (const [key, dateStrings] of Object.entries(obj)) {
-    map.set(key, dateStrings.map(d => new Date(d)));
+    if (Array.isArray(dateStrings)) {
+      map.set(key, dateStrings.map(d => new Date(d)));
+    }
   }
   return map;
 }
 
-export function cacheExceptions(exceptions: Map<string, Date[]>): void {
+export function cacheExceptions(exceptions: Map<string, Date[]>, userId?: string | null): void {
   try {
-    cacheStorage()?.setItem(EXCEPTIONS_CACHE_KEY, serializeExceptions(exceptions));
+    const envelope: CachedExceptionsEnvelope = {
+      userId: userId ?? null,
+      exceptions: serializeExceptionsRaw(exceptions)
+    };
+    cacheStorage()?.setItem(EXCEPTIONS_CACHE_KEY, JSON.stringify(envelope));
     dropPersistentCopy();
   } catch (err) {
     if (import.meta.env?.DEV) console.warn('Failed to cache exceptions:', err);
   }
 }
 
-export function getCachedExceptions(): Map<string, Date[]> | null {
+export function getCachedExceptions(userId?: string | null): Map<string, Date[]> | null {
   try {
     const json = cacheStorage()?.getItem(EXCEPTIONS_CACHE_KEY);
     if (!json) return null;
-    return deserializeExceptions(json);
+    const parsed: unknown = JSON.parse(json);
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      !('exceptions' in parsed) ||
+      typeof (parsed as CachedExceptionsEnvelope).exceptions !== 'object' ||
+      (parsed as CachedExceptionsEnvelope).exceptions === null
+    ) {
+      return null;
+    }
+    const envelope = parsed as CachedExceptionsEnvelope;
+    if ((envelope.userId ?? null) !== (userId ?? null)) {
+      return null;
+    }
+    return deserializeExceptionsRecord(envelope.exceptions);
   } catch {
     return null;
   }

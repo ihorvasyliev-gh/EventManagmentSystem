@@ -7,6 +7,7 @@ import type { Event } from '../types.ts';
 import type { PeriodStats } from './eventStats.ts';
 import { formatClock } from './date.ts';
 import { isAllDay } from './digestText.ts';
+import { loadOrReload } from './staleChunk.ts';
 
 export interface StatsTable {
   title: string;
@@ -64,7 +65,7 @@ const BODY_FONT = { name: 'Calibri', size: 11, color: { argb: 'FF1E293B' } };
 
 /** The workbook, as an .xlsx file */
 export const exportStatsToExcel = async (stats: PeriodStats, periodLabel: string, dates: Event[]): Promise<Blob> => {
-  const ExcelJS = (await import('exceljs')).default;
+  const ExcelJS = (await loadOrReload(() => import('exceljs'))).default;
   const workbook = new ExcelJS.Workbook();
 
   const summary = workbook.addWorksheet('Summary');

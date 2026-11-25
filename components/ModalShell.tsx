@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 interface ModalShellProps {
   isOpen: boolean;
@@ -24,9 +25,6 @@ const SIZE_CLASS: Record<NonNullable<ModalShellProps['size']>, string> = {
   lg: 'sm:max-w-2xl',
   xl: 'sm:max-w-4xl'
 };
-
-// Nested dialogs each lock scrolling; only the last one to close restores it
-let scrollLocks = 0;
 
 // Phones: how far (px) the sheet is pulled down before letting go closes it, or how fast (px/ms)
 const SWIPE_CLOSE_DISTANCE = 120;
@@ -96,13 +94,7 @@ const ModalShell: React.FC<ModalShellProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    scrollLocks++;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      scrollLocks--;
-      if (scrollLocks === 0) document.body.style.overflow = previous;
-    };
+    return lockBodyScroll();
   }, [isOpen]);
 
   if (!isOpen) return null;

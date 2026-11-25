@@ -40,3 +40,31 @@ test('other filters still apply to a staff member’s own drafts', () => {
   assert.deepEqual(ids(filterEvents(events, { search: 'quiz' }, STAFF_ROLE, STAFF)), []);
   assert.deepEqual(ids(filterEvents(events, { status: 'published' }, STAFF_ROLE, STAFF)), ['published']);
 });
+
+test('status=published includes events with undefined status, and status=draft keeps non-admin ownership guard', () => {
+  const legacyPublished = event({ id: 'legacy', status: undefined as unknown as Event['status'] });
+  const list = [...events, legacyPublished];
+  assert.deepEqual(ids(filterEvents(list, { status: 'published' }, STAFF_ROLE, STAFF)), ['published', 'legacy']);
+  assert.deepEqual(ids(filterEvents(list, { status: 'draft' }, STAFF_ROLE, STAFF)), ['mine']);
+  assert.deepEqual(ids(filterEvents(list, { status: 'draft' }, ADMIN_ROLE, STAFF)), ['mine', 'theirs', 'no-account']);
+});
+
+test('multi-day non-recurring events match a date range they overlap (e.g. Today)', () => {
+  const ongoing = event({
+    id: 'multi',
+    date: new Date('2026-11-04T09:00:00Z'),
+    endDate: new Date('2026-11-06T17:00:00Z')
+  });
+  const endedYesterday = event({
+    id: 'past',
+    date: new Date('2026-11-03T09:00:00Z'),
+    endDate: new Date('2026-11-04T17:00:00Z')
+  });
+  const startsTomorrow = event({
+    id: 'future',
+    date: new Date('2026-11-06T09:00:00Z'),
+    endDate: new Date('2026-11-07T17:00:00Z')
+  });
+  const today = { start: new Date('2026-11-05T00:00:00Z'), end: new Date('2026-11-06T00:00:00Z') };
+  assert.deepEqual(ids(filterEvents([ongoing, endedYesterday, startsTomorrow], { dateRange: today }, ADMIN_ROLE)), ['multi']);
+});

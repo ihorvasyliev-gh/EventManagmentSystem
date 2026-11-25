@@ -10,6 +10,8 @@ import PosterLightbox from './PosterLightbox';
 import { expandRecurringEvents, isRecurringEvent } from '../utils/recurrence';
 import { useToast } from '../contexts/ToastContext';
 import { ownsEvent } from '../utils/eventOwnership';
+import { lockBodyScroll } from '../utils/scrollLock';
+import { copyText } from '../utils/clipboard';
 
 interface EventModalProps {
   isOpen: boolean;
@@ -88,6 +90,11 @@ const EventModal: React.FC<EventModalProps> = ({
   // Escape / backdrop / close button go through requestClose (defined below)
   const requestCloseRef = useRef<() => void>(onClose);
   useModalFocusTrap(isOpen, () => requestCloseRef.current(), modalPanelRef);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return lockBodyScroll();
+  }, [isOpen]);
 
   const isAdmin = role === UserRole.ADMIN;
   // Admins edit any event; staff the ones they sent in (or that name them as the contact)
@@ -177,10 +184,9 @@ const EventModal: React.FC<EventModalProps> = ({
   const handleCopyLink = async () => {
     if (!event || !getShareLink) return;
     const link = getShareLink(event);
-    try {
-      await navigator.clipboard.writeText(link);
+    if (await copyText(link)) {
       showToast('Link copied to clipboard', 'success', 2500);
-    } catch {
+    } else {
       window.prompt('Copy this link:', link);
     }
   };

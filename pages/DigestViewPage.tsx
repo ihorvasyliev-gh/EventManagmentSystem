@@ -201,6 +201,23 @@ const DigestViewPage: React.FC = () => {
     </a>
   );
 
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const TABS: ReadonlyArray<Tab> = ['list', 'pdf'];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const index = TABS.indexOf(showing ?? tab);
+    const next =
+      e.key === 'ArrowRight' ? (index + 1) % TABS.length
+      : e.key === 'ArrowLeft' ? (index - 1 + TABS.length) % TABS.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? TABS.length - 1
+      : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    setTab(TABS[next]);
+    tabListRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  };
+
   const tabButton = (value: Tab, label: string, icon: React.ReactNode) => (
     <button
       type="button"
@@ -208,8 +225,9 @@ const DigestViewPage: React.FC = () => {
       id={`tab-${value}`}
       aria-selected={showing === value}
       aria-controls={`panel-${value}`}
+      tabIndex={showing === value ? 0 : -1}
       onClick={() => setTab(value)}
-      className={`cta inline-flex items-center gap-1.5 px-4 h-10 rounded !text-xs tracking-[0.1em] transition-colors ${
+      className={`cta inline-flex items-center gap-1.5 px-4 h-10 rounded !text-xs tracking-[0.1em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
         showing === value
           ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
           : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
@@ -231,7 +249,7 @@ const DigestViewPage: React.FC = () => {
             <h1 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white truncate">Upcoming Events Digest</h1>
             {digest?.period && <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{digest.period}</p>}
           </div>
-          <div className="ml-auto flex items-center gap-1.5">
+          <div data-print-hide className="ml-auto flex items-center gap-1.5">
             <ThemeToggle />
             {others && versions && digest && <PreviousDigests archive={versions.archive} current={digest.key} />}
             {download}
@@ -271,7 +289,14 @@ const DigestViewPage: React.FC = () => {
         )}
 
         {list && view !== 'missing' && (
-          <div role="tablist" aria-label="Show the digest as" className="mb-4 sm:mb-6 mx-auto w-max flex gap-1 p-1 rounded-md bg-slate-200/70 dark:bg-slate-800">
+          <div
+            ref={tabListRef}
+            data-print-hide
+            role="tablist"
+            aria-label="Show the digest as"
+            onKeyDown={handleTabKeyDown}
+            className="mb-4 sm:mb-6 mx-auto w-max flex gap-1 p-1 rounded-md bg-slate-200/70 dark:bg-slate-800"
+          >
             {tabButton('list', 'List', <List className="w-4 h-4" />)}
             {tabButton('pdf', 'PDF', <FileText className="w-4 h-4" />)}
           </div>
@@ -327,13 +352,17 @@ const DigestViewPage: React.FC = () => {
 const PreviousDigests: React.FC<{ archive: DigestRef[]; current: string }> = ({ archive, current }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -345,6 +374,7 @@ const PreviousDigests: React.FC<{ archive: DigestRef[]; current: string }> = ({ 
   return (
     <div ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}

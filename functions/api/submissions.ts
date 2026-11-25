@@ -12,7 +12,7 @@
  */
 import { json, fail, bearerToken, readJson } from '../../server/http.ts';
 import { supabaseConfig, getCaller, serviceRest, type SupabaseEnv } from '../../server/supabase.ts';
-import { type EmailEnv, sendEmail, appUrl, emailConfigured } from '../../server/email.ts';
+import { type EmailEnv, sendEmailBatch, appUrl, emailConfigured } from '../../server/email.ts';
 import { type FileBucket, deleteUnreferencedFiles } from '../../server/files.ts';
 import { approvedEmail, declinedEmail, type NotifiedEvent } from '../../server/notifications.ts';
 
@@ -51,9 +51,9 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   const idFilter = `id=in.(${ids.join(',')})`;
   const columns = 'id,title,date,location,status,tags,poster_url,recurrence_type,recurrence_interval,recurrence_end_date,recurrence_occurrences,recurrence_custom_dates,submitter_name,submitter_email';
 
-  const notify = (emails: Promise<unknown>) => {
-    if (context.waitUntil) context.waitUntil(emails);
-    else return emails;
+  const runBackground = (task: Promise<unknown>) => {
+    if (context.waitUntil) context.waitUntil(task);
+    else return task;
   };
 
   if (body?.action === 'approve') {
@@ -68,9 +68,11 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
     }
     const rows = (await res.json()) as EventRow[];
     const site = appUrl(env, request);
-    await notify(Promise.all(rows.filter(isSubmission).map((row) =>
-      sendEmail(env, { to: [row.submitter_email ?? ''], ...approvedEmail(row, site, `${site}/?event=${row.id}`), replyTo: caller.email })
-    )));
+    await runBackground(sendEmailBatch(env, rows.filter(isSubmission).map((row) => ({
+      to: [row.submitter_email ?? ''],
+      ...approvedEmail(row, site, `${site}/?event=${row.id}`),
+      replyTo: caller.email
+    }))));
     return json({ events: rows, authorsEmailed: emailConfigured(env) });
   }
 
@@ -94,12 +96,16 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
       return fail('The submissions could not be declined. Please try again.', 502);
     }
     if (env.BUCKET) {
-      await deleteUnreferencedFiles(env.BUCKET, cfg, [...rows.map((r) => r.poster_url), ...attachmentUrls])
-        .catch((err) => console.error('Removing declined flyers failed:', err));
+      await runBackground(
+        deleteUnreferencedFiles(env.BUCKET, cfg, [...rows.map((r) => r.poster_url), ...attachmentUrls])
+          .catch((err) => console.error('Removing declined flyers failed:', err))
+      );
     }
-    await notify(Promise.all(rows.filter(isSubmission).map((row) =>
-      sendEmail(env, { to: [row.submitter_email ?? ''], ...declinedEmail(row, reason), replyTo: caller.email })
-    )));
+    await runBackground(sendEmailBatch(env, rows.filter(isSubmission).map((row) => ({
+      to: [row.submitter_email ?? ''],
+      ...declinedEmail(row, reason),
+      replyTo: caller.email
+    }))));
     return json({ declined: rows.map((r) => r.id), authorsEmailed: emailConfigured(env) });
   }
 

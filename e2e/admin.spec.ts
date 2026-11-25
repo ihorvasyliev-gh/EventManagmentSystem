@@ -258,6 +258,10 @@ test('admins add a category with an icon and colour, and it appears in filters a
 
   await modal.getByRole('button', { name: 'Add category', exact: true }).click();
   const addDialog = page.getByRole('dialog', { name: 'Add category' });
+  // Markers already used by standard categories in the PDF are not offered
+  await expect(addDialog.getByRole('button', { name: 'Digest marker: Circle', exact: true })).toHaveCount(0);
+  await expect(addDialog.getByRole('button', { name: 'Digest marker: Pentagon', exact: true })).toHaveCount(0);
+  await expect(addDialog.getByRole('button', { name: 'Digest marker: Ring', exact: true })).toHaveCount(0);
   await addDialog.getByLabel(/Category name/).fill('Youth & Sports');
   await addDialog.getByLabel(/Short label/).fill('Youth');
   await addDialog.getByRole('button', { name: 'Sports', exact: true }).click();
@@ -279,6 +283,8 @@ test('admins add a category with an icon and colour, and it appears in filters a
   await page.locator('#field-category').getByRole('button', { name: 'New category' }).click();
 
   const quickAdd = page.getByRole('dialog', { name: 'Add category' });
+  // "Plus" was just used by Youth & Sports, so it is no longer shown
+  await expect(quickAdd.getByRole('button', { name: 'Digest marker: Plus', exact: true })).toHaveCount(0);
   await quickAdd.getByLabel(/Category name/).fill('Arts & Culture');
   await quickAdd.getByRole('button', { name: 'Arts', exact: true }).click();
   await quickAdd.getByRole('button', { name: 'Add category', exact: true }).click();

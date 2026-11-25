@@ -15,6 +15,7 @@ import type { IssueBucket } from '../../server/digestIssues.ts';
 import { readCategories, writeCategories, categoriesResponsePayload } from '../../server/categories.ts';
 import {
   categoryKey,
+  getUnusedCategoryShapes,
   isBuiltInCategory,
   mergeCategories,
   validateCategoryInput,
@@ -94,7 +95,7 @@ export const onRequestPost = async (context: Context): Promise<Response> => {
   const existing = mergeCategories(stored.custom);
   const check = validateCategoryInput(body, existing);
   if (!check.ok) {
-    const status = check.error.includes('already exists') ? 409 : 400;
+    const status = check.error.includes('already exists') || check.error.includes('already used') ? 409 : 400;
     return fail(check.error, status);
   }
 
@@ -147,6 +148,12 @@ export const onRequestPatch = async (context: Context): Promise<Response> => {
   if (index < 0) return fail('Category not found.', 404);
 
   const current = stored.custom[index];
+  if (check.patch.pdfShape !== undefined) {
+    const allowedShapes = getUnusedCategoryShapes(mergeCategories(stored.custom), current.name);
+    if (!allowedShapes.includes(check.patch.pdfShape)) {
+      return fail('That PDF digest marker is already used by another category.', 409);
+    }
+  }
   const updated: CategoryDefinition = {
     ...current,
     ...(check.patch.icon !== undefined ? { icon: check.patch.icon } : {}),

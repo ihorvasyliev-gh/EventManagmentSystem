@@ -75,11 +75,19 @@ export const CATEGORY_SHAPES = [
   'triangleDown',
   'hexagon',
   'pentagon',
-  'star',
-  'cross',
-  'octagon',
   'ring',
-  'squareRing'
+  'star',
+  'spark',
+  'cross',
+  'xMark',
+  'octagon',
+  'triangleRight',
+  'triangleLeft',
+  'shield',
+  'hourglass',
+  'squareRing',
+  'diamondRing',
+  'triangleRing'
 ] as const;
 
 export type CategoryShape = (typeof CATEGORY_SHAPES)[number];
@@ -99,7 +107,8 @@ export interface CategoryDefinition {
 export const MAX_CATEGORY_NAME = 60;
 export const MIN_CATEGORY_NAME = 2;
 export const MAX_SHORT_LABEL = 24;
-export const MAX_CUSTOM_CATEGORIES = 40;
+/** Every category keeps its own unique PDF digest marker, so custom categories fit the unused markers */
+export const MAX_CUSTOM_CATEGORIES = CATEGORY_SHAPES.length - EVENT_CATEGORIES.length;
 
 /** Short names for tight spots (the calendar's category filter); the full name stays in the tooltip */
 export const CATEGORY_SHORT_LABELS: Record<EventCategoryName, string> = {
@@ -162,24 +171,45 @@ export const categoryKey = (name: string): string => {
 };
 
 const BUILTIN_KEYS = new Set(DEFAULT_CATEGORIES.map((c) => categoryKey(c.name)));
+const BUILTIN_SHAPES = new Set<CategoryShape>(DEFAULT_CATEGORIES.map((c) => c.pdfShape));
 
 export const isBuiltInCategory = (name: string): boolean => BUILTIN_KEYS.has(categoryKey(name));
 
-/** Built-in categories (with custom ones inserted right before "Other"), deduplicated by key */
+/** PDF digest shapes not currently used by any category in `existing` (optionally excluding one category being edited) */
+export const getUnusedCategoryShapes = (
+  existing: readonly Pick<CategoryDefinition, 'name' | 'pdfShape'>[] = DEFAULT_CATEGORIES,
+  excludeName?: string
+): CategoryShape[] => {
+  const excludedKey = excludeName ? categoryKey(excludeName) : null;
+  const used = new Set<CategoryShape>();
+  for (const c of existing) {
+    if (excludedKey && categoryKey(c.name) === excludedKey) continue;
+    if (isCategoryShape(c.pdfShape)) used.add(c.pdfShape);
+  }
+  return CATEGORY_SHAPES.filter((s) => !used.has(s));
+};
+
+/** Built-in categories (with custom ones inserted right before "Other"), deduplicated by key and PDF marker */
 export const mergeCategories = (custom: readonly Partial<CategoryDefinition>[]): CategoryDefinition[] => {
   const seen = new Set<string>(BUILTIN_KEYS);
+  const usedShapes = new Set<CategoryShape>(BUILTIN_SHAPES);
   const validCustom: CategoryDefinition[] = [];
   for (const item of custom) {
     if (!item.name) continue;
     const key = categoryKey(item.name);
     if (!key || seen.has(key)) continue;
+    const preferred = isCategoryShape(item.pdfShape) && !usedShapes.has(item.pdfShape)
+      ? item.pdfShape
+      : CATEGORY_SHAPES.find((s) => !usedShapes.has(s));
+    if (!preferred) break;
     seen.add(key);
+    usedShapes.add(preferred);
     validCustom.push({
       name: normalizeCategoryName(item.name),
       ...(item.shortLabel?.trim() ? { shortLabel: normalizeCategoryName(item.shortLabel) } : {}),
       icon: isCategoryIconId(item.icon) ? item.icon : 'tag',
       color: isCategoryTone(item.color) ? item.color : 'other',
-      pdfShape: isCategoryShape(item.pdfShape) ? item.pdfShape : 'star',
+      pdfShape: preferred,
       builtIn: false,
       ...(item.createdAt ? { createdAt: item.createdAt } : {}),
       ...(item.createdBy ? { createdBy: item.createdBy } : {})
@@ -202,7 +232,7 @@ export interface CategoryInputError {
 /** Validates input when an admin creates a custom category */
 export const validateCategoryInput = (
   input: unknown,
-  existing: readonly Pick<CategoryDefinition, 'name'>[] = DEFAULT_CATEGORIES
+  existing: readonly Pick<CategoryDefinition, 'name' | 'pdfShape'>[] = DEFAULT_CATEGORIES
 ): CategoryInputResult | CategoryInputError => {
   if (!input || typeof input !== 'object') {
     return { ok: false, error: 'Category details are required.' };
@@ -245,9 +275,19 @@ export const validateCategoryInput = (
     return { ok: false, error: 'Please pick a valid colour.' };
   }
 
-  const pdfShape: CategoryShape = raw.pdfShape === undefined ? 'star' : isCategoryShape(raw.pdfShape) ? raw.pdfShape : ('' as CategoryShape);
-  if (!pdfShape) {
+  const unusedShapes = getUnusedCategoryShapes(existing);
+  let pdfShape: CategoryShape;
+  if (raw.pdfShape === undefined) {
+    if (unusedShapes.length === 0) {
+      return { ok: false, error: 'All PDF digest markers are already in use.' };
+    }
+    pdfShape = unusedShapes[0];
+  } else if (!isCategoryShape(raw.pdfShape)) {
     return { ok: false, error: 'Please pick a valid digest marker.' };
+  } else if (!unusedShapes.includes(raw.pdfShape)) {
+    return { ok: false, error: 'That PDF digest marker is already used by another category.' };
+  } else {
+    pdfShape = raw.pdfShape;
   }
 
   return {
@@ -305,10 +345,11 @@ export const validateCategoryPatch = (
   return { ok: true, patch };
 };
 
-/** Sanitizes an untrusted array of custom categories (from R2 or localStorage) */
+/** Sanitizes an untrusted array of custom categories (from R2 or localStorage), keeping PDF markers unique */
 export const parseStoredCustomCategories = (value: unknown): CategoryDefinition[] => {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>(BUILTIN_KEYS);
+  const usedShapes = new Set<CategoryShape>(BUILTIN_SHAPES);
   const out: CategoryDefinition[] = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
@@ -317,7 +358,12 @@ export const parseStoredCustomCategories = (value: unknown): CategoryDefinition[
     if (name.length < MIN_CATEGORY_NAME || name.length > MAX_CATEGORY_NAME || !/[\p{L}\p{N}]/u.test(name)) continue;
     const key = categoryKey(name);
     if (!key || seen.has(key)) continue;
+    const pdfShape = isCategoryShape(raw.pdfShape) && !usedShapes.has(raw.pdfShape)
+      ? raw.pdfShape
+      : CATEGORY_SHAPES.find((s) => !usedShapes.has(s));
+    if (!pdfShape) break;
     seen.add(key);
+    usedShapes.add(pdfShape);
     const shortRaw = typeof raw.shortLabel === 'string' ? normalizeCategoryName(raw.shortLabel) : '';
     const shortLabel = shortRaw && shortRaw.length <= MAX_SHORT_LABEL ? shortRaw : undefined;
     out.push({
@@ -325,7 +371,7 @@ export const parseStoredCustomCategories = (value: unknown): CategoryDefinition[
       ...(shortLabel ? { shortLabel } : {}),
       icon: isCategoryIconId(raw.icon) ? raw.icon : 'tag',
       color: isCategoryTone(raw.color) ? raw.color : 'indigo',
-      pdfShape: isCategoryShape(raw.pdfShape) ? raw.pdfShape : 'star',
+      pdfShape,
       builtIn: false,
       ...(typeof raw.createdAt === 'string' ? { createdAt: raw.createdAt } : {}),
       ...(typeof raw.createdBy === 'string' ? { createdBy: raw.createdBy } : {})

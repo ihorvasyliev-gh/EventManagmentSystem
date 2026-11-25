@@ -13,6 +13,7 @@ import {
   MAX_SHORT_LABEL,
   MIN_CATEGORY_NAME,
   categoryKey,
+  getUnusedCategoryShapes,
   normalizeCategoryName,
   type CategoryDefinition,
   type CategoryIconId,
@@ -43,13 +44,6 @@ const suggestTone = (custom: readonly CategoryDefinition[]): CategoryTone => {
   return preferred.find((t) => !used.has(t)) ?? 'indigo';
 };
 
-/** Pick a PDF digest marker shape not yet used by standard or custom categories */
-const suggestShape = (all: readonly CategoryDefinition[]): CategoryShape => {
-  const preferred: CategoryShape[] = ['star', 'cross', 'octagon', 'squareRing', 'circle', 'square', 'triangle', 'diamond', 'triangleDown', 'hexagon', 'pentagon', 'ring'];
-  const used = new Set(all.map((c) => c.pdfShape));
-  return preferred.find((s) => !used.has(s)) ?? 'star';
-};
-
 /**
  * Admins: manage event categories (view all, add custom categories with app icons, PDF digest
  * markers & colours, edit or remove custom categories). New categories appear immediately in the
@@ -72,7 +66,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   const [shortLabel, setShortLabel] = useState('');
   const [icon, setIcon] = useState<CategoryIconId>('star');
   const [color, setColor] = useState<CategoryTone>('indigo');
-  const [pdfShape, setPdfShape] = useState<CategoryShape>('star');
+  const [pdfShape, setPdfShape] = useState<CategoryShape>(() => getUnusedCategoryShapes(categories)[0] ?? 'star');
   const [iconSearch, setIconSearch] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -80,6 +74,17 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+
+  // Only show PDF markers not currently used in the PDF (when editing, keep this category's own marker)
+  const unusedForAdd = useMemo(() => getUnusedCategoryShapes(categories), [categories]);
+  const availableShapeOptions = useMemo(() => {
+    const allowed = new Set(
+      view === 'edit' && editingName
+        ? getUnusedCategoryShapes(categories, editingName)
+        : unusedForAdd
+    );
+    return CATEGORY_SHAPE_OPTIONS.filter((opt) => allowed.has(opt.id));
+  }, [categories, editingName, unusedForAdd, view]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -94,12 +99,20 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
       setShortLabel('');
       setIcon('star');
       setColor(suggestTone(customCategories));
-      setPdfShape(suggestShape(categories));
+      setPdfShape(getUnusedCategoryShapes(categories)[0] ?? 'star');
     } else {
       setView('list');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when opened
   }, [isOpen, initialMode]);
+
+  // If the currently selected shape is no longer available (e.g. categories refreshed), pick the first unused one
+  useEffect(() => {
+    if (view === 'list' || availableShapeOptions.length === 0) return;
+    if (!availableShapeOptions.some((o) => o.id === pdfShape)) {
+      setPdfShape(availableShapeOptions[0].id);
+    }
+  }, [availableShapeOptions, pdfShape, view]);
 
   useEffect(() => {
     if (isOpen && view === 'add') {
@@ -117,7 +130,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   }, [iconSearch]);
 
   const selectedIconOption = CATEGORY_ICON_OPTIONS.find((o) => o.id === icon) ?? CATEGORY_ICON_OPTIONS[0];
-  const selectedShapeOption = CATEGORY_SHAPE_OPTIONS.find((o) => o.id === pdfShape) ?? CATEGORY_SHAPE_OPTIONS[0];
+  const selectedShapeOption = availableShapeOptions.find((o) => o.id === pdfShape) ?? availableShapeOptions[0];
 
   const openAdd = () => {
     setView('add');
@@ -126,7 +139,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
     setShortLabel('');
     setIcon('star');
     setColor(suggestTone(customCategories));
-    setPdfShape(suggestShape(categories));
+    setPdfShape(unusedForAdd[0] ?? 'star');
     setIconSearch('');
     setFormError(null);
   };
@@ -175,8 +188,12 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
         setFormError('A category with that name already exists.');
         return;
       }
-      if (customCategories.length >= MAX_CUSTOM_CATEGORIES) {
-        setFormError(`You can add at most ${MAX_CUSTOM_CATEGORIES} custom categories.`);
+      if (customCategories.length >= MAX_CUSTOM_CATEGORIES || availableShapeOptions.length === 0) {
+        setFormError('All PDF digest markers are already in use. Remove a custom category to add another.');
+        return;
+      }
+      if (!availableShapeOptions.some((o) => o.id === pdfShape)) {
+        setFormError('That PDF digest marker is already used by another category.');
         return;
       }
 
@@ -262,7 +279,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
           <button
             type="button"
             onClick={openAdd}
-            disabled={customCategories.length >= MAX_CUSTOM_CATEGORIES}
+            disabled={customCategories.length >= MAX_CUSTOM_CATEGORIES || unusedForAdd.length === 0}
             className={primaryButton}
           >
             <Plus className="w-4 h-4" /> Add category
@@ -288,7 +305,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
             Cancel
           </button>
         )}
-        <button type="submit" form={formId} disabled={isSaving} className={primaryButton}>
+        <button type="submit" form={formId} disabled={isSaving || availableShapeOptions.length === 0} className={primaryButton}>
           {isSaving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" /> Saving…
@@ -620,37 +637,43 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
             )}
           </fieldset>
 
-          {/* PDF Digest marker picker */}
+          {/* PDF Digest marker picker — only unused markers are shown */}
           <fieldset>
             <legend className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
-              PDF digest marker <span className="font-normal text-slate-500 dark:text-slate-400">· {selectedShapeOption.label}</span>
+              PDF digest marker{selectedShapeOption && <span className="font-normal text-slate-500 dark:text-slate-400"> · {selectedShapeOption.label}</span>}
             </legend>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-              Shown next to events and on the overview calendar in the PDF digest (stays distinct in black-and-white print).
+              Only markers not already used in the PDF digest are shown, so every category stays distinct.
             </p>
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
-              {CATEGORY_SHAPE_OPTIONS.map((opt) => {
-                const selected = pdfShape === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setPdfShape(opt.id)}
-                    aria-label={`Digest marker: ${opt.label}`}
-                    aria-pressed={selected}
-                    title={opt.label}
-                    className={`flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl border text-[11px] font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                      selected
-                        ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-200 shadow-xs'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-700'
-                    }`}
-                  >
-                    <CategoryShapeMark shape={opt.id} tone={color} className="w-4 h-4" />
-                    <span className="truncate max-w-full leading-none">{opt.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {availableShapeOptions.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                All PDF digest markers are currently in use. Remove a custom category to free one up.
+              </p>
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                {availableShapeOptions.map((opt) => {
+                  const selected = pdfShape === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setPdfShape(opt.id)}
+                      aria-label={`Digest marker: ${opt.label}`}
+                      aria-pressed={selected}
+                      title={opt.label}
+                      className={`flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl border text-[11px] font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                        selected
+                          ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-200 shadow-xs'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-700'
+                      }`}
+                    >
+                      <CategoryShapeMark shape={opt.id} tone={color} className="w-4 h-4" />
+                      <span className="truncate max-w-full leading-none">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </fieldset>
         </form>
       )}

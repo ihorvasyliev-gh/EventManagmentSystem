@@ -170,9 +170,9 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
   const categoryMark = (category: string | undefined, cx: number, cy: number, r: number, rim = true) => {
     const shape = getCategoryShape(category);
     const accent = getCategoryRgb(category).accent;
-    const hollow = shape === 'ring' || shape === 'squareRing';
+    const hollow = shape === 'ring' || shape === 'squareRing' || shape === 'diamondRing' || shape === 'triangleRing';
     fill(hollow ? WHITE : accent);
-    stroke(hollow ? accent : INK, hollow ? r * 0.45 : 0.15);
+    stroke(hollow ? accent : INK, hollow ? r * 0.42 : 0.15);
     const style = hollow || rim ? 'FD' : 'F';
     const poly = (pts: Array<[number, number]>) => {
       const rel = pts.slice(1).map(([px, py], i) => [px - pts[i][0], py - pts[i][1]]);
@@ -188,11 +188,23 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
       case 'triangle':
         poly([[cx, cy - r * 1.05], [cx + r * 1.05, cy + r * 0.8], [cx - r * 1.05, cy + r * 0.8]]);
         break;
-      case 'diamond':
-        poly([[cx, cy - r * 1.15], [cx + r * 1.15, cy], [cx, cy + r * 1.15], [cx - r * 1.15, cy]]);
+      case 'triangleRing':
+        poly([[cx, cy - r * 0.92], [cx + r * 0.92, cy + r * 0.7], [cx - r * 0.92, cy + r * 0.7]]);
         break;
       case 'triangleDown':
         poly([[cx - r * 1.05, cy - r * 0.8], [cx + r * 1.05, cy - r * 0.8], [cx, cy + r * 1.05]]);
+        break;
+      case 'triangleRight':
+        poly([[cx - r * 0.8, cy - r * 1.05], [cx + r * 1.05, cy], [cx - r * 0.8, cy + r * 1.05]]);
+        break;
+      case 'triangleLeft':
+        poly([[cx + r * 0.8, cy - r * 1.05], [cx + r * 0.8, cy + r * 1.05], [cx - r * 1.05, cy]]);
+        break;
+      case 'diamond':
+        poly([[cx, cy - r * 1.15], [cx + r * 1.15, cy], [cx, cy + r * 1.15], [cx - r * 1.15, cy]]);
+        break;
+      case 'diamondRing':
+        poly([[cx, cy - r * 0.98], [cx + r * 0.98, cy], [cx, cy + r * 0.98], [cx - r * 0.98, cy]]);
         break;
       case 'hexagon':
         poly(Array.from({ length: 6 }, (_, k) => {
@@ -213,6 +225,13 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
           return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)] as [number, number];
         }));
         break;
+      case 'spark':
+        poly(Array.from({ length: 8 }, (_, k) => {
+          const a = -Math.PI / 2 + (k * Math.PI) / 4;
+          const rad = k % 2 === 0 ? r * 1.15 : r * 0.42;
+          return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)] as [number, number];
+        }));
+        break;
       case 'cross': {
         const a = r * 0.36;
         const b = r * 1.05;
@@ -224,11 +243,45 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
         ]);
         break;
       }
+      case 'xMark': {
+        const a = r * 0.36;
+        const b = r * 1.05;
+        const rot = Math.PI / 4;
+        const cos = Math.cos(rot);
+        const sin = Math.sin(rot);
+        const base: Array<[number, number]> = [
+          [-a, -b], [a, -b], [a, -a],
+          [b, -a], [b, a], [a, a],
+          [a, b], [-a, b], [-a, a],
+          [-b, a], [-b, -a], [-a, -a]
+        ];
+        poly(base.map(([x, y]) => [cx + x * cos - y * sin, cy + x * sin + y * cos]));
+        break;
+      }
       case 'octagon':
         poly(Array.from({ length: 8 }, (_, k) => {
           const a = Math.PI / 8 + (k * Math.PI) / 4;
           return [cx + r * 1.05 * Math.cos(a), cy + r * 1.05 * Math.sin(a)] as [number, number];
         }));
+        break;
+      case 'shield':
+        poly([
+          [cx - r * 0.85, cy - r * 0.9],
+          [cx + r * 0.85, cy - r * 0.9],
+          [cx + r * 0.85, cy + r * 0.05],
+          [cx, cy + r * 1.1],
+          [cx - r * 0.85, cy + r * 0.05]
+        ]);
+        break;
+      case 'hourglass':
+        poly([
+          [cx - r * 0.92, cy - r * 0.95],
+          [cx + r * 0.92, cy - r * 0.95],
+          [cx + r * 0.25, cy],
+          [cx + r * 0.92, cy + r * 0.95],
+          [cx - r * 0.92, cy + r * 0.95],
+          [cx - r * 0.25, cy]
+        ]);
         break;
       case 'ring':
         doc.circle(cx, cy, r * 0.8, style);

@@ -8,6 +8,7 @@ import {
   getCategoryIconId,
   getCategoryShape,
   getCategoryTone,
+  getUnusedCategoryShapes,
   mergeCategories,
   parseStoredCustomCategories,
   setCustomCategories,
@@ -56,21 +57,23 @@ const req = (method: string, options: { token?: string; body?: unknown; query?: 
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined
   });
 
-test('custom categories sit before Other, deduplicated by key against standard and custom names', () => {
+test('custom categories sit before Other, deduplicated by key and PDF marker against standard and custom names', () => {
   const merged = mergeCategories([
     { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'star' },
     { name: 'seminar / conference', icon: 'mic', color: 'olive' }, // collides with built-in Seminar/Conference
     { name: 'Youth   Sports', icon: 'bike', color: 'olive' }, // collides with Youth & Sports
-    { name: 'Arts & Culture', icon: 'palette', color: 'olive', pdfShape: 'cross' }
+    { name: 'Arts & Culture', icon: 'palette', color: 'olive', pdfShape: 'star' } // duplicate marker auto-reassigned
   ]);
   const names = merged.map((c) => c.name);
   assert.equal(names[names.length - 1], 'Other', 'Other stays last');
   assert.equal(names[names.length - 3], 'Youth & Sports');
   assert.equal(names[names.length - 2], 'Arts & Culture');
   assert.equal(merged.length, DEFAULT_CATEGORIES.length + 2);
+  // Every category has a unique PDF digest marker
+  assert.equal(new Set(merged.map((c) => c.pdfShape)).size, merged.length);
 });
 
-test('category input validation checks name, icon, colour, digest marker, short label and duplicates', () => {
+test('category input validation checks name, icon, colour, unique digest marker, short label and duplicates', () => {
   const ok = validateCategoryInput({ name: '  Youth  &  Sports ', shortLabel: ' Youth ', icon: 'trophy', color: 'indigo', pdfShape: 'cross' });
   assert.equal(ok.ok, true);
   if (ok.ok) {
@@ -87,7 +90,15 @@ test('category input validation checks name, icon, colour, digest marker, short 
   assert.equal(validateCategoryInput({ name: 'Youth', icon: 'not-an-icon', color: 'indigo' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'neon-pink' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'blob' }).ok, false);
+  // Standard PDF markers cannot be reused
+  assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'circle' }).ok, false);
+  assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'pentagon' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', shortLabel: 'x'.repeat(30), icon: 'trophy', color: 'indigo' }).ok, false);
+
+  const unused = getUnusedCategoryShapes(DEFAULT_CATEGORIES);
+  assert.equal(unused.includes('circle'), false);
+  assert.equal(unused.includes('pentagon'), false);
+  assert.equal(unused.includes('star'), true);
 
   const patchOk = validateCategoryPatch({ icon: 'music', color: 'olive', pdfShape: 'octagon', shortLabel: '' });
   assert.equal(patchOk.ok, true);
@@ -121,14 +132,17 @@ test('runtime category registry powers icons, tones, PDF digest markers, short l
   assert.equal(getCategoryShape('Youth & Sports'), 'ring');
 });
 
-test('parseStoredCustomCategories drops invalid items and respects the limit', () => {
+test('parseStoredCustomCategories drops invalid items, keeps unique PDF markers and respects the limit', () => {
   const many = Array.from({ length: MAX_CUSTOM_CATEGORIES + 5 }, (_, i) => ({
     name: `Custom ${i + 1}`,
     icon: 'star',
-    color: 'indigo'
+    color: 'indigo',
+    pdfShape: 'circle' // colliding with built-in gets reassigned uniquely
   }));
   const parsed = parseStoredCustomCategories([null, { name: 'x' }, ...many]);
   assert.equal(parsed.length, MAX_CUSTOM_CATEGORIES);
+  assert.equal(new Set(parsed.map((c) => c.pdfShape)).size, parsed.length);
+  assert.ok(!parsed.some((c) => c.pdfShape === 'circle'));
 });
 
 test('GET /api/categories is public and returns defaults until an admin adds custom categories', async () => {
@@ -150,7 +164,7 @@ test('GET /api/categories is public and returns defaults until an admin adds cus
   assert.deepEqual(((await res.json()) as { custom: unknown[] }).custom, []);
 });
 
-test('only admins can add, edit or delete categories, and added categories are served to everyone', async () => {
+test('only admins can add, edit or delete categories, PDF markers cannot be duplicated, and added categories are served to everyone', async () => {
   const calls = mockFetch([
     ...authRoutes,
     ({ url, method }) => (url.includes('/rest/v1/event_categories') && (method === 'POST' || method === 'DELETE') ? new Response(null, { status: 201 }) : undefined)
@@ -164,6 +178,13 @@ test('only admins can add, edit or delete categories, and added categories are s
   assert.equal((await onRequestPatch({ request: req('PATCH', { token: 'staff-token', body: { name: 'Youth & Sports', icon: 'bike' } }), env: { ...env, BUCKET } })).status, 403);
   assert.equal((await onRequestDelete({ request: req('DELETE', { token: 'staff-token', query: '?name=Youth' }), env: { ...env, BUCKET } })).status, 403);
   assert.equal(BUCKET.contents.size, 0);
+
+  // Admin cannot reuse a PDF marker already used by a standard category
+  const stdDup = await onRequestPost({
+    request: req('POST', { token: 'admin-token', body: { ...newCat, pdfShape: 'circle' } }),
+    env: { ...env, BUCKET }
+  });
+  assert.equal(stdDup.status, 409);
 
   // Admin creates the category
   const createdRes = await onRequestPost({ request: req('POST', { token: 'admin-token', body: newCat }), env: { ...env, BUCKET } });
@@ -182,12 +203,19 @@ test('only admins can add, edit or delete categories, and added categories are s
   assert.ok(CATEGORIES_KEY.startsWith('meta/'), 'never served by /api/file');
   assert.ok(calls.some((c) => c.url.includes('/rest/v1/event_categories') && c.method === 'POST'));
 
-  // Duplicate (even with different case/punctuation) is refused with 409
+  // Duplicate name (even with different case/punctuation) is refused with 409
   const dup = await onRequestPost({
-    request: req('POST', { token: 'admin-token', body: { name: 'youth sports', icon: 'bike', color: 'olive' } }),
+    request: req('POST', { token: 'admin-token', body: { name: 'youth sports', icon: 'bike', color: 'olive', pdfShape: 'cross' } }),
     env: { ...env, BUCKET }
   });
   assert.equal(dup.status, 409);
+
+  // Duplicate PDF marker taken by another custom category is refused with 409
+  const dupShape = await onRequestPost({
+    request: req('POST', { token: 'admin-token', body: { name: 'Arts & Culture', icon: 'palette', color: 'olive', pdfShape: 'star' } }),
+    env: { ...env, BUCKET }
+  });
+  assert.equal(dupShape.status, 409);
 
   // Public GET now includes the new category right before Other
   const publicRes = await onRequestGet({ request: req('GET'), env: { ...env, BUCKET } });
@@ -195,7 +223,14 @@ test('only admins can add, edit or delete categories, and added categories are s
   assert.equal(publicData.categories.at(-2)?.name, 'Youth & Sports');
   assert.equal(publicData.categories.at(-1)?.name, 'Other');
 
-  // Admin updates icon, digest marker and clears shortLabel
+  // Admin cannot PATCH a custom category to a PDF marker used by a standard category
+  const badPatch = await onRequestPatch({
+    request: req('PATCH', { token: 'admin-token', body: { name: 'Youth & Sports', pdfShape: 'hexagon' } }),
+    env: { ...env, BUCKET }
+  });
+  assert.equal(badPatch.status, 409);
+
+  // Admin updates icon, digest marker (to a free one) and clears shortLabel
   const patchRes = await onRequestPatch({
     request: req('PATCH', { token: 'admin-token', body: { name: 'Youth & Sports', icon: 'bike', color: 'olive', pdfShape: 'octagon', shortLabel: '' } }),
     env: { ...env, BUCKET }

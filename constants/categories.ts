@@ -67,11 +67,30 @@ export const CATEGORY_ICON_IDS = [
 
 export type CategoryIconId = (typeof CATEGORY_ICON_IDS)[number];
 
+export const CATEGORY_SHAPES = [
+  'circle',
+  'square',
+  'triangle',
+  'diamond',
+  'triangleDown',
+  'hexagon',
+  'pentagon',
+  'star',
+  'cross',
+  'octagon',
+  'ring',
+  'squareRing'
+] as const;
+
+export type CategoryShape = (typeof CATEGORY_SHAPES)[number];
+
 export interface CategoryDefinition {
   name: string;
   shortLabel?: string;
   icon: CategoryIconId;
   color: CategoryTone;
+  /** Vector marker shape used in the PDF digest (calendar grid, legend, event cards) */
+  pdfShape: CategoryShape;
   builtIn?: boolean;
   createdAt?: string;
   createdBy?: string;
@@ -95,14 +114,14 @@ export const CATEGORY_SHORT_LABELS: Record<EventCategoryName, string> = {
 };
 
 export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
-  { name: 'Enterprise & Employment', shortLabel: 'Enterprise', icon: 'briefcase', color: 'enterprise', builtIn: true },
-  { name: 'Community & Family', shortLabel: 'Community', icon: 'users', color: 'community', builtIn: true },
-  { name: 'Education & Training', shortLabel: 'Education', icon: 'graduation-cap', color: 'education', builtIn: true },
-  { name: 'Special Visits & Celebrations', shortLabel: 'Special visits', icon: 'sparkles', color: 'special', builtIn: true },
-  { name: 'Public Information Session', shortLabel: 'Info sessions', icon: 'megaphone', color: 'info', builtIn: true },
-  { name: 'Health & Wellbeing', shortLabel: 'Health', icon: 'heart', color: 'health', builtIn: true },
-  { name: 'Seminar/Conference', shortLabel: 'Seminars', icon: 'presentation', color: 'seminar', builtIn: true },
-  { name: 'Other', shortLabel: 'Other', icon: 'tag', color: 'other', builtIn: true }
+  { name: 'Enterprise & Employment', shortLabel: 'Enterprise', icon: 'briefcase', color: 'enterprise', pdfShape: 'circle', builtIn: true },
+  { name: 'Community & Family', shortLabel: 'Community', icon: 'users', color: 'community', pdfShape: 'square', builtIn: true },
+  { name: 'Education & Training', shortLabel: 'Education', icon: 'graduation-cap', color: 'education', pdfShape: 'triangle', builtIn: true },
+  { name: 'Special Visits & Celebrations', shortLabel: 'Special visits', icon: 'sparkles', color: 'special', pdfShape: 'diamond', builtIn: true },
+  { name: 'Public Information Session', shortLabel: 'Info sessions', icon: 'megaphone', color: 'info', pdfShape: 'triangleDown', builtIn: true },
+  { name: 'Health & Wellbeing', shortLabel: 'Health', icon: 'heart', color: 'health', pdfShape: 'hexagon', builtIn: true },
+  { name: 'Seminar/Conference', shortLabel: 'Seminars', icon: 'presentation', color: 'seminar', pdfShape: 'pentagon', builtIn: true },
+  { name: 'Other', shortLabel: 'Other', icon: 'tag', color: 'other', pdfShape: 'ring', builtIn: true }
 ];
 
 const LEGACY_TONES: Record<string, CategoryTone> = {
@@ -117,12 +136,16 @@ const LEGACY_TONES: Record<string, CategoryTone> = {
 
 const TONE_SET = new Set<string>(CATEGORY_TONES);
 const ICON_SET = new Set<string>(CATEGORY_ICON_IDS);
+const SHAPE_SET = new Set<string>(CATEGORY_SHAPES);
 
 export const isCategoryTone = (value: unknown): value is CategoryTone =>
   typeof value === 'string' && TONE_SET.has(value);
 
 export const isCategoryIconId = (value: unknown): value is CategoryIconId =>
   typeof value === 'string' && ICON_SET.has(value);
+
+export const isCategoryShape = (value: unknown): value is CategoryShape =>
+  typeof value === 'string' && SHAPE_SET.has(value);
 
 /** Collapses surrounding and repeated whitespace */
 export const normalizeCategoryName = (value: string): string =>
@@ -143,10 +166,11 @@ const BUILTIN_KEYS = new Set(DEFAULT_CATEGORIES.map((c) => categoryKey(c.name)))
 export const isBuiltInCategory = (name: string): boolean => BUILTIN_KEYS.has(categoryKey(name));
 
 /** Built-in categories (with custom ones inserted right before "Other"), deduplicated by key */
-export const mergeCategories = (custom: readonly CategoryDefinition[]): CategoryDefinition[] => {
+export const mergeCategories = (custom: readonly Partial<CategoryDefinition>[]): CategoryDefinition[] => {
   const seen = new Set<string>(BUILTIN_KEYS);
   const validCustom: CategoryDefinition[] = [];
   for (const item of custom) {
+    if (!item.name) continue;
     const key = categoryKey(item.name);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -155,6 +179,7 @@ export const mergeCategories = (custom: readonly CategoryDefinition[]): Category
       ...(item.shortLabel?.trim() ? { shortLabel: normalizeCategoryName(item.shortLabel) } : {}),
       icon: isCategoryIconId(item.icon) ? item.icon : 'tag',
       color: isCategoryTone(item.color) ? item.color : 'other',
+      pdfShape: isCategoryShape(item.pdfShape) ? item.pdfShape : 'star',
       builtIn: false,
       ...(item.createdAt ? { createdAt: item.createdAt } : {}),
       ...(item.createdBy ? { createdBy: item.createdBy } : {})
@@ -220,6 +245,11 @@ export const validateCategoryInput = (
     return { ok: false, error: 'Please pick a valid colour.' };
   }
 
+  const pdfShape: CategoryShape = raw.pdfShape === undefined ? 'star' : isCategoryShape(raw.pdfShape) ? raw.pdfShape : ('' as CategoryShape);
+  if (!pdfShape) {
+    return { ok: false, error: 'Please pick a valid digest marker.' };
+  }
+
   return {
     ok: true,
     category: {
@@ -227,20 +257,21 @@ export const validateCategoryInput = (
       ...(shortLabel ? { shortLabel } : {}),
       icon,
       color,
+      pdfShape,
       builtIn: false
     }
   };
 };
 
-/** Validates a patch when an admin updates a custom category's icon, colour or short label */
+/** Validates a patch when an admin updates a custom category's icon, colour, digest marker or short label */
 export const validateCategoryPatch = (
   input: unknown
-): { ok: true; patch: { icon?: CategoryIconId; color?: CategoryTone; shortLabel?: string | null } } | CategoryInputError => {
+): { ok: true; patch: { icon?: CategoryIconId; color?: CategoryTone; pdfShape?: CategoryShape; shortLabel?: string | null } } | CategoryInputError => {
   if (!input || typeof input !== 'object') {
     return { ok: false, error: 'Update details are required.' };
   }
   const raw = input as Record<string, unknown>;
-  const patch: { icon?: CategoryIconId; color?: CategoryTone; shortLabel?: string | null } = {};
+  const patch: { icon?: CategoryIconId; color?: CategoryTone; pdfShape?: CategoryShape; shortLabel?: string | null } = {};
 
   if (raw.icon !== undefined) {
     if (!isCategoryIconId(raw.icon)) return { ok: false, error: 'Please pick a valid icon.' };
@@ -249,6 +280,10 @@ export const validateCategoryPatch = (
   if (raw.color !== undefined) {
     if (!isCategoryTone(raw.color)) return { ok: false, error: 'Please pick a valid colour.' };
     patch.color = raw.color;
+  }
+  if (raw.pdfShape !== undefined) {
+    if (!isCategoryShape(raw.pdfShape)) return { ok: false, error: 'Please pick a valid digest marker.' };
+    patch.pdfShape = raw.pdfShape;
   }
   if (raw.shortLabel !== undefined) {
     if (raw.shortLabel === null || raw.shortLabel === '') {
@@ -264,7 +299,7 @@ export const validateCategoryPatch = (
     }
   }
 
-  if (patch.icon === undefined && patch.color === undefined && patch.shortLabel === undefined) {
+  if (patch.icon === undefined && patch.color === undefined && patch.pdfShape === undefined && patch.shortLabel === undefined) {
     return { ok: false, error: 'Nothing to update.' };
   }
   return { ok: true, patch };
@@ -290,6 +325,7 @@ export const parseStoredCustomCategories = (value: unknown): CategoryDefinition[
       ...(shortLabel ? { shortLabel } : {}),
       icon: isCategoryIconId(raw.icon) ? raw.icon : 'tag',
       color: isCategoryTone(raw.color) ? raw.color : 'indigo',
+      pdfShape: isCategoryShape(raw.pdfShape) ? raw.pdfShape : 'star',
       builtIn: false,
       ...(typeof raw.createdAt === 'string' ? { createdAt: raw.createdAt } : {}),
       ...(typeof raw.createdBy === 'string' ? { createdBy: raw.createdBy } : {})
@@ -307,7 +343,7 @@ export const parseStoredCustomCategories = (value: unknown): CategoryDefinition[
 let activeCategories: CategoryDefinition[] = [...DEFAULT_CATEGORIES];
 let byKey = new Map<string, CategoryDefinition>(activeCategories.map((c) => [categoryKey(c.name), c]));
 
-export const setCustomCategories = (custom: readonly CategoryDefinition[]): CategoryDefinition[] => {
+export const setCustomCategories = (custom: readonly Partial<CategoryDefinition>[]): CategoryDefinition[] => {
   activeCategories = mergeCategories(custom);
   byKey = new Map(activeCategories.map((c) => [categoryKey(c.name), c]));
   return activeCategories;
@@ -330,6 +366,11 @@ export const getCategoryTone = (category?: string): CategoryTone => {
 export const getCategoryIconId = (category?: string): CategoryIconId => {
   if (!category) return 'tag';
   return byKey.get(categoryKey(category))?.icon ?? 'tag';
+};
+
+export const getCategoryShape = (category?: string): CategoryShape => {
+  if (!category) return 'ring';
+  return byKey.get(categoryKey(category))?.pdfShape ?? 'ring';
 };
 
 /** The short name of a category; custom or older names use their shortLabel or full name */

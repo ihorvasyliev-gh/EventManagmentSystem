@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeft, Check, Loader2, Pencil, Plus, Search, Tag, Trash2 } from 'lucide-react';
 import ModalShell from './ModalShell';
 import CategoryIcon, { CATEGORY_ICON_OPTIONS } from './CategoryIcon';
+import CategoryShapeMark, { CATEGORY_SHAPE_OPTIONS } from './CategoryShapeMark';
 import { getToneChipClass, getToneDotClass, getToneIconClass, TONE_LABELS } from './WeekView';
 import { useCategories } from '../contexts/CategoriesContext';
 import { useToast } from '../contexts/ToastContext';
@@ -15,6 +16,7 @@ import {
   normalizeCategoryName,
   type CategoryDefinition,
   type CategoryIconId,
+  type CategoryShape,
   type CategoryTone
 } from '../constants/categories';
 
@@ -41,10 +43,17 @@ const suggestTone = (custom: readonly CategoryDefinition[]): CategoryTone => {
   return preferred.find((t) => !used.has(t)) ?? 'indigo';
 };
 
+/** Pick a PDF digest marker shape not yet used by standard or custom categories */
+const suggestShape = (all: readonly CategoryDefinition[]): CategoryShape => {
+  const preferred: CategoryShape[] = ['star', 'cross', 'octagon', 'squareRing', 'circle', 'square', 'triangle', 'diamond', 'triangleDown', 'hexagon', 'pentagon', 'ring'];
+  const used = new Set(all.map((c) => c.pdfShape));
+  return preferred.find((s) => !used.has(s)) ?? 'star';
+};
+
 /**
- * Admins: manage event categories (view all, add custom categories with icons & colours,
- * edit or remove custom categories). New categories appear immediately in the submission form,
- * calendar filters and subscribe page.
+ * Admins: manage event categories (view all, add custom categories with app icons, PDF digest
+ * markers & colours, edit or remove custom categories). New categories appear immediately in the
+ * submission form, calendar filters, subscribe page and PDF digest.
  */
 const CategoriesModal: React.FC<CategoriesModalProps> = ({
   isOpen,
@@ -63,6 +72,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   const [shortLabel, setShortLabel] = useState('');
   const [icon, setIcon] = useState<CategoryIconId>('star');
   const [color, setColor] = useState<CategoryTone>('indigo');
+  const [pdfShape, setPdfShape] = useState<CategoryShape>('star');
   const [iconSearch, setIconSearch] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,6 +94,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
       setShortLabel('');
       setIcon('star');
       setColor(suggestTone(customCategories));
+      setPdfShape(suggestShape(categories));
     } else {
       setView('list');
     }
@@ -106,6 +117,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   }, [iconSearch]);
 
   const selectedIconOption = CATEGORY_ICON_OPTIONS.find((o) => o.id === icon) ?? CATEGORY_ICON_OPTIONS[0];
+  const selectedShapeOption = CATEGORY_SHAPE_OPTIONS.find((o) => o.id === pdfShape) ?? CATEGORY_SHAPE_OPTIONS[0];
 
   const openAdd = () => {
     setView('add');
@@ -114,6 +126,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
     setShortLabel('');
     setIcon('star');
     setColor(suggestTone(customCategories));
+    setPdfShape(suggestShape(categories));
     setIconSearch('');
     setFormError(null);
   };
@@ -125,6 +138,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
     setShortLabel(cat.shortLabel ?? '');
     setIcon(cat.icon);
     setColor(cat.color);
+    setPdfShape(cat.pdfShape);
     setIconSearch('');
     setFormError(null);
     setConfirmDeleteName(null);
@@ -172,7 +186,8 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
           name: cleanName,
           ...(cleanShort ? { shortLabel: cleanShort } : {}),
           icon,
-          color
+          color,
+          pdfShape
         });
         showToast(`Category "${created.name}" added`, 'success');
         if (onCreated) {
@@ -195,6 +210,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
         const updated = await editCategory(editingName, {
           icon,
           color,
+          pdfShape,
           shortLabel: cleanShort || null
         });
         showToast(`Category "${updated.name}" updated`, 'success');
@@ -228,10 +244,10 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
   const modalTitle = view === 'add' ? 'Add category' : view === 'edit' ? 'Edit category' : 'Event categories';
   const modalSubtitle =
     view === 'add'
-      ? 'Appears in the submission form, calendar filters and subscribe page.'
+      ? 'Appears in the submission form, calendar filters, subscribe page and PDF digest.'
       : view === 'edit'
-      ? 'Change its icon, colour or short label across the calendar.'
-      : 'Manage categories available in the submission form and filters.';
+      ? 'Change its icon, colour, digest marker or short label across the app.'
+      : 'Manage categories available in the submission form, filters and digest.';
 
   const footer =
     view === 'list' ? (
@@ -324,7 +340,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
               <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 p-5 text-center">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No custom categories yet</p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Add a category with an icon and colour — it will show up in the event submission form right away.
+                  Add a category with an icon, colour and digest marker — it will show up in the event submission form right away.
                 </p>
                 <button
                   type="button"
@@ -356,6 +372,13 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
                                 {cat.shortLabel}
                               </span>
                             )}
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                              title="PDF digest marker"
+                            >
+                              <CategoryShapeMark shape={cat.pdfShape} tone={cat.color} className="w-3 h-3" />
+                              <span>PDF</span>
+                            </span>
                           </div>
                           {cat.createdBy && (
                             <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
@@ -369,7 +392,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
                             onClick={() => openEdit(cat)}
                             disabled={!!deletingName}
                             aria-label={`Edit ${cat.name}`}
-                            title="Edit icon or colour"
+                            title="Edit icon, colour or digest marker"
                             className="p-2 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-brand-50 dark:text-slate-400 dark:hover:text-brand-300 dark:hover:bg-slate-800 transition-colors"
                           >
                             <Pencil className="w-4 h-4" />
@@ -438,6 +461,9 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
                     <CategoryIcon iconId={cat.icon} className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate flex-1">{cat.name}</span>
+                  <span className="shrink-0" title="PDF digest marker">
+                    <CategoryShapeMark shape={cat.pdfShape} tone={cat.color} className="w-3.5 h-3.5" />
+                  </span>
                 </div>
               ))}
             </div>
@@ -467,6 +493,11 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${getToneChipClass(color)}`}>
                 <CategoryIcon iconId={icon} className="w-3 h-3 shrink-0" />
                 <span>{previewShort}</span>
+              </span>
+              {/* PDF digest marker preview */}
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                <CategoryShapeMark shape={pdfShape} tone={color} className="w-3.5 h-3.5" />
+                <span>PDF: {previewShort}</span>
               </span>
             </div>
           </div>
@@ -538,11 +569,11 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
             </div>
           </fieldset>
 
-          {/* Icon picker */}
+          {/* App icon picker */}
           <fieldset>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <legend className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Icon <span className="font-normal text-slate-500 dark:text-slate-400">· {selectedIconOption.label}</span>
+                App icon <span className="font-normal text-slate-500 dark:text-slate-400">· {selectedIconOption.label}</span>
               </legend>
               <div className="relative w-full sm:w-48">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
@@ -562,7 +593,7 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
                 No icons match “{iconSearch.trim()}”.
               </p>
             ) : (
-              <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 max-h-56 overflow-y-auto p-0.5">
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 max-h-48 overflow-y-auto p-0.5">
                 {filteredIcons.map((opt) => {
                   const selected = icon === opt.id;
                   const IconComponent = opt.Icon;
@@ -587,6 +618,39 @@ const CategoriesModal: React.FC<CategoriesModalProps> = ({
                 })}
               </div>
             )}
+          </fieldset>
+
+          {/* PDF Digest marker picker */}
+          <fieldset>
+            <legend className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+              PDF digest marker <span className="font-normal text-slate-500 dark:text-slate-400">· {selectedShapeOption.label}</span>
+            </legend>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+              Shown next to events and on the overview calendar in the PDF digest (stays distinct in black-and-white print).
+            </p>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+              {CATEGORY_SHAPE_OPTIONS.map((opt) => {
+                const selected = pdfShape === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPdfShape(opt.id)}
+                    aria-label={`Digest marker: ${opt.label}`}
+                    aria-pressed={selected}
+                    title={opt.label}
+                    className={`flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl border text-[11px] font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                      selected
+                        ? 'border-brand-600 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-200 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-700'
+                    }`}
+                  >
+                    <CategoryShapeMark shape={opt.id} tone={color} className="w-4 h-4" />
+                    <span className="truncate max-w-full leading-none">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </fieldset>
         </form>
       )}

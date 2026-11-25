@@ -150,7 +150,8 @@ export const onRequestPatch = async (context: Context): Promise<Response> => {
   const updated: CategoryDefinition = {
     ...current,
     ...(check.patch.icon !== undefined ? { icon: check.patch.icon } : {}),
-    ...(check.patch.color !== undefined ? { color: check.patch.color } : {})
+    ...(check.patch.color !== undefined ? { color: check.patch.color } : {}),
+    ...(check.patch.pdfShape !== undefined ? { pdfShape: check.patch.pdfShape } : {})
   };
   if (check.patch.shortLabel === null) {
     delete updated.shortLabel;

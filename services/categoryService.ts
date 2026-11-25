@@ -4,6 +4,7 @@ import {
   parseStoredCustomCategories,
   type CategoryDefinition,
   type CategoryIconId,
+  type CategoryShape,
   type CategoryTone
 } from '../constants/categories';
 
@@ -22,12 +23,14 @@ export interface NewCategoryInput {
   shortLabel?: string;
   icon: CategoryIconId;
   color: CategoryTone;
+  pdfShape?: CategoryShape;
 }
 
 export interface UpdateCategoryInput {
   shortLabel?: string | null;
   icon?: CategoryIconId;
   color?: CategoryTone;
+  pdfShape?: CategoryShape;
 }
 
 export const readCachedCustomCategories = (): CategoryDefinition[] => {

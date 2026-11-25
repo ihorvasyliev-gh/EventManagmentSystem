@@ -155,16 +155,21 @@ export const mockSupabase = async (page: Page, { role = 'admin', mustChangePassw
   await page.route('**/api/categories**', (route) => {
     const method = route.request().method();
     if (method === 'POST') {
-      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string; icon: string; color: string };
-      const added = { ...body, createdAt: '2026-11-25T14:00:00Z', createdBy: profile.full_name };
+      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string; icon: string; color: string; pdfShape?: string };
+      const added = { pdfShape: 'star', ...body, createdAt: '2026-11-25T14:00:00Z', createdBy: profile.full_name };
       state.customCategories = [...state.customCategories, added];
       return json(route, { category: added, custom: state.customCategories, updatedAt: added.createdAt, updatedBy: profile.full_name }, 201);
     }
     if (method === 'PATCH') {
-      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string | null; icon?: string; color?: string };
+      const body = JSON.parse(route.request().postData() || '{}') as { name: string; shortLabel?: string | null; icon?: string; color?: string; pdfShape?: string };
       state.customCategories = state.customCategories.map((c) => {
         if (c.name !== body.name) return c;
-        const next = { ...c, ...(body.icon ? { icon: body.icon } : {}), ...(body.color ? { color: body.color } : {}) };
+        const next = {
+          ...c,
+          ...(body.icon ? { icon: body.icon } : {}),
+          ...(body.color ? { color: body.color } : {}),
+          ...(body.pdfShape ? { pdfShape: body.pdfShape } : {})
+        };
         if (body.shortLabel === null) delete next.shortLabel;
         else if (body.shortLabel) next.shortLabel = body.shortLabel;
         return next;

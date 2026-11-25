@@ -6,7 +6,7 @@ import type jsPDF from 'jspdf';
 import { getCategoryRgb, type Rgb } from '../../constants/categoryColors';
 import { FONT_FILES, type Weight } from './fonts';
 import { LINKISH_GLOBAL, trimLinkPunctuation, linkUrl, cleanPdfText, cleanUnicodeText } from './text';
-import { CATEGORY_SHAPE, BRAND, BRAND_LIGHT, INK, LINK, WHITE } from './theme';
+import { getCategoryShape, BRAND, BRAND_LIGHT, INK, LINK, WHITE } from './theme';
 
 /** Adds the Lato files to the document; false when they couldn't be (the digest then uses Helvetica) */
 export const registerLato = (doc: jsPDF, fontData: Record<Weight, string> | null): boolean => {
@@ -168,11 +168,12 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
    * so they can be told apart in black-and-white print and with colour blindness.
    */
   const categoryMark = (category: string | undefined, cx: number, cy: number, r: number, rim = true) => {
-    const shape = CATEGORY_SHAPE[category || ''] ?? 'ring';
+    const shape = getCategoryShape(category);
     const accent = getCategoryRgb(category).accent;
-    fill(shape === 'ring' ? WHITE : accent);
-    stroke(shape === 'ring' ? accent : INK, shape === 'ring' ? r * 0.45 : 0.15);
-    const style = shape === 'ring' || rim ? 'FD' : 'F';
+    const hollow = shape === 'ring' || shape === 'squareRing';
+    fill(hollow ? WHITE : accent);
+    stroke(hollow ? accent : INK, hollow ? r * 0.45 : 0.15);
+    const style = hollow || rim ? 'FD' : 'F';
     const poly = (pts: Array<[number, number]>) => {
       const rel = pts.slice(1).map(([px, py], i) => [px - pts[i][0], py - pts[i][1]]);
       doc.lines(rel, pts[0][0], pts[0][1], [1, 1], style, true);
@@ -180,6 +181,9 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
     switch (shape) {
       case 'square':
         doc.rect(cx - r * 0.85, cy - r * 0.85, r * 1.7, r * 1.7, style);
+        break;
+      case 'squareRing':
+        doc.rect(cx - r * 0.72, cy - r * 0.72, r * 1.44, r * 1.44, style);
         break;
       case 'triangle':
         poly([[cx, cy - r * 1.05], [cx + r * 1.05, cy + r * 0.8], [cx - r * 1.05, cy + r * 0.8]]);
@@ -200,6 +204,30 @@ export const createPdfKit = (doc: jsPDF, hasLato: boolean) => {
         poly(Array.from({ length: 5 }, (_, k) => {
           const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
           return [cx + r * 1.08 * Math.cos(a), cy + r * 1.08 * Math.sin(a)] as [number, number];
+        }));
+        break;
+      case 'star':
+        poly(Array.from({ length: 10 }, (_, k) => {
+          const a = -Math.PI / 2 + (k * Math.PI) / 5;
+          const rad = k % 2 === 0 ? r * 1.15 : r * 0.5;
+          return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)] as [number, number];
+        }));
+        break;
+      case 'cross': {
+        const a = r * 0.36;
+        const b = r * 1.05;
+        poly([
+          [cx - a, cy - b], [cx + a, cy - b], [cx + a, cy - a],
+          [cx + b, cy - a], [cx + b, cy + a], [cx + a, cy + a],
+          [cx + a, cy + b], [cx - a, cy + b], [cx - a, cy + a],
+          [cx - b, cy + a], [cx - b, cy - a], [cx - a, cy - a]
+        ]);
+        break;
+      }
+      case 'octagon':
+        poly(Array.from({ length: 8 }, (_, k) => {
+          const a = Math.PI / 8 + (k * Math.PI) / 4;
+          return [cx + r * 1.05 * Math.cos(a), cy + r * 1.05 * Math.sin(a)] as [number, number];
         }));
         break;
       case 'ring':

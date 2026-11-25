@@ -1,8 +1,9 @@
 /** The digest's look: corkcitypartnership.ie colours, category shapes, spacing presets */
 import { type Rgb } from '../../constants/categoryColors';
+import { getCategoryShape, type CategoryShape } from '../../constants/categories';
 
 // Second cue besides colour for each category (see categoryMark)
-export type CategoryShape = 'circle' | 'square' | 'triangle' | 'diamond' | 'triangleDown' | 'hexagon' | 'pentagon' | 'ring';
+export { getCategoryShape, type CategoryShape };
 export const CATEGORY_SHAPE: Record<string, CategoryShape> = {
   'Enterprise & Employment': 'circle',
   'Community & Family': 'square',

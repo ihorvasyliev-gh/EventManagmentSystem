@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CATEGORY_SHAPES,
   DEFAULT_CATEGORIES,
   MAX_CUSTOM_CATEGORIES,
   categoryFromKey,
   getCategoryIconId,
+  getCategoryShape,
   getCategoryTone,
   mergeCategories,
   parseStoredCustomCategories,
@@ -56,10 +58,10 @@ const req = (method: string, options: { token?: string; body?: unknown; query?: 
 
 test('custom categories sit before Other, deduplicated by key against standard and custom names', () => {
   const merged = mergeCategories([
-    { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo' },
+    { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'star' },
     { name: 'seminar / conference', icon: 'mic', color: 'olive' }, // collides with built-in Seminar/Conference
     { name: 'Youth   Sports', icon: 'bike', color: 'olive' }, // collides with Youth & Sports
-    { name: 'Arts & Culture', icon: 'palette', color: 'olive' }
+    { name: 'Arts & Culture', icon: 'palette', color: 'olive', pdfShape: 'cross' }
   ]);
   const names = merged.map((c) => c.name);
   assert.equal(names[names.length - 1], 'Other', 'Other stays last');
@@ -68,14 +70,15 @@ test('custom categories sit before Other, deduplicated by key against standard a
   assert.equal(merged.length, DEFAULT_CATEGORIES.length + 2);
 });
 
-test('category input validation checks name, icon, colour, short label and duplicates', () => {
-  const ok = validateCategoryInput({ name: '  Youth  &  Sports ', shortLabel: ' Youth ', icon: 'trophy', color: 'indigo' });
+test('category input validation checks name, icon, colour, digest marker, short label and duplicates', () => {
+  const ok = validateCategoryInput({ name: '  Youth  &  Sports ', shortLabel: ' Youth ', icon: 'trophy', color: 'indigo', pdfShape: 'cross' });
   assert.equal(ok.ok, true);
   if (ok.ok) {
     assert.equal(ok.category.name, 'Youth & Sports');
     assert.equal(ok.category.shortLabel, 'Youth');
     assert.equal(ok.category.icon, 'trophy');
     assert.equal(ok.category.color, 'indigo');
+    assert.equal(ok.category.pdfShape, 'cross');
   }
 
   assert.equal(validateCategoryInput({ name: 'A', icon: 'trophy', color: 'indigo' }).ok, false);
@@ -83,33 +86,39 @@ test('category input validation checks name, icon, colour, short label and dupli
   assert.equal(validateCategoryInput({ name: 'Seminar / Conference', icon: 'trophy', color: 'indigo' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', icon: 'not-an-icon', color: 'indigo' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'neon-pink' }).ok, false);
+  assert.equal(validateCategoryInput({ name: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'blob' }).ok, false);
   assert.equal(validateCategoryInput({ name: 'Youth', shortLabel: 'x'.repeat(30), icon: 'trophy', color: 'indigo' }).ok, false);
 
-  const patchOk = validateCategoryPatch({ icon: 'music', color: 'olive', shortLabel: '' });
+  const patchOk = validateCategoryPatch({ icon: 'music', color: 'olive', pdfShape: 'octagon', shortLabel: '' });
   assert.equal(patchOk.ok, true);
   if (patchOk.ok) {
-    assert.deepEqual(patchOk.patch, { icon: 'music', color: 'olive', shortLabel: null });
+    assert.deepEqual(patchOk.patch, { icon: 'music', color: 'olive', pdfShape: 'octagon', shortLabel: null });
   }
   assert.equal(validateCategoryPatch({}).ok, false);
   assert.equal(validateCategoryPatch({ icon: 'invalid' }).ok, false);
+  assert.equal(validateCategoryPatch({ pdfShape: 'invalid' }).ok, false);
 });
 
-test('runtime category registry powers icons, tones, PDF colours, short labels and subscribe links', () => {
+test('runtime category registry powers icons, tones, PDF digest markers, short labels and subscribe links', () => {
   try {
     setCustomCategories([
-      { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo' }
+      { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'cross' }
     ]);
     assert.equal(getCategoryTone('Youth & Sports'), 'indigo');
     assert.equal(getCategoryIconId('Youth & Sports'), 'trophy');
+    assert.equal(getCategoryShape('Youth & Sports'), 'cross');
+    assert.equal(getCategoryShape('Seminar/Conference'), 'pentagon');
     assert.equal(shortCategoryLabel('Youth & Sports'), 'Youth');
     assert.deepEqual(getCategoryRgb('Youth & Sports'), TONE_RGB.indigo);
     assert.equal(categoryFromKey('youth-sports'), 'Youth & Sports');
     assert.deepEqual(knownCategories(['youth-sports', 'other']), ['Youth & Sports', 'Other']);
+    assert.ok(CATEGORY_SHAPES.includes('star') && CATEGORY_SHAPES.includes('squareRing'));
   } finally {
     setCustomCategories([]);
   }
   assert.equal(getCategoryTone('Youth & Sports'), 'other');
   assert.equal(getCategoryIconId('Youth & Sports'), 'tag');
+  assert.equal(getCategoryShape('Youth & Sports'), 'ring');
 });
 
 test('parseStoredCustomCategories drops invalid items and respects the limit', () => {
@@ -147,7 +156,7 @@ test('only admins can add, edit or delete categories, and added categories are s
     ({ url, method }) => (url.includes('/rest/v1/event_categories') && (method === 'POST' || method === 'DELETE') ? new Response(null, { status: 201 }) : undefined)
   ]);
   const BUCKET = bucket();
-  const newCat = { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo' };
+  const newCat = { name: 'Youth & Sports', shortLabel: 'Youth', icon: 'trophy', color: 'indigo', pdfShape: 'star' };
 
   // Signed-out and staff callers are refused
   assert.equal((await onRequestPost({ request: req('POST', { body: newCat }), env: { ...env, BUCKET } })).status, 401);
@@ -160,13 +169,14 @@ test('only admins can add, edit or delete categories, and added categories are s
   const createdRes = await onRequestPost({ request: req('POST', { token: 'admin-token', body: newCat }), env: { ...env, BUCKET } });
   assert.equal(createdRes.status, 201);
   const createdBody = (await createdRes.json()) as {
-    category: { name: string; shortLabel?: string; icon: string; color: string; createdBy?: string };
+    category: { name: string; shortLabel?: string; icon: string; color: string; pdfShape: string; createdBy?: string };
     categories: Array<{ name: string }>;
     custom: Array<{ name: string }>;
   };
   assert.equal(createdBody.category.name, 'Youth & Sports');
   assert.equal(createdBody.category.icon, 'trophy');
   assert.equal(createdBody.category.color, 'indigo');
+  assert.equal(createdBody.category.pdfShape, 'star');
   assert.equal(createdBody.category.createdBy, 'Ada Admin');
   assert.ok(BUCKET.contents.has(CATEGORIES_KEY));
   assert.ok(CATEGORIES_KEY.startsWith('meta/'), 'never served by /api/file');
@@ -185,15 +195,16 @@ test('only admins can add, edit or delete categories, and added categories are s
   assert.equal(publicData.categories.at(-2)?.name, 'Youth & Sports');
   assert.equal(publicData.categories.at(-1)?.name, 'Other');
 
-  // Admin updates icon and clears shortLabel
+  // Admin updates icon, digest marker and clears shortLabel
   const patchRes = await onRequestPatch({
-    request: req('PATCH', { token: 'admin-token', body: { name: 'Youth & Sports', icon: 'bike', color: 'olive', shortLabel: '' } }),
+    request: req('PATCH', { token: 'admin-token', body: { name: 'Youth & Sports', icon: 'bike', color: 'olive', pdfShape: 'octagon', shortLabel: '' } }),
     env: { ...env, BUCKET }
   });
   assert.equal(patchRes.status, 200);
-  const patched = (await patchRes.json()) as { category: { icon: string; color: string; shortLabel?: string } };
+  const patched = (await patchRes.json()) as { category: { icon: string; color: string; pdfShape: string; shortLabel?: string } };
   assert.equal(patched.category.icon, 'bike');
   assert.equal(patched.category.color, 'olive');
+  assert.equal(patched.category.pdfShape, 'octagon');
   assert.equal(patched.category.shortLabel, undefined);
 
   // Built-in categories cannot be edited or deleted

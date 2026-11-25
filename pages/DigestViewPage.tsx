@@ -8,7 +8,8 @@ import {
 } from '../utils/digestLinks';
 import { MONTHS_LONG, WEEKDAYS_LONG } from '../utils/digestText';
 import { parseDigestList, type DigestList, type DigestListEntry } from '../utils/digestList';
-import { getCategoryDotColor } from '../components/WeekView';
+import { getCategoryIconColor } from '../components/WeekView';
+import CategoryIcon from '../components/CategoryIcon';
 import type { EventCategory } from '../types';
 
 type ViewState = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
@@ -450,7 +451,7 @@ const DigestListView: React.FC<{ list: DigestList }> = ({ list }) => {
             {entries.map((entry, i) => (
               <li key={i} className="p-4 rounded-leaf-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(entry.category as EventCategory)}`} aria-hidden="true" />
+                  <CategoryIcon category={entry.category} className={`w-3.5 h-3.5 shrink-0 ${getCategoryIconColor(entry.category as EventCategory)}`} />
                   <span className="truncate">{entry.category}</span>
                   {(entry.isUpdated || entry.isNew) && (
                     <span className="ml-auto shrink-0 flex gap-1">

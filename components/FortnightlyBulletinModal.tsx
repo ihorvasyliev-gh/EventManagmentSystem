@@ -19,7 +19,8 @@ import { expandRecurringEvents } from '../utils/recurrence';
 import { groupDigestOccurrences, formatAlsoOnDates, digestWeekStart } from '../utils/digestGrouping';
 import type { DigestPreviousIssue } from '../utils/pdf/digest/context';
 import { useToast } from '../contexts/ToastContext';
-import { getCategoryDotColor } from './WeekView';
+import { getCategoryIconColor } from './WeekView';
+import CategoryIcon from './CategoryIcon';
 import ModalShell from './ModalShell';
 
 interface FortnightlyBulletinModalProps {
@@ -781,7 +782,7 @@ const FortnightlyBulletinModal: React.FC<FortnightlyBulletinModalProps> = ({
               <ul tabIndex={0} aria-label="Events in this digest" className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/70 max-h-64 overflow-y-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 {groups.map((g) => (
                   <li key={g.event.id} className="flex items-center gap-3 px-3 py-2.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${getCategoryDotColor(g.event.category)}`} aria-hidden="true" />
+                    <CategoryIcon category={g.event.category} className={`w-4 h-4 shrink-0 ${getCategoryIconColor(g.event.category)}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{g.event.title}</p>
                       {g.occurrences.length > 1 && (

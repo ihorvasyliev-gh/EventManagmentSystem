@@ -262,6 +262,7 @@ test('admins add a category with an icon and colour, and it appears in filters a
   await addDialog.getByLabel(/Short label/).fill('Youth');
   await addDialog.getByRole('button', { name: 'Sports', exact: true }).click();
   await addDialog.getByRole('button', { name: 'Indigo', exact: true }).click();
+  await addDialog.getByRole('button', { name: 'Digest marker: Plus', exact: true }).click();
   await expectAccessible(page);
   await addDialog.getByRole('button', { name: 'Add category', exact: true }).click();
 

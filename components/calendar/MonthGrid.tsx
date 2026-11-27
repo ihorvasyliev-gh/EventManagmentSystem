@@ -86,6 +86,8 @@ const MonthGrid: React.FC<MonthGridProps> = ({
   const todayColumn = (today.getDay() + 6) % 7;
   useEffect(() => {
     if (isMobile || !showsToday) return;
+    // Keep the Wednesday/Friday routine prompt fully visible at the top until sent or dismissed
+    if (document.querySelector('[data-routine-banner]')) return;
     const cell = todayCellRef.current;
     if (!cell || cell.getBoundingClientRect().bottom <= window.innerHeight) return;
     cell.scrollIntoView?.({ block: 'nearest' });

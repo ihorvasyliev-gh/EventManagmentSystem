@@ -31,6 +31,7 @@ const WeeklyRoutineBanner: React.FC<WeeklyRoutineBannerProps> = ({
 
   return (
     <section
+      data-routine-banner=""
       aria-label={isReminder ? 'Wednesday reminder' : 'Friday digest'}
       className={`mb-3 rounded-xl border border-l-4 px-3.5 py-3 shadow-xs transition-colors ${
         isReminder

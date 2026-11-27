@@ -187,17 +187,6 @@ const Navbar: React.FC<NavbarProps> = ({
                   <span>Digest</span>
                 </button>
               )}
-              {isAdmin && onSendReminder && (
-                <button
-                  type="button"
-                  onClick={onSendReminder}
-                  className={`${barButton} hidden lg:inline-flex`}
-                  title="Email all staff a reminder to send in their events before Friday's digest"
-                >
-                  <BellRing className="h-4 w-4" />
-                  <span>Reminder</span>
-                </button>
-              )}
               {onExportClick && (
                 <button
                   type="button"
@@ -305,6 +294,11 @@ const Navbar: React.FC<NavbarProps> = ({
                     {isAdmin && onOpenStaff && (
                       <button type="button" role="menuitem" onClick={closeMenuAnd(onOpenStaff)} className={accountItem}>
                         <Users className="h-4 w-4 text-slate-400" /> Staff accounts
+                      </button>
+                    )}
+                    {isAdmin && onSendReminder && (
+                      <button type="button" role="menuitem" onClick={closeMenuAnd(onSendReminder)} className={accountItem}>
+                        <BellRing className="h-4 w-4 text-slate-400" /> Send a reminder
                       </button>
                     )}
                     {isAdmin && onOpenEmailRecipients && (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Event } from '../types';
 import { fetchSentDigest, type SentDigest } from '../services/digestService';
+import { formatLocalDate } from '../utils/date';
 import { issuedDay, sentDigestChanges, type SentDigestState } from '../utils/sentDigest';
 
 /** The digest that went out has events that read differently now: its day and their titles */
@@ -18,19 +19,24 @@ export interface DigestChange {
  */
 export const useSentDigest = (enabled: boolean, ready: boolean, events: Event[], recurrenceExceptions?: Map<string, Date[]>) => {
   const [sent, setSent] = useState<SentDigestState<SentDigest> | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [lookups, setLookups] = useState(0);
   const refresh = useCallback(() => setLookups((n) => n + 1), []);
 
   useEffect(() => {
     if (!enabled) {
       setSent(null);
+      setLoaded(false);
       return;
     }
     let active = true;
     fetchSentDigest()
       .then((found) => active && setSent(found))
       // Nothing to point to: the dialog still offers the update when opened
-      .catch(() => active && setSent(null));
+      .catch(() => active && setSent(null))
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
     return () => {
       active = false;
     };
@@ -42,5 +48,7 @@ export const useSentDigest = (enabled: boolean, ready: boolean, events: Event[],
     return sent && changes?.changed?.length ? { issued: issuedDay(sent.digest.issued), titles: changes.changed } : null;
   }, [ready, sent, events, recurrenceExceptions]);
 
-  return { change, refresh };
+  const sentToday = sent?.digest.issued === formatLocalDate(new Date());
+
+  return { change, sentToday, loaded, refresh };
 };

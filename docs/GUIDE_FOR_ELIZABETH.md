@@ -54,7 +54,7 @@ As the coordinator, your role is supported by the **CCP Event Calendar**, which 
 
 Every Wednesday afternoon, send an email to all CCP staff reminding them to submit any events taking place over the **following two weeks**.
 
-**The calendar can write it for you:** click **Reminder** in the top bar (on a phone or tablet, open the menu → **Send a reminder**). A new email opens to allstaff@partnershipcork.ie (or whoever you set: see *Who the emails go to* below) with the subject filled in, and a formatted reminder in the digest's look is copied: click into the message and press Ctrl+V (⌘V on a Mac) to paste it. It asks for events before this Friday (from Friday on, next Friday), has a **Send in an event** button to the form, and says to write to ivasyliev@partnershipcork.ie with questions or suggestions about the site. You can edit it before sending, or use the template below instead.
+**The calendar can write it for you:** on Wednesdays, a green banner appears right above the calendar with a **Send reminder** button — click it and the banner tucks away for the rest of the day. (On any other day, or to send it again, open your account menu in the top right — or the menu on a phone/tablet — and click **Send a reminder**.) A new email opens to allstaff@partnershipcork.ie (or whoever you set: see *Who the emails go to* below) with the subject filled in, and a formatted reminder in the digest's look is copied: click into the message and press Ctrl+V (⌘V on a Mac) to paste it. It asks for events before this Friday (from Friday on, next Friday), has a **Send in an event** button to the form, and says to write to ivasyliev@partnershipcork.ie with questions or suggestions about the site. You can edit it before sending, or use the template below instead.
 
 ### Direct Link to Share:
 > **Submission URL:** `https://ccp-event-calendar.pages.dev/submit`  
@@ -139,9 +139,11 @@ When staff submit events, they arrive directly in your **Submissions Inbox** wit
 
 ## Step 3: Friday Morning — Generate the Upcoming Events Digest
 
-Once submissions are approved, you can generate both the **branded PDF** and the **WhatsApp digest** in under 60 seconds.
+Once submissions are approved, you can email the standard digest in one click, or open the full **Digest** window for WhatsApp, custom dates or a PDF download.
 
-### 1. Open the Generator
+> **One-click Friday shortcut:** On Fridays, a raspberry banner appears right above the calendar with an **Email 2-week digest** button. Clicking it immediately creates and uploads the standard **2-week Executive cards PDF with printable flyers**, copies the formatted email and opens your email app (just paste with `Ctrl + V` / `⌘ V`), then hides for the rest of the day.
+
+### 1. Open the Generator (for WhatsApp, PDF download or custom dates)
 * In the top navigation bar, click the **"Digest"** button (with the document icon).
 * *(Alternatively, click "Export" and choose "Upcoming Events Digest").*
 

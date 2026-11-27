@@ -133,7 +133,8 @@ test('an admin emails all staff a reminder to send in their events, formatted li
   await mockSupabase(page);
   await signIn(page);
 
-  await page.getByRole('button', { name: 'Reminder' }).click();
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Send a reminder' }).click();
   await expect(page.getByText('Reminder copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
   const email = await page.evaluate(async () => {
     const [item] = await navigator.clipboard.read();
@@ -203,9 +204,10 @@ test('admins choose who the digest and the reminder go to, with To, CC and BCC f
   await expect(digest.getByText('kieran_oconnell@corkcity.ie')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // The Reminder button asks for the saved recipients before it opens the email
+  // Send a reminder asks for the saved recipients before it opens the email
   backend.recipientRequests.length = 0;
-  await page.getByRole('button', { name: 'Reminder' }).click();
+  await page.getByRole('button', { name: /Ada Admin|Account menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Send a reminder' }).click();
   await expect(page.getByText('Reminder copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
   expect(backend.recipientRequests).toEqual(['GET']);
 });
@@ -449,3 +451,89 @@ test('admins see in the inbox and above the calendar that the digest that went o
   await expect(banner).toHaveCount(0);
   await expect(page.getByTitle('Review staff submissions')).not.toContainText('1');
 });
+
+test('on Wednesdays and Fridays admins get one highlighted banner for that day’s email, and it hides once sent', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+  // Wednesday: green reminder banner; clicking sends the reminder and hides it for the day
+  await page.clock.setFixedTime(new Date('2026-10-21T11:00:00'));
+  await mockSupabase(page);
+  await signIn(page);
+
+  const wedBanner = page.getByRole('region', { name: 'Wednesday reminder' });
+  await expect(wedBanner).toBeVisible();
+  await expectAccessible(page);
+
+  await wedBanner.getByRole('button', { name: 'Send reminder' }).click();
+  await expect(page.getByText('Reminder copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
+  await expect(wedBanner).toHaveCount(0);
+
+  // Stays hidden for the rest of Wednesday even after a reload
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Digest' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Wednesday reminder' })).toHaveCount(0);
+});
+
+test('on Fridays the one-click digest banner sends a 2-week Executive cards digest with flyers regardless of saved modal prefs', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.clock.setFixedTime(new Date('2026-10-23T09:30:00'));
+  await mockSupabase(page, {
+    events: [
+      eventRow({ id: '10000000-0000-0000-0000-000000000001', title: 'Community Coffee Morning', date: '2026-10-27T10:00:00Z', end_date: '2026-10-27T11:30:00Z' }),
+      eventRow({ id: '10000000-0000-0000-0000-000000000002', title: 'Far Away Event', date: '2026-12-01T10:00:00Z', end_date: '2026-12-01T11:30:00Z' })
+    ]
+  });
+
+  const uploads: string[] = [];
+  const period = '2026-10-23-to-2026-11-06';
+  const digest = digestId(9, period);
+  await page.route('**/api/digest', async (route) => {
+    uploads.push(route.request().postDataBuffer()?.toString('utf8') ?? '');
+    await route.fulfill({
+      status: 201,
+      json: { url: `/api/file/digests/${digest}.pdf`, expiresAt: '2027-04-23T00:00:00.000Z' }
+    });
+  });
+
+  // Saved manual modal preferences are Compact + Flyers off: Friday's 1-click button must ignore them
+  await page.addInitScript(() => {
+    localStorage.setItem('ccp_digest_format', 'compact');
+    localStorage.setItem('ccp_digest_flyers', 'off');
+  });
+
+  await signIn(page);
+
+  const friBanner = page.getByRole('region', { name: 'Friday digest' });
+  await expect(friBanner).toBeVisible();
+  await expect(friBanner).toContainText('1 event over the next 2 weeks · Executive cards with flyers');
+  await expectAccessible(page);
+
+  await friBanner.getByRole('button', { name: 'Email 2-week digest' }).click();
+  await expect(page.getByText('Email copied — click into the new message and press Ctrl+V to paste it')).toBeVisible();
+  await expect(friBanner).toHaveCount(0);
+
+  expect(uploads).toHaveLength(1);
+  const field = (name: string) => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`).exec(uploads[0])?.[1];
+  expect(field('layout')).toBe('executive');
+  expect(field('flyers')).toBe('1');
+  expect(field('issued')).toBe('2026-10-23');
+  expect(uploads[0]).toContain(`filename="CCP-Upcoming-Events-${period}.pdf"`);
+
+  // Manual modal preferences remain untouched
+  const prefs = await page.evaluate(() => ({
+    format: localStorage.getItem('ccp_digest_format'),
+    flyers: localStorage.getItem('ccp_digest_flyers')
+  }));
+  expect(prefs).toEqual({ format: 'compact', flyers: 'off' });
+});
+
+test('on non-routine days (such as Thursday) no weekly routine banner appears', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-22T10:00:00'));
+  await mockSupabase(page);
+  await signIn(page);
+
+  await expect(page.getByRole('button', { name: 'Digest' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Wednesday reminder' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Friday digest' })).toHaveCount(0);
+});
+

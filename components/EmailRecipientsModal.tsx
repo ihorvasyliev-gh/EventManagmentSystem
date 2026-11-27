@@ -16,7 +16,7 @@ interface EmailRecipientsModalProps {
 
 const EMAILS: Record<EmailKind, { title: string; usedBy: string; icon: React.ReactNode }> = {
   digest: { title: 'Events Digest', usedBy: 'The Email button in Events Digest', icon: <FileText className="w-4 h-4" /> },
-  reminder: { title: 'Reminder', usedBy: 'The Reminder button: asks staff to send in their events', icon: <BellRing className="w-4 h-4" /> }
+  reminder: { title: 'Reminder', usedBy: 'Wednesday’s reminder banner and Send a reminder in the account menu', icon: <BellRing className="w-4 h-4" /> }
 };
 
 const FIELD_LABEL: Record<RecipientField, string> = { to: 'To', cc: 'CC', bcc: 'BCC' };

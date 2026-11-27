@@ -10,7 +10,7 @@ import { recipientsFor } from '../services/emailRecipientsService';
  * with the recipients (Email recipients, in the account menu) and subject filled in. Without the
  * clipboard the plain text goes in.
  */
-export const useReminderEmail = (): (() => Promise<void>) => {
+export const useReminderEmail = (): (() => Promise<boolean>) => {
   const { showToast } = useToast();
   return useCallback(async () => {
     const today = new Date();
@@ -31,9 +31,10 @@ export const useReminderEmail = (): (() => Promise<void>) => {
     } catch (err) {
       console.error('Opening the reminder failed:', err);
       showToast('The reminder could not be opened. Please try again.', 'error');
-      return;
+      return false;
     }
     if (copied) showToast(`Reminder copied — click into the new message and press ${PASTE_KEYS} to paste it`, 'success', 12000);
     else showToast('Opening your email app', 'info');
+    return true;
   }, [showToast]);
 };

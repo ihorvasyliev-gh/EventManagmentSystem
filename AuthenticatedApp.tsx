@@ -7,6 +7,7 @@ import EventFiltersComponent, { type Submitter } from './components/EventFilters
 import CategoryPills from './components/CategoryPills';
 import SubmissionsBanner from './components/SubmissionsBanner';
 import DigestChangedBanner from './components/DigestChangedBanner';
+import WeeklyRoutineBanner from './components/WeeklyRoutineBanner';
 import OfflineBanner from './components/OfflineBanner';
 import AppFooter from './components/AppFooter';
 import { CalendarDaySkeleton } from './components/SkeletonLoader';
@@ -14,7 +15,10 @@ import { useToast } from './contexts/ToastContext';
 import { type Event, type EventFilters, UserRole } from './types';
 import { filterEvents } from './utils/filterEvents';
 import { eventNeighbours } from './utils/eventNeighbours';
-import { getEventLocations, isRecurringEvent } from './utils/recurrence';
+import { expandRecurringEvents, getEventLocations, isRecurringEvent } from './utils/recurrence';
+import { calculatePresetDateRange, formatLocalDate } from './utils/date';
+import { groupDigestOccurrences } from './utils/digestGrouping';
+import { activeRoutineTask, markRoutineDoneForDay, routineTaskForDay, type RoutineTask } from './utils/weeklyRoutine';
 import BottomNavigation from './components/BottomNavigation';
 import { useMedia } from './hooks/useMedia';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -30,6 +34,7 @@ import { useAppShortcuts } from './hooks/useAppShortcuts';
 import { useChangeLogBadge } from './hooks/useChangeLogBadge';
 import { useSentDigest } from './hooks/useSentDigest';
 import { useReminderEmail } from './hooks/useReminderEmail';
+import { useQuickDigestEmail } from './hooks/useQuickDigestEmail';
 import { loadOrReload } from './utils/staleChunk';
 import { usePreloadWindows } from './hooks/usePreloadWindows';
 
@@ -156,6 +161,65 @@ const AuthenticatedApp: React.FC = () => {
     setIsSubmissionsModalOpen(false);
     setIsBulletinModalOpen(true);
   }, []);
+
+  // Admins: Wednesday reminder / Friday 2-week digest banner above the calendar
+  const [routineToday, setRoutineToday] = useState(() => new Date());
+  useEffect(() => {
+    if (!isAdmin) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = new Date();
+      setRoutineToday((prev) => (formatLocalDate(prev) === formatLocalDate(now) ? prev : now));
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [isAdmin]);
+  const [doneRoutineKeys, setDoneRoutineKeys] = useState<Set<string>>(() => new Set());
+  const markRoutineDone = useCallback((task: RoutineTask, day: Date = new Date()) => {
+    markRoutineDoneForDay(task, day);
+    const key = `${task}:${formatLocalDate(day)}`;
+    setDoneRoutineKeys((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }, []);
+  const handleSendReminder = useCallback(async () => {
+    const ok = await sendReminder();
+    if (ok) {
+      const now = new Date();
+      if (routineTaskForDay(now) === 'reminder') markRoutineDone('reminder', now);
+    }
+  }, [sendReminder, markRoutineDone]);
+  const { send: sendQuickDigest, sending: sendingQuickDigest } = useQuickDigestEmail(events, recurrenceExceptions, refreshSentDigest);
+  const routineTask = activeRoutineTask({
+    isAdmin,
+    today: routineToday,
+    digestSentToday: sentDigest.sentToday,
+    digestChecked: sentDigest.loaded,
+    doneInMemory: doneRoutineKeys
+  });
+  const showRoutineBanner = routineTask === 'reminder' || (routineTask === 'digest' && !loadingEvents);
+  const fridayDigestEventCount = useMemo(() => {
+    if (routineTask !== 'digest' || loadingEvents) return 0;
+    const { startDate, endDate } = calculatePresetDateRange('2weeks', { referenceDate: routineToday, events });
+    const expanded = expandRecurringEvents(events, startDate, endDate, recurrenceExceptions);
+    const inRange = expanded.filter((e) => e.date.getTime() >= startDate.getTime() && e.date.getTime() <= endDate.getTime());
+    return groupDigestOccurrences(inRange.filter((e) => !e.status || e.status === 'published')).length;
+  }, [routineTask, loadingEvents, routineToday, events, recurrenceExceptions]);
+  const handleRoutineSend = useCallback(async () => {
+    if (routineTask === 'reminder') {
+      await handleSendReminder();
+    } else if (routineTask === 'digest') {
+      const ok = await sendQuickDigest();
+      if (ok) markRoutineDone('digest', routineToday);
+    }
+  }, [routineTask, handleSendReminder, sendQuickDigest, markRoutineDone, routineToday]);
+  const handleRoutineDismiss = useCallback(() => {
+    if (routineTask) markRoutineDone(routineTask, routineToday);
+  }, [routineTask, markRoutineDone, routineToday]);
+
   const { handleDeleteInstance, handleDeleteEvent, restoreDeletedEvent, forgetExceptions } = useEventActions({
     user, events, setEvents, recurrenceExceptions, setRecurrenceExceptions, showToast, modal
   });
@@ -364,7 +428,7 @@ const AuthenticatedApp: React.FC = () => {
         pendingSubmissionsCount={inboxCount}
         onOpenSubmissions={openInbox}
         onOpenFortnightlyBulletin={() => setIsBulletinModalOpen(true)}
-        onSendReminder={isAdmin ? sendReminder : undefined}
+        onSendReminder={isAdmin ? handleSendReminder : undefined}
         onOpenStaff={() => setIsStaffOpen(true)}
         onOpenEmailRecipients={() => setIsRecipientsOpen(true)}
         onOpenCategories={() => setIsCategoriesOpen(true)}
@@ -377,6 +441,15 @@ const AuthenticatedApp: React.FC = () => {
       <main className="flex-grow max-w-7xl 2xl:max-w-[96rem] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 lg:py-6">
         <h1 className="sr-only">CCP Event Calendar</h1>
         {!isOnline && <OfflineBanner lastSyncedAt={lastSyncedAt} />}
+        {showRoutineBanner && routineTask && (
+          <WeeklyRoutineBanner
+            task={routineTask}
+            eventCount={fridayDigestEventCount}
+            busy={routineTask === 'digest' && sendingQuickDigest}
+            onSend={handleRoutineSend}
+            onDismiss={handleRoutineDismiss}
+          />
+        )}
         {isAdmin && pendingSubmissions.length > 0 && (
           <SubmissionsBanner submissions={pendingSubmissions} onOpen={openInbox} />
         )}
